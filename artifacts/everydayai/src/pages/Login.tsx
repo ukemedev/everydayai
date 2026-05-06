@@ -1,6 +1,29 @@
-import { Link } from "wouter";
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
+import { supabase } from "@/lib/supabase";
 
 export default function Login() {
+  const [, navigate] = useLocation();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      navigate("/dashboard");
+    }
+  }
+
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center px-4"
@@ -23,12 +46,15 @@ export default function Login() {
         </div>
 
         {/* Form */}
-        <div className="flex flex-col gap-4">
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-white/70">Email</label>
             <input
               type="email"
               placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
               className="w-full rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/30 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
               style={{ backgroundColor: "#0a0f1e" }}
             />
@@ -39,19 +65,29 @@ export default function Login() {
             <input
               type="password"
               placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
               className="w-full rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/30 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
               style={{ backgroundColor: "#0a0f1e" }}
             />
           </div>
-        </div>
 
-        {/* CTA */}
-        <button
-          className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-          style={{ backgroundColor: "#3b5bfc" }}
-        >
-          Log In
-        </button>
+          {/* Error message */}
+          {error && (
+            <p className="text-sm text-red-400 text-center">{error}</p>
+          )}
+
+          {/* CTA */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "#3b5bfc" }}
+          >
+            {loading ? "Logging in…" : "Log In"}
+          </button>
+        </form>
 
         {/* Footer link */}
         <p className="text-center text-sm text-white/40">
