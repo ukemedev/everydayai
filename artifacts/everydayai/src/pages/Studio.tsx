@@ -117,7 +117,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
 
   return (
     <div
-      className="flex flex-col h-full border-l border-white/5"
+      className="flex-1 flex flex-col min-h-0 border-l border-white/5"
       style={{ backgroundColor: "#0d1117" }}
     >
       {/* Chat header */}
@@ -134,7 +134,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 flex flex-col gap-3">
         {noInstructions ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
             <p className="text-xs text-white/25 leading-relaxed">
@@ -297,7 +297,7 @@ export default function Studio() {
   const isLive = agent.status === "live";
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: "#0a0f1e", ...font }}>
+    <div className="h-screen flex flex-col" style={{ backgroundColor: "#0a0f1e", ...font }}>
 
       {/* Top bar */}
       <header
@@ -349,10 +349,10 @@ export default function Studio() {
       </header>
 
       {/* Body: two columns */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
 
         {/* ── Left column: tabs + content ── */}
-        <div className="flex flex-col overflow-hidden" style={{ width: "60%" }}>
+        <div className="flex flex-col min-h-0" style={{ width: "60%" }}>
           {/* Tabs */}
           <div className="flex items-center gap-1 px-8 pt-4 border-b border-white/5 flex-shrink-0">
             {tabs.map((tab) => {
@@ -377,7 +377,7 @@ export default function Studio() {
           </div>
 
           {/* Tab content (scrollable) */}
-          <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6">
             {activeTab === "Prompt" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div className="flex flex-col gap-1.5">
@@ -437,7 +437,10 @@ export default function Studio() {
         </div>
 
         {/* ── Right column: chat panel ── */}
-        <div className="flex flex-col overflow-hidden" style={{ width: "40%" }}>
+        <div
+          className="flex flex-col overflow-hidden"
+          style={{ width: "40%", position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
+        >
           <ChatPanel
             agentId={agent.id}
             instructions={instructions}
