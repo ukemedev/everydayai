@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -14,10 +14,64 @@ const modelOptions = [
   { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
 ];
 
-function CreateAgentModal({ onClose }: { onClose: () => void }) {
+interface Agent {
+  id: string;
+  name: string;
+  description: string | null;
+  model: string;
+  status: string;
+  created_at: string;
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+
+interface CreateAgentModalProps {
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
   const [agentName, setAgentName] = useState("");
   const [agentDescription, setAgentDescription] = useState("");
   const [model, setModel] = useState("gpt-4o-mini");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [nameError, setNameError] = useState("");
+
+  async function handleCreate() {
+    setNameError("");
+    setError("");
+
+    if (!agentName.trim()) {
+      setNameError("Agent name is required.");
+      return;
+    }
+
+    setLoading(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setError("You must be logged in to create an agent.");
+      setLoading(false);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("agents").insert({
+      name: agentName.trim(),
+      description: agentDescription.trim() || null,
+      model,
+      user_id: user.id,
+    });
+
+    if (insertError) {
+      setError(insertError.message);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(false);
+    onCreated();
+  }
 
   return (
     <div
@@ -47,10 +101,16 @@ function CreateAgentModal({ onClose }: { onClose: () => void }) {
             type="text"
             placeholder="e.g. Smith's Solar Assistant"
             value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
-            className="w-full rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/25 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
-            style={{ backgroundColor: "#0a0f1e" }}
+            onChange={(e) => { setAgentName(e.target.value); setNameError(""); }}
+            className="w-full rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/25 border outline-none transition-colors"
+            style={{
+              backgroundColor: "#0a0f1e",
+              borderColor: nameError ? "#f87171" : "rgba(255,255,255,0.1)",
+            }}
           />
+          {nameError && (
+            <p className="text-xs text-red-400">{nameError}</p>
+          )}
         </div>
 
         {/* Agent Description */}
@@ -83,17 +143,25 @@ function CreateAgentModal({ onClose }: { onClose: () => void }) {
           </select>
         </div>
 
+        {/* Server error */}
+        {error && (
+          <p className="text-sm text-red-400 text-center -mt-1">{error}</p>
+        )}
+
         {/* Actions */}
         <div className="flex flex-col gap-3 pt-1">
           <button
-            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+            onClick={handleCreate}
+            disabled={loading}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ backgroundColor: "#3b5bfc" }}
           >
-            Create Agent
+            {loading ? "Creating…" : "Create Agent"}
           </button>
           <button
             onClick={onClose}
-            className="text-sm text-white/35 hover:text-white/60 transition-colors duration-150 text-center"
+            disabled={loading}
+            className="text-sm text-white/35 hover:text-white/60 transition-colors duration-150 text-center disabled:opacity-50"
           >
             Cancel
           </button>
@@ -103,17 +171,85 @@ function CreateAgentModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Agent Card ───────────────────────────────────────────────────────────────
+
+function AgentCard({ agent }: { agent: Agent }) {
+  const modelLabel = modelOptions.find((m) => m.value === agent.model)?.label ?? agent.model;
+  const isLive = agent.status === "live";
+
+  return (
+    <div
+      className="w-48 h-40 rounded-2xl border border-white/10 p-4 flex flex-col justify-between hover:border-white/20 transition-all duration-200 cursor-pointer"
+      style={{ backgroundColor: "#111827" }}
+    >
+      <div className="flex flex-col gap-1 overflow-hidden">
+        <p className="text-sm font-semibold text-white truncate">{agent.name}</p>
+        {agent.description && (
+          <p className="text-xs text-white/40 line-clamp-2 leading-relaxed">
+            {agent.description}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {/* Model badge */}
+        <span
+          className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+          style={{ backgroundColor: "rgba(59,91,252,0.18)", color: "#7b93ff" }}
+        >
+          {modelLabel}
+        </span>
+        {/* Status badge */}
+        <span
+          className="text-[10px] font-medium px-2 py-0.5 rounded-full capitalize"
+          style={
+            isLive
+              ? { backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }
+              : { backgroundColor: "rgba(251,146,60,0.15)", color: "#fb923c" }
+          }
+        >
+          {agent.status}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [activeNav, setActiveNav] = useState("home");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const fetchAgents = useCallback(async () => {
+    setLoadingAgents(true);
+    const { data, error } = await supabase
+      .from("agents")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data) setAgents(data as Agent[]);
+    setLoadingAgents(false);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUserEmail(session?.user?.email ?? null);
     });
-  }, []);
+    fetchAgents();
+  }, [fetchAgents]);
+
+  function handleAgentCreated() {
+    setShowCreateModal(false);
+    fetchAgents();
+    setSuccessMessage("Agent created successfully!");
+    setTimeout(() => setSuccessMessage(""), 3500);
+  }
 
   async function handleLogOut() {
     await supabase.auth.signOut();
@@ -125,9 +261,22 @@ export default function Dashboard() {
       className="flex min-h-screen w-full"
       style={{ fontFamily: "'Inter', sans-serif" }}
     >
-      {/* Create Agent Modal */}
+      {/* Modal */}
       {showCreateModal && (
-        <CreateAgentModal onClose={() => setShowCreateModal(false)} />
+        <CreateAgentModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleAgentCreated}
+        />
+      )}
+
+      {/* Success toast */}
+      {successMessage && (
+        <div
+          className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg"
+          style={{ backgroundColor: "#16a34a" }}
+        >
+          ✓ {successMessage}
+        </div>
       )}
 
       {/* Sidebar */}
@@ -181,16 +330,12 @@ export default function Dashboard() {
         className="flex-1 ml-60 min-h-screen px-8 py-8"
         style={{ backgroundColor: "#0a0f1e" }}
       >
-        <h1 className="text-2xl font-bold text-white mb-6">
-          Welcome back 👋
-        </h1>
+        <h1 className="text-2xl font-bold text-white mb-6">Welcome back 👋</h1>
 
         {/* Blue banner */}
         <div
           className="w-full rounded-2xl px-8 py-7 mb-8 flex items-center justify-between"
-          style={{
-            background: "linear-gradient(135deg, #1e3a8a 0%, #3b5bfc 100%)",
-          }}
+          style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #3b5bfc 100%)" }}
         >
           <div>
             <h2 className="text-xl font-bold text-white mb-1">
@@ -209,20 +354,35 @@ export default function Dashboard() {
         <div>
           <h2 className="text-base font-semibold text-white mb-4">My Agents</h2>
 
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="w-48 h-40 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#3b5bfc]/50 hover:bg-white/[0.02] transition-all duration-200 group"
-          >
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-xl text-white/30 group-hover:text-[#3b5bfc]/70 transition-colors duration-200"
-              style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-            >
-              +
+          {loadingAgents ? (
+            <div className="flex items-center gap-2 text-sm text-white/30">
+              <div className="w-4 h-4 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+              Loading agents…
             </div>
-            <span className="text-xs text-white/35 group-hover:text-white/50 transition-colors duration-200">
-              Create New Agent
-            </span>
-          </button>
+          ) : (
+            <div className="flex flex-wrap gap-4">
+              {/* Existing agent cards */}
+              {agents.map((agent) => (
+                <AgentCard key={agent.id} agent={agent} />
+              ))}
+
+              {/* Create New Agent card — always last */}
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="w-48 h-40 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#3b5bfc]/50 hover:bg-white/[0.02] transition-all duration-200 group"
+              >
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-xl text-white/30 group-hover:text-[#3b5bfc]/70 transition-colors duration-200"
+                  style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                >
+                  +
+                </div>
+                <span className="text-xs text-white/35 group-hover:text-white/50 transition-colors duration-200">
+                  Create New Agent
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </main>
     </div>
