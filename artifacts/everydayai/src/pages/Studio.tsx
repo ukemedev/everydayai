@@ -79,27 +79,45 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
     if (!text || isTyping) return;
 
     const userMsg: Message = { id: crypto.randomUUID(), role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInput("");
     setIsTyping(true);
+
+    // Build conversation history in OpenAI format (everything before this new message)
+    const conversationHistory = messages.map((m) => ({
+      role: m.role === "user" ? "user" : "assistant" as "user" | "assistant",
+      content: m.text,
+    }));
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, instructions, model, agentId }),
+        body: JSON.stringify({
+          message: text,
+          instructions: instructions.trim() || "You are a helpful assistant.",
+          model,
+          conversationHistory,
+          agentId,
+        }),
       });
+
       const data = await res.json();
-      const agentMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "agent",
-        text: data.reply ?? "Sorry, I didn't get a response.",
-      };
-      setMessages((prev) => [...prev, agentMsg]);
-    } catch {
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Request failed");
+      }
+
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "agent", text: "Error connecting to agent. Please try again." },
+        { id: crypto.randomUUID(), role: "agent", text: data.reply ?? "Sorry, I didn't get a response." },
+      ]);
+    } catch (err) {
+      const errText = err instanceof Error ? err.message : "Error connecting to agent. Please try again.";
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "agent", text: errText },
       ]);
     } finally {
       setIsTyping(false);
