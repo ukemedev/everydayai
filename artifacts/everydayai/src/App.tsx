@@ -7,6 +7,7 @@ import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
+import Studio from "@/pages/Studio";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,9 @@ function Router() {
       <Route path="/signup" component={Signup} />
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
+      </Route>
+      <Route path="/studio/:agentId">
+        {() => <ProtectedRoute component={Studio} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

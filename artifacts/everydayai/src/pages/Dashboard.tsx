@@ -174,12 +174,14 @@ function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
 // ─── Agent Card ───────────────────────────────────────────────────────────────
 
 function AgentCard({ agent }: { agent: Agent }) {
+  const [, navigate] = useLocation();
   const modelLabel = modelOptions.find((m) => m.value === agent.model)?.label ?? agent.model;
   const isLive = agent.status === "live";
 
   return (
     <div
-      className="w-48 h-40 rounded-2xl border border-white/10 p-4 flex flex-col justify-between hover:border-white/20 transition-all duration-200 cursor-pointer"
+      onClick={() => navigate(`/studio/${agent.id}`)}
+      className="w-48 h-40 rounded-2xl border border-white/10 p-4 flex flex-col justify-between hover:border-[#3b5bfc]/40 hover:bg-white/[0.02] transition-all duration-200 cursor-pointer"
       style={{ backgroundColor: "#111827" }}
     >
       <div className="flex flex-col gap-1 overflow-hidden">
