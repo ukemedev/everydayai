@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -18,6 +18,219 @@ interface Agent {
   model: string;
   status: string;
 }
+
+interface Message {
+  id: string;
+  role: "user" | "agent";
+  text: string;
+}
+
+// ─── Typing indicator ─────────────────────────────────────────────────────────
+
+function TypingDots() {
+  return (
+    <div className="flex items-center gap-1 px-4 py-3">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-white/30"
+          style={{
+            animation: `typing-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes typing-bounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+          40% { transform: translateY(-5px); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── Chat panel ───────────────────────────────────────────────────────────────
+
+interface ChatPanelProps {
+  agentId: string;
+  instructions: string;
+  model: string;
+}
+
+function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isTyping]);
+
+  function clearChat() {
+    setMessages([]);
+    setInput("");
+    inputRef.current?.focus();
+  }
+
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || isTyping) return;
+
+    const userMsg: Message = { id: crypto.randomUUID(), role: "user", text };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setIsTyping(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, instructions, model, agentId }),
+      });
+      const data = await res.json();
+      const agentMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "agent",
+        text: data.reply ?? "Sorry, I didn't get a response.",
+      };
+      setMessages((prev) => [...prev, agentMsg]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "agent", text: "Error connecting to agent. Please try again." },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  const noInstructions = !instructions.trim();
+
+  return (
+    <div
+      className="flex flex-col h-full border-l border-white/5"
+      style={{ backgroundColor: "#0d1117" }}
+    >
+      {/* Chat header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 flex-shrink-0">
+        <span className="text-xs font-medium text-white/40 uppercase tracking-wider">
+          Test Your Agent
+        </span>
+        <button
+          onClick={clearChat}
+          className="text-xs text-white/35 hover:text-white/65 border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-all duration-150"
+        >
+          New Chat
+        </button>
+      </div>
+
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
+        {noInstructions ? (
+          <div className="flex-1 flex items-center justify-center text-center px-4">
+            <p className="text-xs text-white/25 leading-relaxed">
+              Add instructions in the Prompt tab and save before testing.
+            </p>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-xs text-white/20 text-center">
+              Send a message to test your agent…
+            </p>
+          </div>
+        ) : (
+          <>
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex items-end gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+              >
+                {msg.role === "agent" && (
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mb-0.5"
+                    style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
+                  >
+                    🤖
+                  </div>
+                )}
+                <div
+                  className="max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words"
+                  style={
+                    msg.role === "user"
+                      ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
+                      : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
+                  }
+                >
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+
+            {/* Typing indicator */}
+            {isTyping && (
+              <div className="flex items-end gap-2">
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0"
+                  style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
+                >
+                  🤖
+                </div>
+                <div
+                  className="rounded-2xl"
+                  style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}
+                >
+                  <TypingDots />
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input area */}
+      <div className="px-4 pb-4 pt-2 flex-shrink-0 border-t border-white/5">
+        <div
+          className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 focus-within:border-[#3b5bfc]/50 transition-colors"
+          style={{ backgroundColor: "#111827" }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Send a message..."
+            disabled={noInstructions || isTyping}
+            className="flex-1 bg-transparent text-sm text-white placeholder-white/20 outline-none disabled:opacity-40"
+          />
+          <button
+            onClick={sendMessage}
+            disabled={!input.trim() || isTyping || noInstructions}
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-150 disabled:opacity-30"
+            style={{ backgroundColor: input.trim() && !noInstructions ? "#3b5bfc" : "rgba(59,91,252,0.3)" }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M22 2L11 13" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Studio ───────────────────────────────────────────────────────────────────
 
 export default function Studio() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -54,10 +267,7 @@ export default function Studio() {
   async function handleSave() {
     if (!agent) return;
     setSaving(true);
-    await supabase
-      .from("agents")
-      .update({ model })
-      .eq("id", agent.id);
+    await supabase.from("agents").update({ model }).eq("id", agent.id);
     setSaving(false);
     setSavedMsg(true);
     setTimeout(() => setSavedMsg(false), 2500);
@@ -87,14 +297,13 @@ export default function Studio() {
   const isLive = agent.status === "live";
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#0a0f1e", ...font }}>
+    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: "#0a0f1e", ...font }}>
 
       {/* Top bar */}
       <header
-        className="flex items-center justify-between px-8 py-4 border-b border-white/5 sticky top-0 z-10"
+        className="flex items-center justify-between px-8 py-4 border-b border-white/5 flex-shrink-0 z-10"
         style={{ backgroundColor: "#0d1117" }}
       >
-        {/* Left: back + title */}
         <div className="flex items-center gap-4 min-w-0">
           <button
             onClick={() => navigate("/dashboard")}
@@ -123,7 +332,6 @@ export default function Studio() {
           </div>
         </div>
 
-        {/* Right: action buttons */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95"
@@ -140,102 +348,103 @@ export default function Studio() {
         </div>
       </header>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 px-8 pt-5 border-b border-white/5">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className="px-4 py-2 text-sm font-medium rounded-t-lg transition-all duration-150 relative"
-              style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.4)" }}
-            >
-              {tab}
-              {isActive && (
-                <span
-                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                  style={{ backgroundColor: "#3b5bfc" }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Body: two columns */}
+      <div className="flex flex-1 overflow-hidden">
 
-      {/* Tab content */}
-      <div className="flex-1 px-8 py-7 max-w-3xl">
-        {activeTab === "Prompt" && (
-          <div className="flex flex-col gap-6">
-            {/* Model dropdown */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-white/70">Model</label>
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-64 rounded-lg px-4 py-2.5 text-sm text-white border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors appearance-none cursor-pointer"
-                style={{ backgroundColor: "#111827" }}
-              >
-                {modelOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value} style={{ backgroundColor: "#111827" }}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Instructions */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-white/70">Instructions</label>
-              <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="Write your agent instructions here..."
-                rows={14}
-                className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors resize-none leading-relaxed"
-                style={{ backgroundColor: "#111827" }}
-              />
-            </div>
-
-            {/* Save */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: "#3b5bfc" }}
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-              {savedMsg && (
-                <span className="text-sm text-green-400">✓ Saved</span>
-              )}
-            </div>
+        {/* ── Left column: tabs + content ── */}
+        <div className="flex flex-col overflow-hidden" style={{ width: "60%" }}>
+          {/* Tabs */}
+          <div className="flex items-center gap-1 px-8 pt-4 border-b border-white/5 flex-shrink-0">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className="px-4 py-2 text-sm font-medium transition-all duration-150 relative"
+                  style={{ color: isActive ? "#fff" : "rgba(255,255,255,0.4)" }}
+                >
+                  {tab}
+                  {isActive && (
+                    <span
+                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
+                      style={{ backgroundColor: "#3b5bfc" }}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
-        )}
 
-        {activeTab === "Knowledge" && (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <p className="text-white/25 text-sm">Knowledge base coming soon.</p>
+          {/* Tab content (scrollable) */}
+          <div className="flex-1 overflow-y-auto px-8 py-6">
+            {activeTab === "Prompt" && (
+              <div className="flex flex-col gap-6 max-w-xl">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-white/70">Model</label>
+                  <select
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-56 rounded-lg px-4 py-2.5 text-sm text-white border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors appearance-none cursor-pointer"
+                    style={{ backgroundColor: "#111827" }}
+                  >
+                    {modelOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value} style={{ backgroundColor: "#111827" }}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-medium text-white/70">Instructions</label>
+                  <textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    placeholder="Write your agent instructions here..."
+                    rows={16}
+                    className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors resize-none leading-relaxed"
+                    style={{ backgroundColor: "#111827" }}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: "#3b5bfc" }}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                  {savedMsg && <span className="text-sm text-green-400">✓ Saved</span>}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "Knowledge" && (
+              <div className="flex items-center justify-center h-48">
+                <p className="text-white/25 text-sm">Knowledge base coming soon.</p>
+              </div>
+            )}
+
+            {activeTab === "Tools" && (
+              <div className="flex items-center justify-center h-48">
+                <p className="text-white/25 text-sm">Tool integrations coming soon.</p>
+              </div>
+            )}
           </div>
-        )}
-
-        {activeTab === "Tools" && (
-          <div className="flex flex-col items-center justify-center py-24 gap-3">
-            <p className="text-white/25 text-sm">Tool integrations coming soon.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Saved toast */}
-      {savedMsg && (
-        <div
-          className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg"
-          style={{ backgroundColor: "#16a34a" }}
-        >
-          ✓ Changes saved
         </div>
-      )}
+
+        {/* ── Right column: chat panel ── */}
+        <div className="flex flex-col overflow-hidden" style={{ width: "40%" }}>
+          <ChatPanel
+            agentId={agent.id}
+            instructions={instructions}
+            model={model}
+          />
+        </div>
+      </div>
     </div>
   );
 }
