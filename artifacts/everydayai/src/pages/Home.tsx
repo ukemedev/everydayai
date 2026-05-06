@@ -1,3 +1,5 @@
+import { Link } from "wouter";
+
 export default function Home() {
   return (
     <div
@@ -10,17 +12,19 @@ export default function Home() {
           EverydayAI
         </span>
         <div className="flex items-center gap-3">
-          <button
-            className="px-5 py-2 rounded-lg text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200"
-          >
-            Log In
-          </button>
-          <button
-            className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-            style={{ backgroundColor: "#3b5bfc" }}
-          >
-            Get Started
-          </button>
+          <Link href="/login">
+            <button className="px-5 py-2 rounded-lg text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200">
+              Log In
+            </button>
+          </Link>
+          <Link href="/signup">
+            <button
+              className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 active:scale-95"
+              style={{ backgroundColor: "#3b5bfc" }}
+            >
+              Get Started
+            </button>
+          </Link>
         </div>
       </nav>
 
@@ -51,15 +55,17 @@ export default function Home() {
           no coding needed.
         </p>
 
-        <button
-          className="mt-10 px-8 py-3.5 rounded-xl text-base font-semibold text-white transition-all duration-200 hover:opacity-90 hover:scale-105 active:scale-95 shadow-lg"
-          style={{
-            backgroundColor: "#3b5bfc",
-            boxShadow: "0 0 40px rgba(59, 91, 252, 0.35)",
-          }}
-        >
-          Start Building Free
-        </button>
+        <Link href="/signup">
+          <button
+            className="mt-10 px-8 py-3.5 rounded-xl text-base font-semibold text-white transition-all duration-200 hover:opacity-90 hover:scale-105 active:scale-95 shadow-lg"
+            style={{
+              backgroundColor: "#3b5bfc",
+              boxShadow: "0 0 40px rgba(59, 91, 252, 0.35)",
+            }}
+          >
+            Start Building Free
+          </button>
+        </Link>
       </main>
     </div>
   );
