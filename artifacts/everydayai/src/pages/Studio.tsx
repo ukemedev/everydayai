@@ -151,9 +151,10 @@ interface ChatPanelProps {
   instructions: string;
   model: string;
   docCount: number;
+  userId: string;
 }
 
-function ChatPanel({ agentId, instructions, model, docCount }: ChatPanelProps) {
+function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanelProps) {
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -216,6 +217,7 @@ function ChatPanel({ agentId, instructions, model, docCount }: ChatPanelProps) {
           apiKey: keyData.api_key,
           conversationHistory,
           agentId,
+          userId,
         }),
       });
 
@@ -424,6 +426,9 @@ export default function Studio() {
   const [loadingTools, setLoadingTools] = useState(false);
   const [confirmingTool, setConfirmingTool] = useState(false);
   const [deletingToolId, setDeletingToolId] = useState<string | null>(null);
+  const [userId, setUserId] = useState("");
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [checkingGoogle, setCheckingGoogle] = useState(false);
 
   // Knowledge Base
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -452,6 +457,35 @@ export default function Studio() {
         setLoading(false);
       });
   }, [agentId]);
+
+  // Fetch current user id once on mount
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id);
+    });
+  }, []);
+
+  // Check Google connection whenever Tools tab is opened or window regains focus
+  async function checkGoogleConnection() {
+    if (!userId) return;
+    setCheckingGoogle(true);
+    const { data } = await supabase
+      .from("integrations")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("provider", "google")
+      .maybeSingle();
+    setGoogleConnected(!!data);
+    setCheckingGoogle(false);
+  }
+
+  useEffect(() => {
+    if (activeTab !== "Tools" || !userId) return;
+    checkGoogleConnection();
+    const onFocus = () => checkGoogleConnection();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [activeTab, userId]);
 
   useEffect(() => {
     if (activeTab !== "Knowledge" || !agent) return;
@@ -1255,7 +1289,56 @@ export default function Studio() {
                 {/* Divider */}
                 <div className="border-t border-white/5" />
 
-                {/* ── Section 3: Available Connectors ── */}
+                {/* ── Section 3: Connected Accounts ── */}
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-white">Connected Accounts</h2>
+                    <p className="text-sm text-white/40 mt-1">
+                      Authorize services so your agent can write data on your behalf
+                    </p>
+                  </div>
+
+                  {/* Google row */}
+                  <div
+                    className="rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3"
+                    style={{ backgroundColor: "#111827" }}
+                  >
+                    <span className="text-xl flex-shrink-0">📊</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white">Google</p>
+                      <p className="text-xs text-white/40 mt-0.5">Sheets &amp; Drive access</p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {checkingGoogle ? (
+                        <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white/70 animate-spin block" />
+                      ) : googleConnected ? (
+                        <span
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
+                          style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                        >
+                          <span className="text-[10px]">✓</span> Connected
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!userId) return;
+                            window.open(`/api/auth/google?userId=${userId}`, "_blank");
+                          }}
+                          disabled={!userId}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
+                          style={{ backgroundColor: "#3b5bfc" }}
+                        >
+                          Connect Google Account
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-white/5" />
+
+                {/* ── Section 4: Available Connectors ── */}
                 <div className="flex flex-col gap-4">
                   <h2 className="text-base font-semibold text-white">Available Connectors</h2>
                   <div className="grid grid-cols-2 gap-3">
@@ -1304,7 +1387,7 @@ export default function Studio() {
           className="flex flex-col overflow-hidden"
           style={{ width: "40%", position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
         >
-          <ChatPanel agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} />
+          <ChatPanel agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
         </div>
       </div>
 

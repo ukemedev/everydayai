@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
+import { appendToSheet } from "../lib/googleSheets.js";
 
 // pdf-parse and mammoth are externalized in esbuild — load via require at runtime
 const _require = createRequire(import.meta.url);
@@ -158,6 +159,16 @@ interface ConversationMessage {
   content: string;
 }
 
+interface ToolRecord {
+  id: string;
+  tool_name: string;
+  tool_description: string | null;
+  connector: string;
+  action: string;
+  required_inputs: Array<{ name: string; label: string; description: string }> | null;
+  required_auth: { type: string; provider: string; description: string } | null;
+}
+
 interface ChatBody {
   message?: string;
   instructions?: string;
@@ -166,6 +177,47 @@ interface ChatBody {
   apiKey?: string;
   conversationHistory?: ConversationMessage[];
   agentId?: string;
+  userId?: string;
+}
+
+async function buildToolsContext(agentId: string): Promise<{ prompt: string; tools: ToolRecord[] }> {
+  const sb = getServiceClient();
+  if (!sb) return { prompt: "", tools: [] };
+
+  const { data, error } = await sb
+    .from("tools")
+    .select("*")
+    .eq("agent_id", agentId)
+    .eq("status", "active");
+
+  if (error || !data || data.length === 0) return { prompt: "", tools: [] };
+
+  const tools = data as ToolRecord[];
+
+  const toolDescriptions = tools
+    .map((t) => {
+      const inputs =
+        t.required_inputs
+          ?.map((i) => `  - ${i.name} (${i.label}): ${i.description}`)
+          .join("\n") ?? "  (none)";
+      return `Tool ID: ${t.id}\nName: ${t.tool_name}\nDescription: ${t.tool_description ?? ""}\nConnector: ${t.connector}\nAction: ${t.action}\nRequired inputs:\n${inputs}`;
+    })
+    .join("\n\n---\n\n");
+
+  const prompt = `
+
+You have access to the following tools. When you have collected ALL required inputs from the user, output a tool call on its own line in EXACTLY this format (nothing else on that line), then continue with a friendly confirmation:
+
+[TOOL_CALL:{"tool_id":"<id>","inputs":{"<field_name>":"<value>"},"spreadsheet_id":"<id>","sheet_name":"Sheet1"}]
+
+To get the spreadsheet_id: ask the user for their Google Sheets URL and extract the ID (the part between /d/ and /edit or /view). The sheet_name is usually "Sheet1" unless the user specifies otherwise.
+
+Available tools:
+---
+${toolDescriptions}`;
+
+  logger.info({ agentId, toolCount: tools.length }, "tools context built");
+  return { prompt, tools };
 }
 
 async function callOpenAI(
@@ -224,7 +276,7 @@ async function callGroq(
 // ─── Route ────────────────────────────────────────────────────────────────────
 
 router.post("/chat", async (req: Request, res: Response) => {
-  const { message, instructions, model, provider, apiKey, conversationHistory, agentId } =
+  const { message, instructions, model, provider, apiKey, conversationHistory, agentId, userId } =
     req.body as ChatBody;
 
   if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
@@ -240,7 +292,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     "chat request received"
   );
 
-  // Fetch and inject knowledge base documents
+  // Fetch knowledge base documents
   let docContext = "";
   if (agentId?.trim()) {
     try {
@@ -250,10 +302,23 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
-  const systemPrompt = baseInstructions + docContext;
+  // Fetch tools for this agent
+  let toolsContext = "";
+  let agentTools: ToolRecord[] = [];
+  if (agentId?.trim()) {
+    try {
+      const result = await buildToolsContext(agentId.trim());
+      toolsContext = result.prompt;
+      agentTools   = result.tools;
+    } catch (err) {
+      logger.error({ err, agentId }, "buildToolsContext threw unexpectedly");
+    }
+  }
+
+  const systemPrompt = baseInstructions + docContext + toolsContext;
 
   req.log.info(
-    { systemPromptLength: systemPrompt.length, docContextLength: docContext.length },
+    { systemPromptLength: systemPrompt.length, docContextLength: docContext.length, toolCount: agentTools.length },
     "system prompt assembled"
   );
 
@@ -266,6 +331,70 @@ router.post("/chat", async (req: Request, res: Response) => {
       case "openai":
       default:          reply = await callOpenAI   (apiKey, resolvedModel, systemPrompt, history, message.trim()); break;
     }
+
+    // ── Tool call execution ───────────────────────────────────────────────────
+    const toolCallMatch = reply.match(/\[TOOL_CALL:(\{.*?\})\]/s);
+    if (toolCallMatch && agentTools.length > 0) {
+      req.log.info({ raw: toolCallMatch[1] }, "tool call detected in AI response");
+      try {
+        const toolCall = JSON.parse(toolCallMatch[1]) as {
+          tool_id: string;
+          inputs: Record<string, string>;
+          spreadsheet_id: string;
+          sheet_name?: string;
+        };
+
+        const tool = agentTools.find((t) => t.id === toolCall.tool_id);
+
+        if (tool && tool.connector === "google_sheets" && userId?.trim()) {
+          const sb = getServiceClient();
+          let resultMsg = "";
+
+          if (sb) {
+            const { data: integration } = await sb
+              .from("integrations")
+              .select("access_token")
+              .eq("user_id", userId.trim())
+              .eq("provider", "google")
+              .maybeSingle();
+
+            if (integration?.access_token) {
+              // Build row in order of required_inputs
+              const rowData = tool.required_inputs?.length
+                ? tool.required_inputs.map((i) => toolCall.inputs[i.name] ?? "")
+                : Object.values(toolCall.inputs);
+
+              const sheetResult = await appendToSheet(
+                integration.access_token as string,
+                toolCall.spreadsheet_id,
+                toolCall.sheet_name ?? "Sheet1",
+                rowData
+              );
+
+              resultMsg = sheetResult.success
+                ? "✓ Saved to Google Sheets"
+                : `⚠ Could not save to Google Sheets: ${sheetResult.error}`;
+
+              req.log.info(
+                { toolId: toolCall.tool_id, success: sheetResult.success },
+                "tool execution complete"
+              );
+            } else {
+              resultMsg = "⚠ Google Sheets not connected. Please connect Google in the Tools tab.";
+            }
+          }
+
+          reply = reply.replace(toolCallMatch[0], `[${resultMsg}]`);
+        } else {
+          // Unknown connector or no userId — just remove the marker
+          reply = reply.replace(toolCallMatch[0], "");
+        }
+      } catch (parseErr) {
+        logger.error({ parseErr }, "failed to parse tool call JSON — removing marker");
+        reply = reply.replace(toolCallMatch[0], "");
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     req.log.info({ provider: resolvedProvider, model: resolvedModel, hasDocContext: docContext.length > 0 }, "chat completion successful");
     res.json({ reply });
