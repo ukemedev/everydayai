@@ -105,9 +105,10 @@ interface ChatPanelProps {
   agentId: string;
   instructions: string;
   model: string;
+  docCount: number;
 }
 
-function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
+function ChatPanel({ agentId, instructions, model, docCount }: ChatPanelProps) {
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -205,9 +206,19 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 flex-shrink-0">
-        <span className="text-xs font-medium text-white/40 uppercase tracking-wider">
-          Test Your Agent
-        </span>
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-medium text-white/40 uppercase tracking-wider">
+            Test Your Agent
+          </span>
+          {docCount > 0 && (
+            <span
+              className="text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1"
+              style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#7b93ff" }}
+            >
+              📚 {docCount} {docCount === 1 ? "document" : "documents"} loaded
+            </span>
+          )}
+        </div>
         <button
           onClick={clearChat}
           className="text-xs text-white/35 hover:text-white/65 border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-all duration-150"
@@ -883,7 +894,7 @@ export default function Studio() {
           className="flex flex-col overflow-hidden"
           style={{ width: "40%", position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
         >
-          <ChatPanel agentId={agent.id} instructions={instructions} model={model} />
+          <ChatPanel agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} />
         </div>
       </div>
 
