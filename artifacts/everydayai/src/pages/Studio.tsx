@@ -364,6 +364,9 @@ export default function Studio() {
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -418,6 +421,73 @@ export default function Studio() {
       day: "numeric",
       year: "numeric",
     });
+  }
+
+  async function handleUpload() {
+    if (!stagedFile || !agent) return;
+    setUploading(true);
+    setUploadError("");
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setUploadError("Not authenticated.");
+      setUploading(false);
+      return;
+    }
+
+    const ext = stagedFile.name.split(".").pop();
+    const safeName = `${Date.now()}_${stagedFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const storagePath = `${user.id}/${agent.id}/${safeName}`;
+
+    const { error: storageError } = await supabase.storage
+      .from("documents")
+      .upload(storagePath, stagedFile, { upsert: false });
+
+    if (storageError) {
+      setUploadError("Upload failed: " + storageError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: docRecord, error: dbError } = await supabase
+      .from("documents")
+      .insert({
+        agent_id: agent.id,
+        user_id: user.id,
+        file_name: stagedFile.name,
+        file_size: stagedFile.size,
+        file_type: ext ?? null,
+        storage_path: storagePath,
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      await supabase.storage.from("documents").remove([storagePath]);
+      setUploadError("Failed to save record: " + dbError.message);
+      setUploading(false);
+      return;
+    }
+
+    setDocuments((prev) => [docRecord as Document, ...prev]);
+    setStagedFile(null);
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    showToast("Document uploaded!");
+  }
+
+  async function handleDelete(doc: Document) {
+    setDeletingId(doc.id);
+
+    if (doc.storage_path) {
+      await supabase.storage.from("documents").remove([doc.storage_path]);
+    }
+
+    await supabase.from("documents").delete().eq("id", doc.id);
+
+    setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+    setDeletingId(null);
+    showToast("Document deleted.");
   }
 
   async function handleSave() {
@@ -677,19 +747,32 @@ export default function Studio() {
                         <p className="text-xs text-white/40 mt-0.5">{formatBytes(stagedFile.size)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setStagedFile(null)}
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90"
-                        style={{ backgroundColor: "#3b5bfc" }}
-                      >
-                        Upload
-                      </button>
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => { setStagedFile(null); setUploadError(""); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                          disabled={uploading}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all disabled:opacity-40"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleUpload}
+                          disabled={uploading}
+                          className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-1.5"
+                          style={{ backgroundColor: "#3b5bfc" }}
+                        >
+                          {uploading ? (
+                            <>
+                              <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                              Uploading…
+                            </>
+                          ) : "Upload"}
+                        </button>
+                      </div>
+                      {uploadError && (
+                        <p className="text-xs text-red-400">{uploadError}</p>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -767,10 +850,17 @@ export default function Studio() {
                             Uploaded
                           </span>
                           <button
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 hover:opacity-90"
+                            onClick={() => handleDelete(doc)}
+                            disabled={deletingId === doc.id}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
                             style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#f87171" }}
                           >
-                            Delete
+                            {deletingId === doc.id ? (
+                              <>
+                                <span className="w-2.5 h-2.5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
+                                Deleting…
+                              </>
+                            ) : "Delete"}
                           </button>
                         </div>
                       </div>
