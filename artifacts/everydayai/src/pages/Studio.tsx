@@ -34,8 +34,8 @@ const modelGroups = [
     provider: "groq",
     label: "Groq (Free)",
     models: [
-      { value: "llama3-8b-8192", label: "Llama 3 8B" },
-      { value: "llama3-70b-8192", label: "Llama 3 70B" },
+      { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (Fast)" },
+      { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
       { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
     ],
   },
