@@ -90,6 +90,20 @@ const CONNECTOR_LABELS: Record<string, string> = {
   instagram:     "Instagram",
 };
 
+interface Tool {
+  id: string;
+  agent_id: string;
+  user_id: string;
+  tool_name: string;
+  tool_description: string | null;
+  connector: string;
+  action: string;
+  required_inputs: ToolInput[] | null;
+  required_auth: { type: string; provider: string; description: string } | null;
+  status: string;
+  created_at: string;
+}
+
 interface Document {
   id: string;
   agent_id: string;
@@ -406,6 +420,10 @@ export default function Studio() {
   const [toolAnalyzing, setToolAnalyzing] = useState(false);
   const [toolError, setToolError] = useState("");
   const [toolPreview, setToolPreview] = useState<ToolPreview | null>(null);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [loadingTools, setLoadingTools] = useState(false);
+  const [confirmingTool, setConfirmingTool] = useState(false);
+  const [deletingToolId, setDeletingToolId] = useState<string | null>(null);
 
   // Knowledge Base
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -522,6 +540,69 @@ export default function Studio() {
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     showToast("Document uploaded!");
+  }
+
+  useEffect(() => {
+    if (activeTab !== "Tools" || !agent) return;
+    setLoadingTools(true);
+    supabase
+      .from("tools")
+      .select("*")
+      .eq("agent_id", agent.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setTools((data as Tool[]) ?? []);
+        setLoadingTools(false);
+      });
+  }, [activeTab, agent]);
+
+  async function handleConfirmTool() {
+    if (!toolPreview || !agent) return;
+    setConfirmingTool(true);
+    setToolError("");
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setToolError("Not authenticated.");
+      setConfirmingTool(false);
+      return;
+    }
+
+    const { data: saved, error } = await supabase
+      .from("tools")
+      .insert({
+        agent_id: agent.id,
+        user_id: user.id,
+        tool_name: toolPreview.tool_name,
+        tool_description: toolPreview.tool_description,
+        connector: toolPreview.connector,
+        action: toolPreview.action,
+        required_inputs: toolPreview.required_inputs,
+        required_auth: toolPreview.required_auth,
+        status: "active",
+      })
+      .select()
+      .single();
+
+    setConfirmingTool(false);
+
+    if (error) {
+      setToolError("Failed to save tool: " + error.message);
+      return;
+    }
+
+    setTools((prev) => [saved as Tool, ...prev]);
+    setToolPreview(null);
+    setToolPrompt("");
+    showToast("Tool added successfully!");
+  }
+
+  async function handleDeleteTool(id: string) {
+    setDeletingToolId(id);
+    await supabase.from("tools").delete().eq("id", id);
+    setTools((prev) => prev.filter((t) => t.id !== id));
+    setDeletingToolId(null);
+    showToast("Tool removed.");
   }
 
   async function handleAnalyzeTool() {
@@ -1076,14 +1157,22 @@ export default function Studio() {
                         {/* Actions */}
                         <div className="px-5 py-4 flex items-center gap-3">
                           <button
-                            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+                            onClick={handleConfirmTool}
+                            disabled={confirmingTool}
+                            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2"
                             style={{ backgroundColor: "#3b5bfc" }}
                           >
-                            Confirm &amp; Add Tool
+                            {confirmingTool ? (
+                              <>
+                                <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                                Saving…
+                              </>
+                            ) : "Confirm & Add Tool"}
                           </button>
                           <button
                             onClick={() => { setToolPreview(null); setToolPrompt(""); }}
-                            className="px-4 py-2.5 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all"
+                            disabled={confirmingTool}
+                            className="px-4 py-2.5 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all disabled:opacity-40"
                           >
                             Cancel
                           </button>
@@ -1100,26 +1189,67 @@ export default function Studio() {
                 <div className="flex flex-col gap-3">
                   <h2 className="text-base font-semibold text-white">Connected Tools</h2>
 
-                  {/* Empty state */}
-                  <div
-                    className="rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 py-10 px-6 text-center"
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center mb-1"
-                      style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                        <circle cx="19" cy="5" r="3" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8"/>
-                        <path d="M16 2l-2 2 4 4 2-2" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
+                  {loadingTools ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
                     </div>
-                    <p className="text-sm font-medium text-white/35">No tools connected yet</p>
-                    <p className="text-xs text-white/22 leading-relaxed max-w-[220px]">
-                      Describe a tool above and AI will build it for you
-                    </p>
-                  </div>
+                  ) : tools.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 py-10 px-6 text-center">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center mb-1"
+                        style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <p className="text-sm font-medium text-white/35">No tools connected yet</p>
+                      <p className="text-xs text-white/25 leading-relaxed max-w-[220px]">
+                        Describe a tool above and AI will build it for you
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {tools.map((tool) => (
+                        <div
+                          key={tool.id}
+                          className="rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3"
+                          style={{ backgroundColor: "#111827" }}
+                        >
+                          <span className="text-xl flex-shrink-0">
+                            {CONNECTOR_ICONS[tool.connector] ?? "🔧"}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-white truncate">{tool.tool_name}</p>
+                            {tool.tool_description && (
+                              <p className="text-xs text-white/40 mt-0.5 truncate">{tool.tool_description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                            >
+                              Active
+                            </span>
+                            <button
+                              onClick={() => handleDeleteTool(tool.id)}
+                              disabled={deletingToolId === tool.id}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-150 hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+                              style={{ borderColor: "rgba(239,68,68,0.3)", color: "#f87171", backgroundColor: "rgba(239,68,68,0.08)" }}
+                            >
+                              {deletingToolId === tool.id ? (
+                                <>
+                                  <span className="w-2.5 h-2.5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
+                                  Removing…
+                                </>
+                              ) : "Delete"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Divider */}
