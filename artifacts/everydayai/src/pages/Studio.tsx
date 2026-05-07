@@ -882,8 +882,108 @@ export default function Studio() {
             )}
 
             {activeTab === "Tools" && (
-              <div className="flex items-center justify-center h-48">
-                <p className="text-white/25 text-sm">Tool integrations coming soon.</p>
+              <div className="flex flex-col gap-8 p-8 overflow-y-auto">
+
+                {/* ── Section 1: AI Tool Builder ── */}
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <h2 className="text-base font-semibold text-white">Build a Tool</h2>
+                    <p className="text-sm text-white/40 mt-1">
+                      Describe what you want your agent to do in plain English
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <textarea
+                      rows={4}
+                      placeholder={"e.g. When a customer gives their name and phone number, save it to my Google Sheet automatically"}
+                      className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none leading-relaxed"
+                      style={{ backgroundColor: "#111827" }}
+                    />
+                    <div className="flex flex-col gap-2">
+                      <button
+                        className="self-start px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                        style={{ backgroundColor: "#3b5bfc" }}
+                      >
+                        Build Tool with AI
+                      </button>
+                      <p className="text-xs text-white/30">
+                        AI will analyze your request and set up the right integration
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-white/5" />
+
+                {/* ── Section 2: Connected Tools ── */}
+                <div className="flex flex-col gap-3">
+                  <h2 className="text-base font-semibold text-white">Connected Tools</h2>
+
+                  {/* Empty state */}
+                  <div
+                    className="rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 py-10 px-6 text-center"
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center mb-1"
+                      style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        <circle cx="19" cy="5" r="3" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8"/>
+                        <path d="M16 2l-2 2 4 4 2-2" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-white/35">No tools connected yet</p>
+                    <p className="text-xs text-white/22 leading-relaxed max-w-[220px]">
+                      Describe a tool above and AI will build it for you
+                    </p>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-white/5" />
+
+                {/* ── Section 3: Available Connectors ── */}
+                <div className="flex flex-col gap-4">
+                  <h2 className="text-base font-semibold text-white">Available Connectors</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { icon: "📊", name: "Google Sheets", desc: "Save data to spreadsheets",       soon: false },
+                      { icon: "💬", name: "WhatsApp",      desc: "Send WhatsApp messages",          soon: true  },
+                      { icon: "📱", name: "Telegram",      desc: "Send Telegram notifications",     soon: false },
+                      { icon: "📧", name: "Gmail",         desc: "Send emails automatically",       soon: false },
+                      { icon: "📸", name: "Instagram",     desc: "Post or reply on Instagram",      soon: true  },
+                    ].map(({ icon, name, desc, soon }) => (
+                      <div
+                        key={name}
+                        className="relative rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3 transition-all duration-150"
+                        style={{
+                          backgroundColor: "#111827",
+                          opacity: soon ? 0.6 : 1,
+                        }}
+                      >
+                        <span className="text-xl flex-shrink-0">{icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium text-white">{name}</p>
+                            {soon && (
+                              <span
+                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                                style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}
+                              >
+                                Soon
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/35 mt-0.5 truncate">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             )}
           </div>
