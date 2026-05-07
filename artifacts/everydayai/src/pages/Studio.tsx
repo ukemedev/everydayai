@@ -59,6 +59,16 @@ interface Agent {
   status: string;
 }
 
+interface Document {
+  id: string;
+  agent_id: string;
+  file_name: string;
+  file_size: number | null;
+  file_type: string | null;
+  storage_path: string | null;
+  created_at: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "agent";
@@ -349,6 +359,13 @@ export default function Studio() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
+  // Knowledge Base
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!agentId) return;
     supabase
@@ -366,6 +383,42 @@ export default function Studio() {
         setLoading(false);
       });
   }, [agentId]);
+
+  useEffect(() => {
+    if (activeTab !== "Knowledge" || !agent) return;
+    setLoadingDocs(true);
+    supabase
+      .from("documents")
+      .select("*")
+      .eq("agent_id", agent.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        setDocuments((data as Document[]) ?? []);
+        setLoadingDocs(false);
+      });
+  }, [activeTab, agent]);
+
+  function handleFileInput(file: File | null) {
+    if (!file) return;
+    const allowed = [".pdf", ".txt", ".docx"];
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!allowed.includes(ext)) return;
+    setStagedFile(file);
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
 
   async function handleSave() {
     if (!agent) return;
@@ -593,8 +646,137 @@ export default function Studio() {
             )}
 
             {activeTab === "Knowledge" && (
-              <div className="flex items-center justify-center h-48">
-                <p className="text-white/25 text-sm">Knowledge base coming soon.</p>
+              <div className="flex flex-col gap-6 p-8">
+                {/* Header */}
+                <div>
+                  <h2 className="text-base font-semibold text-white">Knowledge Base</h2>
+                  <p className="text-sm text-white/40 mt-1">
+                    Upload documents your agent will use to answer questions
+                  </p>
+                </div>
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.txt,.docx"
+                  className="hidden"
+                  onChange={(e) => handleFileInput(e.target.files?.[0] ?? null)}
+                />
+
+                {/* Staged file */}
+                {stagedFile ? (
+                  <div
+                    className="rounded-xl border border-white/10 px-5 py-4 flex items-center justify-between gap-4"
+                    style={{ backgroundColor: "#111827" }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-2xl flex-shrink-0">📄</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{stagedFile.name}</p>
+                        <p className="text-xs text-white/40 mt-0.5">{formatBytes(stagedFile.size)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => setStagedFile(null)}
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90"
+                        style={{ backgroundColor: "#3b5bfc" }}
+                      >
+                        Upload
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Drop zone */
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                    onDragLeave={() => setIsDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragOver(false);
+                      handleFileInput(e.dataTransfer.files?.[0] ?? null);
+                    }}
+                    className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-3 py-10 px-6 transition-all duration-150 cursor-pointer"
+                    style={{
+                      borderColor: isDragOver ? "#3b5bfc" : "rgba(255,255,255,0.12)",
+                      backgroundColor: isDragOver ? "rgba(59,91,252,0.06)" : "transparent",
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {/* Cloud upload icon */}
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: "rgba(59,91,252,0.15)" }}
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                        <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6H16a3 3 0 010 6h-1" stroke="#3b5bfc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M12 12v9M9 15l3-3 3 3" stroke="#3b5bfc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-white/70">Drag and drop files here</p>
+                      <p className="text-xs text-white/30 mt-1">Supports PDF, TXT, DOCX</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                      className="mt-1 px-4 py-1.5 rounded-lg text-xs font-medium text-[#3b5bfc] border transition-all duration-150 hover:bg-[#3b5bfc]/10"
+                      style={{ borderColor: "rgba(59,91,252,0.4)" }}
+                    >
+                      Choose Files
+                    </button>
+                  </div>
+                )}
+
+                {/* Document list */}
+                <div className="flex flex-col gap-2">
+                  {loadingDocs ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+                    </div>
+                  ) : documents.length === 0 ? (
+                    <p className="text-sm text-white/25 text-center py-6">No documents uploaded yet</p>
+                  ) : (
+                    documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="rounded-xl border border-white/8 px-4 py-3 flex items-center justify-between gap-4"
+                        style={{ backgroundColor: "#111827" }}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-xl flex-shrink-0">📄</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{doc.file_name}</p>
+                            <p className="text-xs text-white/35 mt-0.5">
+                              {doc.file_size ? formatBytes(doc.file_size) : "—"}
+                              {" · "}
+                              {formatDate(doc.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                          >
+                            Uploaded
+                          </span>
+                          <button
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 hover:opacity-90"
+                            style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#f87171" }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
 
