@@ -59,6 +59,37 @@ interface Agent {
   status: string;
 }
 
+interface ToolInput {
+  name: string;
+  label: string;
+  description: string;
+}
+
+interface ToolPreview {
+  connector: string;
+  action: string;
+  tool_name: string;
+  tool_description: string;
+  required_inputs: ToolInput[];
+  required_auth: { type: string; provider: string; description: string };
+}
+
+const CONNECTOR_ICONS: Record<string, string> = {
+  google_sheets: "📊",
+  telegram:      "📱",
+  gmail:         "📧",
+  whatsapp:      "💬",
+  instagram:     "📸",
+};
+
+const CONNECTOR_LABELS: Record<string, string> = {
+  google_sheets: "Google Sheets",
+  telegram:      "Telegram",
+  gmail:         "Gmail",
+  whatsapp:      "WhatsApp",
+  instagram:     "Instagram",
+};
+
 interface Document {
   id: string;
   agent_id: string;
@@ -370,6 +401,12 @@ export default function Studio() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
+  // Tools tab
+  const [toolPrompt, setToolPrompt] = useState("");
+  const [toolAnalyzing, setToolAnalyzing] = useState(false);
+  const [toolError, setToolError] = useState("");
+  const [toolPreview, setToolPreview] = useState<ToolPreview | null>(null);
+
   // Knowledge Base
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
@@ -485,6 +522,51 @@ export default function Studio() {
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     showToast("Document uploaded!");
+  }
+
+  async function handleAnalyzeTool() {
+    if (!toolPrompt.trim()) return;
+    setToolAnalyzing(true);
+    setToolError("");
+    setToolPreview(null);
+
+    // Try providers in order: groq → openai → anthropic → google
+    const providerOrder = ["groq", "openai", "anthropic", "google"];
+    let chosenKey = "";
+    let chosenProvider = "";
+    for (const p of providerOrder) {
+      const { data } = await supabase
+        .from("api_keys")
+        .select("api_key")
+        .eq("provider", p)
+        .maybeSingle();
+      if (data?.api_key) { chosenKey = data.api_key; chosenProvider = p; break; }
+    }
+
+    if (!chosenKey) {
+      setToolError("No API key found. Add a Groq or OpenAI key in Settings to use this feature.");
+      setToolAnalyzing(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/tools/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: toolPrompt.trim(),
+          apiKey: chosenKey,
+          provider: chosenProvider,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Request failed");
+      setToolPreview(data.tool as ToolPreview);
+    } catch (err) {
+      setToolError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
+    } finally {
+      setToolAnalyzing(false);
+    }
   }
 
   async function handleDelete(doc: Document) {
@@ -895,21 +977,119 @@ export default function Studio() {
                   <div className="flex flex-col gap-3">
                     <textarea
                       rows={4}
-                      placeholder={"e.g. When a customer gives their name and phone number, save it to my Google Sheet automatically"}
-                      className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none leading-relaxed"
+                      value={toolPrompt}
+                      onChange={(e) => { setToolPrompt(e.target.value); setToolError(""); setToolPreview(null); }}
+                      disabled={toolAnalyzing}
+                      placeholder="e.g. When a customer gives their name and phone number, save it to my Google Sheet automatically"
+                      className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none leading-relaxed disabled:opacity-50"
                       style={{ backgroundColor: "#111827" }}
                     />
                     <div className="flex flex-col gap-2">
                       <button
-                        className="self-start px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                        onClick={handleAnalyzeTool}
+                        disabled={!toolPrompt.trim() || toolAnalyzing}
+                        className="self-start px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         style={{ backgroundColor: "#3b5bfc" }}
                       >
-                        Build Tool with AI
+                        {toolAnalyzing ? (
+                          <>
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                            Analyzing…
+                          </>
+                        ) : "Build Tool with AI"}
                       </button>
                       <p className="text-xs text-white/30">
                         AI will analyze your request and set up the right integration
                       </p>
                     </div>
+
+                    {/* Error state */}
+                    {toolError && (
+                      <div
+                        className="rounded-xl px-4 py-3 text-sm border"
+                        style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)", color: "#f87171" }}
+                      >
+                        {toolError}
+                      </div>
+                    )}
+
+                    {/* ── Tool preview card ── */}
+                    {toolPreview && (
+                      <div
+                        className="rounded-xl border border-white/10 overflow-hidden"
+                        style={{ backgroundColor: "#111827" }}
+                      >
+                        {/* Card header */}
+                        <div
+                          className="px-5 py-4 border-b border-white/5 flex items-start gap-3"
+                          style={{ backgroundColor: "rgba(59,91,252,0.06)" }}
+                        >
+                          <span className="text-2xl flex-shrink-0 mt-0.5">
+                            {CONNECTOR_ICONS[toolPreview.connector] ?? "🔧"}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-white">{toolPreview.tool_name}</p>
+                            <p className="text-xs text-white/50 mt-0.5 leading-relaxed">{toolPreview.tool_description}</p>
+                            <div className="flex items-center gap-1.5 mt-2">
+                              <span
+                                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                                style={{ backgroundColor: "rgba(59,91,252,0.2)", color: "#7b93ff" }}
+                              >
+                                {CONNECTOR_LABELS[toolPreview.connector] ?? toolPreview.connector}
+                              </span>
+                              <span
+                                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                                style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.45)" }}
+                              >
+                                {toolPreview.action}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Required inputs */}
+                        {toolPreview.required_inputs.length > 0 && (
+                          <div className="px-5 py-4 border-b border-white/5">
+                            <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
+                              Data to collect
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {toolPreview.required_inputs.map((input) => (
+                                <div key={input.name} className="flex items-start gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#3b5bfc] flex-shrink-0 mt-1.5" />
+                                  <div>
+                                    <span className="text-xs font-medium text-white">{input.label}</span>
+                                    <span className="text-xs text-white/35 ml-1.5">{input.description}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Auth requirement */}
+                        <div className="px-5 py-3.5 border-b border-white/5 flex items-center gap-2">
+                          <span className="text-sm">🔐</span>
+                          <p className="text-xs text-white/45">{toolPreview.required_auth.description}</p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="px-5 py-4 flex items-center gap-3">
+                          <button
+                            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+                            style={{ backgroundColor: "#3b5bfc" }}
+                          >
+                            Confirm &amp; Add Tool
+                          </button>
+                          <button
+                            onClick={() => { setToolPreview(null); setToolPrompt(""); }}
+                            className="px-4 py-2.5 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
