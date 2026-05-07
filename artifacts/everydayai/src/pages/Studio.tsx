@@ -345,6 +345,10 @@ export default function Studio() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
 
+  const [showDeployModal, setShowDeployModal] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [toast, setToast] = useState("");
+
   useEffect(() => {
     if (!agentId) return;
     supabase
@@ -366,10 +370,44 @@ export default function Studio() {
   async function handleSave() {
     if (!agent) return;
     setSaving(true);
-    await supabase.from("agents").update({ model }).eq("id", agent.id);
+    await supabase.from("agents").update({ model, instructions, prompt_model: model }).eq("id", agent.id);
     setSaving(false);
     setSavedMsg(true);
     setTimeout(() => setSavedMsg(false), 2500);
+  }
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3500);
+  }
+
+  async function handlePublish() {
+    if (!agent) return;
+    setPublishing(true);
+    const { error } = await supabase
+      .from("agents")
+      .update({ status: "live" })
+      .eq("id", agent.id);
+    setPublishing(false);
+    if (!error) {
+      setAgent((prev) => prev ? { ...prev, status: "live" } : prev);
+      setShowDeployModal(false);
+      showToast("Agent is now Live! 🎉");
+    }
+  }
+
+  async function handleUnpublish() {
+    if (!agent) return;
+    setPublishing(true);
+    const { error } = await supabase
+      .from("agents")
+      .update({ status: "draft" })
+      .eq("id", agent.id);
+    setPublishing(false);
+    if (!error) {
+      setAgent((prev) => prev ? { ...prev, status: "draft" } : prev);
+      showToast("Agent unpublished.");
+    }
   }
 
   const font = { fontFamily: "'Inter', sans-serif" };
@@ -439,12 +477,24 @@ export default function Studio() {
             <span className="text-sm">⚙️</span>
             Settings
           </button>
-          <button
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95"
-            style={{ backgroundColor: "#3b5bfc" }}
-          >
-            Deploy
-          </button>
+          {isLive ? (
+            <button
+              onClick={handleUnpublish}
+              disabled={publishing}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-red-500/30 hover:text-red-400 transition-all duration-150 disabled:opacity-50"
+            >
+              {publishing ? "Saving…" : "Unpublish"}
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowDeployModal(true)}
+              disabled={publishing}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
+              style={{ backgroundColor: "#3b5bfc" }}
+            >
+              Deploy
+            </button>
+          )}
           <button className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150">
             Share
           </button>
@@ -564,6 +614,76 @@ export default function Studio() {
           <ChatPanel agentId={agent.id} instructions={instructions} model={model} />
         </div>
       </div>
+
+      {/* ── Deploy confirmation modal ── */}
+      {showDeployModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowDeployModal(false); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 px-7 py-7 flex flex-col gap-5"
+            style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif" }}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-white">Publish Your Agent</h2>
+                <p className="text-sm text-white/45 mt-2 leading-relaxed">
+                  Any changes made will immediately go Live. Are you sure you want to continue?
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDeployModal(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-white/30 hover:text-white/70 hover:bg-white/5 transition-all flex-shrink-0 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Status preview */}
+            <div
+              className="flex items-center gap-3 rounded-xl px-4 py-3 border border-white/5"
+              style={{ backgroundColor: "rgba(34,197,94,0.06)" }}
+            >
+              <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+              <p className="text-sm text-white/70">
+                <span className="text-white font-medium">{agent.name}</span> will be set to{" "}
+                <span className="text-green-400 font-medium">Live</span>
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowDeployModal(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/55 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={publishing}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#3b5bfc" }}
+              >
+                {publishing ? "Publishing…" : "Yes, I'm Sure"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div
+          className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg transition-all"
+          style={{ backgroundColor: "#16a34a" }}
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
