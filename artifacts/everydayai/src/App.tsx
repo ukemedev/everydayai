@@ -8,6 +8,7 @@ import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Studio from "@/pages/Studio";
+import Settings from "@/pages/Settings";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,9 @@ function Router() {
       </Route>
       <Route path="/studio/:agentId">
         {() => <ProtectedRoute component={Studio} />}
+      </Route>
+      <Route path="/settings">
+        {() => <ProtectedRoute component={Settings} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -2,11 +2,51 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { supabase } from "@/lib/supabase";
 
-const modelOptions = [
-  { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "gpt-4o", label: "GPT-4o" },
-  { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+// ─── Model catalogue ──────────────────────────────────────────────────────────
+
+const modelGroups = [
+  {
+    provider: "openai",
+    label: "OpenAI",
+    models: [
+      { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+      { value: "gpt-4o", label: "GPT-4o" },
+      { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+    ],
+  },
+  {
+    provider: "anthropic",
+    label: "Anthropic",
+    models: [
+      { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+      { value: "claude-3-haiku-20240307", label: "Claude 3 Haiku" },
+    ],
+  },
+  {
+    provider: "google",
+    label: "Google",
+    models: [
+      { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+      { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
+    ],
+  },
+  {
+    provider: "groq",
+    label: "Groq (Free)",
+    models: [
+      { value: "llama3-8b-8192", label: "Llama 3 8B" },
+      { value: "llama3-70b-8192", label: "Llama 3 70B" },
+      { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" },
+    ],
+  },
 ];
+
+function getProviderForModel(modelValue: string): string {
+  for (const group of modelGroups) {
+    if (group.models.some((m) => m.value === modelValue)) return group.provider;
+  }
+  return "openai";
+}
 
 const tabs = ["Prompt", "Knowledge", "Tools"] as const;
 type Tab = (typeof tabs)[number];
@@ -23,6 +63,8 @@ interface Message {
   id: string;
   role: "user" | "agent";
   text: string;
+  type?: "no-key";
+  provider?: string;
 }
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
@@ -34,9 +76,7 @@ function TypingDots() {
         <span
           key={i}
           className="w-1.5 h-1.5 rounded-full bg-white/30"
-          style={{
-            animation: `typing-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
-          }}
+          style={{ animation: `typing-bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
         />
       ))}
       <style>{`
@@ -58,6 +98,7 @@ interface ChatPanelProps {
 }
 
 function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
+  const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -79,14 +120,31 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
     if (!text || isTyping) return;
 
     const userMsg: Message = { id: crypto.randomUUID(), role: "user", text };
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsTyping(true);
 
-    // Build conversation history in OpenAI format (everything before this new message)
+    const provider = getProviderForModel(model);
+
+    // Fetch the user's API key for this provider from Supabase
+    const { data: keyData } = await supabase
+      .from("api_keys")
+      .select("api_key")
+      .eq("provider", provider)
+      .maybeSingle();
+
+    if (!keyData?.api_key) {
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "agent", type: "no-key", provider, text: "" },
+      ]);
+      setIsTyping(false);
+      return;
+    }
+
+    // Build conversation history in OpenAI format (all previous messages)
     const conversationHistory = messages.map((m) => ({
-      role: m.role === "user" ? "user" : "assistant" as "user" | "assistant",
+      role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
       content: m.text,
     }));
 
@@ -98,6 +156,8 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
           message: text,
           instructions: instructions.trim() || "You are a helpful assistant.",
           model,
+          provider,
+          apiKey: keyData.api_key,
           conversationHistory,
           agentId,
         }),
@@ -105,16 +165,14 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.error ?? "Request failed");
-      }
+      if (!res.ok) throw new Error(data.error ?? "Request failed");
 
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "agent", text: data.reply ?? "Sorry, I didn't get a response." },
+        { id: crypto.randomUUID(), role: "agent", text: data.reply ?? "No response." },
       ]);
     } catch (err) {
-      const errText = err instanceof Error ? err.message : "Error connecting to agent. Please try again.";
+      const errText = err instanceof Error ? err.message : "Error connecting to agent.";
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "agent", text: errText },
@@ -125,10 +183,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
   const noInstructions = !instructions.trim();
@@ -138,7 +193,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
       className="flex-1 flex flex-col min-h-0 border-l border-white/5"
       style={{ backgroundColor: "#0d1117" }}
     >
-      {/* Chat header */}
+      {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 flex-shrink-0">
         <span className="text-xs font-medium text-white/40 uppercase tracking-wider">
           Test Your Agent
@@ -151,7 +206,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
         </button>
       </div>
 
-      {/* Messages area */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 flex flex-col gap-3">
         {noInstructions ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
@@ -161,39 +216,68 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
           </div>
         ) : messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-xs text-white/20 text-center">
-              Send a message to test your agent…
-            </p>
+            <p className="text-xs text-white/20 text-center">Send a message to test your agent…</p>
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex items-end gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-              >
-                {msg.role === "agent" && (
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mb-0.5"
-                    style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
-                  >
-                    🤖
+            {messages.map((msg) => {
+              // Special "no API key" system message
+              if (msg.type === "no-key") {
+                return (
+                  <div key={msg.id} className="flex items-start gap-2">
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
+                      style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
+                    >
+                      🤖
+                    </div>
+                    <div
+                      className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed"
+                      style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}
+                    >
+                      <p className="text-amber-400/90 text-xs mb-1.5 font-medium">No API key found</p>
+                      <p className="text-white/60 text-xs leading-relaxed">
+                        You need to add a{" "}
+                        <span className="text-white/80 capitalize">{msg.provider}</span> API key to use this model.
+                      </p>
+                      <button
+                        onClick={() => navigate("/settings")}
+                        className="mt-2.5 text-xs text-[#3b5bfc] hover:underline"
+                      >
+                        → Go to Settings to add your key
+                      </button>
+                    </div>
                   </div>
-                )}
-                <div
-                  className="max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words"
-                  style={
-                    msg.role === "user"
-                      ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
-                      : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
-                  }
-                >
-                  {msg.text}
-                </div>
-              </div>
-            ))}
+                );
+              }
 
-            {/* Typing indicator */}
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex items-end gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+                >
+                  {msg.role === "agent" && (
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mb-0.5"
+                      style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
+                    >
+                      🤖
+                    </div>
+                  )}
+                  <div
+                    className="max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words"
+                    style={
+                      msg.role === "user"
+                        ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
+                        : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
+                    }
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              );
+            })}
+
             {isTyping && (
               <div className="flex items-end gap-2">
                 <div
@@ -202,10 +286,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
                 >
                   🤖
                 </div>
-                <div
-                  className="rounded-2xl"
-                  style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}
-                >
+                <div className="rounded-2xl" style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}>
                   <TypingDots />
                 </div>
               </div>
@@ -215,7 +296,7 @@ function ChatPanel({ agentId, instructions, model }: ChatPanelProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area */}
+      {/* Input */}
       <div className="px-4 pb-4 pt-2 flex-shrink-0 border-t border-white/5">
         <div
           className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 focus-within:border-[#3b5bfc]/50 transition-colors"
@@ -352,6 +433,13 @@ export default function Studio() {
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
+            onClick={() => navigate("/settings")}
+            className="px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 flex items-center gap-1.5"
+          >
+            <span className="text-sm">⚙️</span>
+            Settings
+          </button>
+          <button
             className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95"
             style={{ backgroundColor: "#3b5bfc" }}
           >
@@ -403,15 +491,29 @@ export default function Studio() {
                   <select
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    className="w-56 rounded-lg px-4 py-2.5 text-sm text-white border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors appearance-none cursor-pointer"
+                    className="w-64 rounded-lg px-4 py-2.5 text-sm text-white border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors appearance-none cursor-pointer"
                     style={{ backgroundColor: "#111827" }}
                   >
-                    {modelOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value} style={{ backgroundColor: "#111827" }}>
-                        {opt.label}
-                      </option>
+                    {modelGroups.map((group) => (
+                      <optgroup key={group.provider} label={group.label} style={{ backgroundColor: "#111827", color: "rgba(255,255,255,0.5)" }}>
+                        {group.models.map((opt) => (
+                          <option key={opt.value} value={opt.value} style={{ backgroundColor: "#111827" }}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
+                  <p className="text-[11px] text-white/30">
+                    Provider: <span className="capitalize text-white/45">{getProviderForModel(model)}</span>
+                    {" · "}
+                    <button
+                      onClick={() => navigate("/settings")}
+                      className="text-[#3b5bfc]/70 hover:text-[#3b5bfc] transition-colors"
+                    >
+                      Manage API keys →
+                    </button>
+                  </p>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -459,11 +561,7 @@ export default function Studio() {
           className="flex flex-col overflow-hidden"
           style={{ width: "40%", position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
         >
-          <ChatPanel
-            agentId={agent.id}
-            instructions={instructions}
-            model={model}
-          />
+          <ChatPanel agentId={agent.id} instructions={instructions} model={model} />
         </div>
       </div>
     </div>

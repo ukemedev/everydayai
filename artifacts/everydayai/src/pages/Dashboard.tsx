@@ -310,6 +310,14 @@ export default function Dashboard() {
               </button>
             );
           })}
+          <button
+            onClick={() => navigate("/settings")}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
+            style={{ color: "rgba(255,255,255,0.55)" }}
+          >
+            <span className="text-base">⚙️</span>
+            Settings
+          </button>
         </nav>
 
         <div className="px-4 py-5 border-t border-white/5 flex flex-col gap-3">
