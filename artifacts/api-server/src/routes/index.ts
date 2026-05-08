@@ -9,9 +9,25 @@ import adminRouter from "./admin";
 import blogRouter from "./blog";
 import agentsRouter from "./agents";
 import paystackRouter from "./paystack";
+import {
+  generalLimiter,
+  chatLimiter,
+  authLimiter,
+  analyzeLimiter,
+} from "../middleware/rateLimiter";
 
 const router: IRouter = Router();
 
+// ── Global limiter ────────────────────────────────────────────────────────────
+router.use(generalLimiter);
+
+// ── Route-specific limiters (applied before the routers below) ────────────────
+router.post("/chat", chatLimiter);
+router.post("/tools/analyze", analyzeLimiter);
+router.post("/automations/analyze", analyzeLimiter);
+router.use("/admin", authLimiter);
+
+// ── Routers ───────────────────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(chatRouter);
 router.use(toolsRouter);
