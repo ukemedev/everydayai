@@ -305,13 +305,14 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
 
       const newMessages: Message[] = [];
 
-      if (data.toolCall) {
+      const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls as ToolCallDebug[] : [];
+      for (const tc of toolCalls) {
         newMessages.push({
           id: crypto.randomUUID(),
           role: "agent",
           type: "tool-debug",
           text: "",
-          toolCall: data.toolCall as ToolCallDebug,
+          toolCall: tc,
         });
       }
 

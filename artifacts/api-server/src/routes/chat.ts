@@ -16,6 +16,31 @@ function extractSpreadsheetId(url: string): string {
   return match?.[1] ?? url;
 }
 
+// Finds every TOOL_CALL marker in an AI reply, tolerates missing brackets and nested JSON.
+function extractToolCallMarkers(text: string): Array<{ raw: string; json: string }> {
+  const results: Array<{ raw: string; json: string }> = [];
+  // Match optional `[`, then `TOOL_CALL:`, optional whitespace, then opening brace
+  const markerRe = /\[?TOOL_CALL:\s*(\{)/g;
+  let m: RegExpExecArray | null;
+  while ((m = markerRe.exec(text)) !== null) {
+    const braceStart = m.index + m[0].length - 1; // position of the opening `{`
+    let depth = 0;
+    let i = braceStart;
+    for (; i < text.length; i++) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") { depth--; if (depth === 0) break; }
+    }
+    if (depth !== 0) continue; // unbalanced — skip
+    const jsonStr = text.slice(braceStart, i + 1);
+    const hasClosingBracket = text[i + 1] === "]";
+    const raw = text.slice(m.index, i + 1 + (hasClosingBracket ? 1 : 0));
+    results.push({ raw, json: jsonStr });
+    // advance past this match to avoid re-processing
+    markerRe.lastIndex = i + 1 + (hasClosingBracket ? 1 : 0);
+  }
+  return results;
+}
+
 // pdf-parse and mammoth are externalized in esbuild — load via require at runtime
 const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (
@@ -223,11 +248,12 @@ async function buildToolsContext(agentId: string): Promise<{ prompt: string; too
 
   const prompt = `
 
-You have access to the following tools. When you have collected ALL required inputs from the user, output a tool call on its own line in EXACTLY this format (nothing else on that line), then continue with a friendly confirmation:
+You have access to the following tools. When you have collected ALL required inputs from the user, output each tool call on its own line in EXACTLY this format, then continue with a friendly confirmation:
 
 [TOOL_CALL:{"tool_id":"<id>","inputs":{"<field_name>":"<value>"}}]
 
 CRITICAL RULES:
+- If multiple tools are relevant (e.g. save to Google Sheets AND send a Telegram notification), output ALL tool calls one after another without waiting — use every relevant tool automatically in a single response.
 - For google_sheets tools: NEVER ask the user for a spreadsheet URL or ID — it is already saved. Collect only the data fields listed under "Required inputs", then trigger the tool immediately.
 - For telegram tools: NEVER ask the user for a Telegram handle, chat ID, or bot token. The bot is pre-configured. Trigger the tool with a "message" input summarising what happened, then confirm to the user that the notification was sent.
 - For gmail tools: NEVER ask the user for credentials. Just collect to/subject/body from the conversation.
@@ -360,25 +386,32 @@ router.post("/chat", async (req: Request, res: Response) => {
       response: string;
       timestamp: string;
     }
-    let toolCallResult: ToolCallResult | null = null;
+    const toolCallResults: ToolCallResult[] = [];
 
-    const toolCallMatch = reply.match(/\[TOOL_CALL:(\{.*?\})\]/s);
-    if (toolCallMatch && agentTools.length > 0) {
-      req.log.info({ raw: toolCallMatch[1] }, "tool call detected in AI response");
-      try {
-        const toolCallParsed = JSON.parse(toolCallMatch[1]) as {
-          tool_id: string;
-          inputs: Record<string, string>;
-          spreadsheet_id?: string;
-          sheet_name?: string;
-        };
+    const markers = extractToolCallMarkers(reply);
+    if (markers.length > 0 && agentTools.length > 0) {
+      req.log.info({ count: markers.length }, "tool call markers detected in AI response");
 
-        const tool = agentTools.find((t) => t.id === toolCallParsed.tool_id);
+      for (const { raw, json } of markers) {
+        try {
+          const toolCallParsed = JSON.parse(json) as {
+            tool_id: string;
+            inputs: Record<string, string>;
+            spreadsheet_id?: string;
+            sheet_name?: string;
+          };
 
-        if (tool && userId?.trim()) {
+          const tool = agentTools.find((t) => t.id === toolCallParsed.tool_id);
+
+          if (!tool || !userId?.trim()) {
+            reply = reply.replace(raw, "");
+            continue;
+          }
+
           const sb = getServiceClient();
           let resultMsg = "";
           const uid = userId.trim();
+          let result: ToolCallResult;
 
           if (tool.connector === "google_sheets" && sb) {
             const { data: integration } = await sb
@@ -404,11 +437,8 @@ router.post("/chat", async (req: Request, res: Response) => {
               );
 
               const succeeded = sheetResult.success;
-              resultMsg = succeeded
-                ? "✓ Saved to Google Sheets"
-                : `⚠ Could not save to Google Sheets: ${sheetResult.error}`;
-
-              toolCallResult = {
+              resultMsg = succeeded ? "✓ Saved to Google Sheets" : `⚠ Could not save to Google Sheets: ${sheetResult.error}`;
+              result = {
                 name:      tool.tool_name,
                 status:    succeeded ? "success" : "failed",
                 data:      toolCallParsed.inputs,
@@ -417,17 +447,10 @@ router.post("/chat", async (req: Request, res: Response) => {
               };
             } else {
               resultMsg = "⚠ Google Sheets not connected. Please connect Google in the Tools tab.";
-              toolCallResult = {
-                name:      tool.tool_name,
-                status:    "failed",
-                data:      toolCallParsed.inputs,
-                response:  "Google account not connected",
-                timestamp: new Date().toISOString(),
-              };
+              result = { name: tool.tool_name, status: "failed", data: toolCallParsed.inputs, response: "Google account not connected", timestamp: new Date().toISOString() };
             }
 
           } else if (tool.connector === "telegram" && sb) {
-            // Always look up credentials via the tool owner's user_id, not the chat session uid
             const toolOwnerId = (tool as { user_id?: string }).user_id ?? uid;
             const { data: integration } = await sb
               .from("integrations")
@@ -440,18 +463,13 @@ router.post("/chat", async (req: Request, res: Response) => {
             const chatId   = integration?.refresh_token as string | undefined;
 
             if (botToken && chatId) {
-              const summary = toolCallParsed.inputs.message
-                ?? Object.entries(toolCallParsed.inputs).map(([k, v]) => `${k}: ${v}`).join(", ");
-              const agentName = (tool as { tool_name: string }).tool_name;
-              const message   = `🔔 New notification from ${agentName}:\n${summary}`;
-              const tgResult = await sendTelegramMessage(botToken, chatId, message);
+              const summary   = toolCallParsed.inputs.message ?? Object.entries(toolCallParsed.inputs).map(([k, v]) => `${k}: ${v}`).join(", ");
+              const tgMessage = `🔔 New notification from ${tool.tool_name}:\n${summary}`;
+              const tgResult  = await sendTelegramMessage(botToken, chatId, tgMessage);
               const succeeded = tgResult.success;
 
-              resultMsg = succeeded
-                ? "✓ Telegram message sent"
-                : `⚠ Could not send Telegram message: ${tgResult.error}`;
-
-              toolCallResult = {
+              resultMsg = succeeded ? "✓ Telegram message sent" : `⚠ Could not send Telegram message: ${tgResult.error}`;
+              result = {
                 name:      tool.tool_name,
                 status:    succeeded ? "success" : "failed",
                 data:      toolCallParsed.inputs,
@@ -460,13 +478,7 @@ router.post("/chat", async (req: Request, res: Response) => {
               };
             } else {
               resultMsg = "⚠ Telegram not connected. Please add your Bot Token and Chat ID in Settings.";
-              toolCallResult = {
-                name:      tool.tool_name,
-                status:    "failed",
-                data:      toolCallParsed.inputs,
-                response:  "Telegram credentials not configured",
-                timestamp: new Date().toISOString(),
-              };
+              result = { name: tool.tool_name, status: "failed", data: toolCallParsed.inputs, response: "Telegram credentials not configured", timestamp: new Date().toISOString() };
             }
 
           } else if (tool.connector === "gmail" && sb) {
@@ -483,13 +495,10 @@ router.post("/chat", async (req: Request, res: Response) => {
               const body    = toolCallParsed.inputs.body ?? toolCallParsed.inputs.message ?? "";
 
               const gmailResult = await sendEmail(integration.access_token as string, to, subject, body);
-              const succeeded = gmailResult.success;
+              const succeeded   = gmailResult.success;
 
-              resultMsg = succeeded
-                ? "✓ Email sent via Gmail"
-                : `⚠ Could not send email: ${gmailResult.error}`;
-
-              toolCallResult = {
+              resultMsg = succeeded ? "✓ Email sent via Gmail" : `⚠ Could not send email: ${gmailResult.error}`;
+              result = {
                 name:      tool.tool_name,
                 status:    succeeded ? "success" : "failed",
                 data:      toolCallParsed.inputs,
@@ -498,32 +507,28 @@ router.post("/chat", async (req: Request, res: Response) => {
               };
             } else {
               resultMsg = "⚠ Gmail not connected. Please connect Google in the Tools tab.";
-              toolCallResult = {
-                name:      tool.tool_name,
-                status:    "failed",
-                data:      toolCallParsed.inputs,
-                response:  "Google account not connected",
-                timestamp: new Date().toISOString(),
-              };
+              result = { name: tool.tool_name, status: "failed", data: toolCallParsed.inputs, response: "Google account not connected", timestamp: new Date().toISOString() };
             }
+
           } else {
-            resultMsg = "";
+            reply = reply.replace(raw, "");
+            continue;
           }
 
-          req.log.info({ toolId: tool.id, connector: tool.connector, status: toolCallResult?.status }, "tool execution complete");
-          reply = reply.replace(toolCallMatch[0], resultMsg ? `[${resultMsg}]` : "");
-        } else {
-          reply = reply.replace(toolCallMatch[0], "");
+          req.log.info({ toolId: tool.id, connector: tool.connector, status: result.status }, "tool execution complete");
+          toolCallResults.push(result);
+          reply = reply.replace(raw, resultMsg ? `[${resultMsg}]` : "");
+
+        } catch (parseErr) {
+          logger.error({ parseErr }, "failed to parse tool call JSON — removing marker");
+          reply = reply.replace(raw, "");
         }
-      } catch (parseErr) {
-        logger.error({ parseErr }, "failed to parse tool call JSON — removing marker");
-        reply = reply.replace(toolCallMatch[0], "");
       }
     }
     // ─────────────────────────────────────────────────────────────────────────
 
     req.log.info({ provider: resolvedProvider, model: resolvedModel, hasDocContext: docContext.length > 0 }, "chat completion successful");
-    res.json({ reply, toolCall: toolCallResult });
+    res.json({ reply, toolCalls: toolCallResults.length > 0 ? toolCallResults : null });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "Unknown error";
     req.log.error({ err, provider: resolvedProvider, model: resolvedModel }, "chat completion failed");
