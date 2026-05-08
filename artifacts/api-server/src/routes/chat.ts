@@ -333,6 +333,15 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
 
     // ── Tool call execution ───────────────────────────────────────────────────
+    interface ToolCallResult {
+      name: string;
+      status: "success" | "failed";
+      data: Record<string, string>;
+      response: string;
+      timestamp: string;
+    }
+    let toolCallResult: ToolCallResult | null = null;
+
     const toolCallMatch = reply.match(/\[TOOL_CALL:(\{.*?\})\]/s);
     if (toolCallMatch && agentTools.length > 0) {
       req.log.info({ raw: toolCallMatch[1] }, "tool call detected in AI response");
@@ -359,7 +368,6 @@ router.post("/chat", async (req: Request, res: Response) => {
               .maybeSingle();
 
             if (integration?.access_token) {
-              // Build row in order of required_inputs
               const rowData = tool.required_inputs?.length
                 ? tool.required_inputs.map((i) => toolCall.inputs[i.name] ?? "")
                 : Object.values(toolCall.inputs);
@@ -371,22 +379,37 @@ router.post("/chat", async (req: Request, res: Response) => {
                 rowData
               );
 
-              resultMsg = sheetResult.success
+              const succeeded = sheetResult.success;
+              resultMsg = succeeded
                 ? "✓ Saved to Google Sheets"
                 : `⚠ Could not save to Google Sheets: ${sheetResult.error}`;
 
+              toolCallResult = {
+                name:      tool.tool_name,
+                status:    succeeded ? "success" : "failed",
+                data:      toolCall.inputs,
+                response:  succeeded ? "Row appended successfully" : (sheetResult.error ?? "Unknown error"),
+                timestamp: new Date().toISOString(),
+              };
+
               req.log.info(
-                { toolId: toolCall.tool_id, success: sheetResult.success },
+                { toolId: toolCall.tool_id, success: succeeded },
                 "tool execution complete"
               );
             } else {
               resultMsg = "⚠ Google Sheets not connected. Please connect Google in the Tools tab.";
+              toolCallResult = {
+                name:      tool.tool_name,
+                status:    "failed",
+                data:      toolCall.inputs,
+                response:  "Google account not connected",
+                timestamp: new Date().toISOString(),
+              };
             }
           }
 
           reply = reply.replace(toolCallMatch[0], `[${resultMsg}]`);
         } else {
-          // Unknown connector or no userId — just remove the marker
           reply = reply.replace(toolCallMatch[0], "");
         }
       } catch (parseErr) {
@@ -397,7 +420,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     // ─────────────────────────────────────────────────────────────────────────
 
     req.log.info({ provider: resolvedProvider, model: resolvedModel, hasDocContext: docContext.length > 0 }, "chat completion successful");
-    res.json({ reply });
+    res.json({ reply, toolCall: toolCallResult });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "Unknown error";
     req.log.error({ err, provider: resolvedProvider, model: resolvedModel }, "chat completion failed");

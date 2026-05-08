@@ -114,12 +114,90 @@ interface Document {
   created_at: string;
 }
 
+interface ToolCallDebug {
+  name: string;
+  status: "success" | "failed";
+  data: Record<string, string>;
+  response: string;
+  timestamp: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "agent";
   text: string;
-  type?: "no-key";
+  type?: "no-key" | "tool-debug";
   provider?: string;
+  toolCall?: ToolCallDebug;
+}
+
+// ─── Tool debug card ──────────────────────────────────────────────────────────
+
+function ToolDebugCard({ toolCall }: { toolCall: ToolCallDebug }) {
+  const [open, setOpen] = useState(false);
+  const succeeded = toolCall.status === "success";
+  const time = new Date(toolCall.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  return (
+    <div
+      className="rounded-xl text-xs overflow-hidden"
+      style={{ backgroundColor: "#1a2235", borderLeft: "3px solid rgba(59,91,252,0.5)" }}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between px-3 py-2.5 gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[11px]">🔧</span>
+          <span className="text-white/40 font-medium uppercase tracking-wider text-[10px]">Tool Called</span>
+          <span className="text-white/70 font-semibold truncate">{toolCall.name}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={
+              succeeded
+                ? { backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }
+                : { backgroundColor: "rgba(239,68,68,0.15)", color: "#f87171" }
+            }
+          >
+            {succeeded ? "Success" : "Failed"}
+          </span>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1 text-white/35 hover:text-white/65 transition-colors text-[10px] font-medium"
+          >
+            {open ? "Hide" : "Details"}
+            <svg
+              width="10" height="10" viewBox="0 0 24 24" fill="none"
+              className="transition-transform duration-200"
+              style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+            >
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Collapsible details */}
+      {open && (
+        <div className="border-t border-white/5 px-3 py-2.5 flex flex-col gap-2">
+          <div>
+            <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-1">Data sent</p>
+            <pre
+              className="text-[11px] text-white/60 leading-relaxed overflow-x-auto rounded-lg px-3 py-2"
+              style={{ backgroundColor: "rgba(0,0,0,0.25)" }}
+            >
+              {JSON.stringify(toolCall.data, null, 2)}
+            </pre>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-1">Response</p>
+            <p className="text-[11px] text-white/60 leading-relaxed">{toolCall.response}</p>
+          </div>
+          <p className="text-[10px] text-white/25">{time}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
@@ -225,10 +303,25 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
 
       if (!res.ok) throw new Error(data.error ?? "Request failed");
 
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "agent", text: data.reply ?? "No response." },
-      ]);
+      const newMessages: Message[] = [];
+
+      if (data.toolCall) {
+        newMessages.push({
+          id: crypto.randomUUID(),
+          role: "agent",
+          type: "tool-debug",
+          text: "",
+          toolCall: data.toolCall as ToolCallDebug,
+        });
+      }
+
+      newMessages.push({
+        id: crypto.randomUUID(),
+        role: "agent",
+        text: data.reply ?? "No response.",
+      });
+
+      setMessages((prev) => [...prev, ...newMessages]);
     } catch (err) {
       const errText = err instanceof Error ? err.message : "Error connecting to agent.";
       setMessages((prev) => [
@@ -289,6 +382,15 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
         ) : (
           <>
             {messages.map((msg) => {
+              // Tool debug card
+              if (msg.type === "tool-debug" && msg.toolCall) {
+                return (
+                  <div key={msg.id} className="px-1">
+                    <ToolDebugCard toolCall={msg.toolCall} />
+                  </div>
+                );
+              }
+
               // Special "no API key" system message
               if (msg.type === "no-key") {
                 return (
