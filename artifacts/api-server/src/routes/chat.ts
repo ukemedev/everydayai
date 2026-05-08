@@ -358,14 +358,24 @@ router.post("/chat", async (req: Request, res: Response) => {
   // ── Sanitize and validate the incoming message ─────────────────────────────
   const cleanMessage = sanitizeText(message);
 
-  if (!validateMessageLength(cleanMessage, 8000)) {
-    res.status(400).json({ error: "Message is too long. Maximum 8000 characters." });
+  if (!validateMessageLength(cleanMessage, 2000)) {
+    res.status(400).json({ error: "Message is too long. Maximum 2000 characters." });
+    return;
+  }
+
+  if (instructions && !validateMessageLength(instructions, 10000)) {
+    res.status(400).json({ error: "Instructions are too long. Maximum 10000 characters." });
     return;
   }
 
   if (detectPromptInjection(cleanMessage)) {
-    req.log.warn({ agentId, userId }, "Prompt injection attempt detected");
-    res.status(400).json({ error: "Message contains disallowed content." });
+    console.warn("Prompt injection attempt:", {
+      ip: req.ip,
+      message: cleanMessage.slice(0, 100),
+      timestamp: new Date().toISOString(),
+    });
+    req.log.warn({ agentId, userId, ip: req.ip }, "Prompt injection attempt detected");
+    res.status(400).json({ error: "Invalid message content" });
     return;
   }
 
@@ -459,11 +469,11 @@ router.post("/chat", async (req: Request, res: Response) => {
   try {
     let reply: string;
     switch (resolvedProvider) {
-      case "anthropic": reply = await callAnthropic(resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
-      case "google":    reply = await callGoogle   (resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
-      case "groq":      reply = await callGroq     (resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
+      case "anthropic": reply = await callAnthropic(resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
+      case "google":    reply = await callGoogle   (resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
+      case "groq":      reply = await callGroq     (resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
       case "openai":
-      default:          reply = await callOpenAI   (resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
+      default:          reply = await callOpenAI   (resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
     }
 
     // ── Tool call execution ───────────────────────────────────────────────────

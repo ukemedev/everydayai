@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import OpenAI from "openai";
 import Groq from "groq-sdk";
+import { sanitizeText, validateMessageLength, detectPromptInjection } from "../lib/sanitize.js";
 
 const router = Router();
 
@@ -70,7 +71,25 @@ router.post("/tools/analyze", async (req: Request, res: Response) => {
     return;
   }
 
-  req.log.info({ provider, descLength: description.length }, "tool analyze request received");
+  const cleanDescription = sanitizeText(description);
+
+  if (!validateMessageLength(cleanDescription, 1000)) {
+    res.status(400).json({ error: "Description is too long. Maximum 1000 characters." });
+    return;
+  }
+
+  if (detectPromptInjection(cleanDescription)) {
+    console.warn("Prompt injection attempt:", {
+      ip: req.ip,
+      message: cleanDescription.slice(0, 100),
+      timestamp: new Date().toISOString(),
+    });
+    req.log.warn({ ip: req.ip }, "Prompt injection detected in tools/analyze");
+    res.status(400).json({ error: "Invalid message content" });
+    return;
+  }
+
+  req.log.info({ provider, descLength: cleanDescription.length }, "tool analyze request received");
 
   let rawJson = "";
 
@@ -81,7 +100,7 @@ router.post("/tools/analyze", async (req: Request, res: Response) => {
         model: "llama-3.3-70b-versatile",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: description.trim() },
+          { role: "user", content: cleanDescription },
         ],
         temperature: 0.1,
       });
@@ -92,7 +111,7 @@ router.post("/tools/analyze", async (req: Request, res: Response) => {
         model: "gpt-4o-mini",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: description.trim() },
+          { role: "user", content: cleanDescription },
         ],
         temperature: 0.1,
         response_format: { type: "json_object" },

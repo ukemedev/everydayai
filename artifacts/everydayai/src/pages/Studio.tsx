@@ -1842,7 +1842,16 @@ export default function Studio() {
     if (!file) return;
     const allowed = [".pdf", ".txt", ".docx"];
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
-    if (!allowed.includes(ext)) return;
+    if (!allowed.includes(ext)) {
+      setUploadError("Only PDF, TXT, and DOCX files are allowed.");
+      return;
+    }
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setUploadError("File is too large. Maximum size is 5 MB.");
+      return;
+    }
+    setUploadError("");
     setStagedFile(file);
   }
 
@@ -1872,8 +1881,25 @@ export default function Studio() {
       return;
     }
 
-    const ext = stagedFile.name.split(".").pop();
-    const safeName = `${Date.now()}_${stagedFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (stagedFile.size > MAX_SIZE) {
+      setUploadError("File is too large. Maximum size is 5 MB.");
+      setUploading(false);
+      return;
+    }
+
+    const ext = stagedFile.name.split(".").pop()?.toLowerCase();
+    const allowedExts = ["pdf", "txt", "docx"];
+    if (!ext || !allowedExts.includes(ext)) {
+      setUploadError("Only PDF, TXT, and DOCX files are allowed.");
+      setUploading(false);
+      return;
+    }
+
+    const cleanBase = stagedFile.name
+      .replace(/\.\.[/\\]/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = `${Date.now()}_${cleanBase}`;
     const storagePath = `${user.id}/${agent.id}/${safeName}`;
 
     const { error: storageError } = await supabase.storage
