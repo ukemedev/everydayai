@@ -1549,22 +1549,21 @@ export default function Studio() {
             <span className="text-sm">⚙️</span>
             Settings
           </button>
-          {isLive ? (
+          <button
+            onClick={() => setShowDeployModal(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+            style={{ backgroundColor: "#3b5bfc" }}
+          >
+            Deploy
+          </button>
+          {isLive && (
             <button
               onClick={handleUnpublish}
               disabled={publishing}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-red-500/30 hover:text-red-400 transition-all duration-150 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 disabled:opacity-50"
+              style={{ color: "rgba(248,113,113,0.85)", borderColor: "rgba(248,113,113,0.25)" }}
             >
               {publishing ? "Saving…" : "Unpublish"}
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowDeployModal(true)}
-              disabled={publishing}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
-              style={{ backgroundColor: "#3b5bfc" }}
-            >
-              Deploy
             </button>
           )}
           <button
