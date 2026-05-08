@@ -18,6 +18,7 @@ import AdminUsers from "@/pages/AdminUsers";
 import AdminAgents from "@/pages/AdminAgents";
 import AdminAutomations from "@/pages/AdminAutomations";
 import AdminRevenue from "@/pages/AdminRevenue";
+import AdminBlog from "@/pages/AdminBlog";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,9 @@ function Router() {
       </Route>
       <Route path="/admin/automations">
         {() => <AdminRoute component={AdminAutomations} />}
+      </Route>
+      <Route path="/admin/blog">
+        {() => <AdminRoute component={AdminBlog} />}
       </Route>
       <Route path="/admin/revenue">
         {() => <AdminRoute component={AdminRevenue} />}

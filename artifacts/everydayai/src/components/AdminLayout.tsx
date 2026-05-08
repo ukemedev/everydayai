@@ -5,6 +5,7 @@ import {
   Users,
   Bot,
   Zap,
+  Newspaper,
   BarChart2,
   ArrowLeft,
   X,
@@ -16,6 +17,7 @@ const navItems = [
   { id: "users",       icon: Users,      label: "Users",       path: "/admin/users" },
   { id: "agents",      icon: Bot,        label: "Agents",      path: "/admin/agents" },
   { id: "automations", icon: Zap,        label: "Automations", path: "/admin/automations" },
+  { id: "blog",        icon: Newspaper,  label: "Blog",        path: "/admin/blog" },
   { id: "revenue",     icon: BarChart2,  label: "Revenue",     path: "/admin/revenue" },
 ];
 

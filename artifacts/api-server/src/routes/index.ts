@@ -6,6 +6,7 @@ import googleRouter from "./google";
 import automationsRouter from "./automations";
 import telegramRouter from "./telegram";
 import adminRouter from "./admin";
+import blogRouter from "./blog";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(googleRouter);
 router.use(automationsRouter);
 router.use(telegramRouter);
 router.use(adminRouter);
+router.use(blogRouter);
 
 export default router;
