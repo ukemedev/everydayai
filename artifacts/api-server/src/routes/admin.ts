@@ -32,29 +32,20 @@ router.get("/admin/verify", async (req: Request, res: Response) => {
     return;
   }
 
-  const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
   try {
-    const resp = await fetch(
-      `${supabaseUrl}/rest/v1/users?select=is_admin&id=eq.${user.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${serviceKey}`,
-          apikey: serviceKey,
-          "Accept-Profile": "auth",
-        },
-      }
-    );
+    const { data: profile, error: profileError } = await sb
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    if (!resp.ok) {
-      req.log.warn({ status: resp.status, userId: user.id }, "is_admin fetch failed");
+    if (profileError) {
+      req.log.warn({ err: profileError, userId: user.id }, "profiles query failed");
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
 
-    const rows = (await resp.json()) as Array<{ is_admin: boolean | null }>;
-    const isAdmin = rows[0]?.is_admin === true;
+    const isAdmin = profile?.is_admin === true;
 
     if (!isAdmin) {
       req.log.info({ userId: user.id }, "admin verify denied — not an admin");
