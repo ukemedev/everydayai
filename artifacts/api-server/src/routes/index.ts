@@ -8,6 +8,7 @@ import telegramRouter from "./telegram";
 import adminRouter from "./admin";
 import blogRouter from "./blog";
 import agentsRouter from "./agents";
+import paystackRouter from "./paystack";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(telegramRouter);
 router.use(adminRouter);
 router.use(blogRouter);
 router.use(agentsRouter);
+router.use(paystackRouter);
 
 export default router;
