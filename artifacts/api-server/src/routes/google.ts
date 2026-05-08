@@ -6,8 +6,7 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-const CALLBACK_URL =
-  "https://210a27-00-3de2kjsfw3qjw.riker.replit.dev/api/auth/google/callback";
+const CALLBACK_URL = `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/google/callback`;
 
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
