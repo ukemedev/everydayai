@@ -14,6 +14,7 @@ import Chat from "@/pages/Chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoute from "@/components/AdminRoute";
 import Admin from "@/pages/Admin";
+import AdminUsers from "@/pages/AdminUsers";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,9 @@ function Router() {
       <Route path="/chat/:agentId" component={Chat} />
       <Route path="/admin">
         {() => <AdminRoute component={Admin} />}
+      </Route>
+      <Route path="/admin/users">
+        {() => <AdminRoute component={AdminUsers} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
