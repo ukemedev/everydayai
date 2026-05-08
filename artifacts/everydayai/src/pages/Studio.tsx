@@ -500,7 +500,151 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
   );
 }
 
-// ─── Studio ───────────────────────────────────────────────────────────────────
+// ─── Share modal ──────────────────────────────────────────────────────────────
+
+interface ShareModalProps {
+  agentId: string;
+  isLive: boolean;
+  publishing: boolean;
+  onClose: () => void;
+  onToggleLive: () => void;
+}
+
+function ShareModal({ agentId, isLive, publishing, onClose, onToggleLive }: ShareModalProps) {
+  const [copied, setCopied] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+
+  const chatUrl = `${window.location.origin}/chat/${agentId}`;
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(chatUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleEmailShare(e: React.FormEvent) {
+    e.preventDefault();
+    if (!shareEmail.trim()) return;
+    setEmailSent(true);
+    setTimeout(() => setEmailSent(false), 3000);
+    setShareEmail("");
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-white/10 px-7 py-7 flex flex-col gap-6"
+        style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif" }}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-white">Share Agent</h2>
+            <p className="text-sm text-white/45 mt-1.5 leading-relaxed">
+              Anyone with the link can chat with this agent when it's live.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-white/30 hover:text-white/70 hover:bg-white/5 transition-all flex-shrink-0 text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Live toggle */}
+        <div
+          className="flex items-center justify-between gap-4 rounded-xl px-4 py-3.5 border border-white/5"
+          style={{ backgroundColor: isLive ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.03)" }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: isLive ? "#4ade80" : "rgba(255,255,255,0.25)" }}
+            />
+            <div>
+              <p className="text-sm text-white font-medium">{isLive ? "Agent is Live" : "Agent is Offline"}</p>
+              <p className="text-xs text-white/40 mt-0.5">
+                {isLive ? "Anyone with the link can chat." : "Publish to allow public access."}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onToggleLive}
+            disabled={publishing}
+            className="relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: isLive ? "#3b5bfc" : "rgba(255,255,255,0.12)" }}
+          >
+            <span
+              className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
+              style={{ left: isLive ? "calc(100% - 1.375rem)" : "0.125rem" }}
+            />
+          </button>
+        </div>
+
+        {/* Chat link */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Chat link</label>
+          <div
+            className="flex items-center gap-2 rounded-xl px-3 py-2.5 border border-white/8"
+            style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+          >
+            <span className="flex-1 text-sm text-white/60 truncate select-all">{chatUrl}</span>
+            <button
+              onClick={handleCopy}
+              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150"
+              style={
+                copied
+                  ? { backgroundColor: "rgba(34,197,94,0.2)", color: "#4ade80" }
+                  : { backgroundColor: "rgba(59,91,252,0.2)", color: "#818cf8" }
+              }
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        {/* Email share */}
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Share via email</label>
+          <form onSubmit={handleEmailShare} className="flex gap-2">
+            <input
+              type="email"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              placeholder="colleague@example.com"
+              className="flex-1 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+              style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+            />
+            <button
+              type="submit"
+              disabled={!shareEmail.trim() || emailSent}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+              style={{ backgroundColor: "#3b5bfc" }}
+            >
+              {emailSent ? "Sent!" : "Send"}
+            </button>
+          </form>
+        </div>
+
+        {/* Close */}
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-medium text-white/50 border border-white/8 hover:border-white/18 hover:text-white/70 transition-all duration-150"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Studio page ──────────────────────────────────────────────────────────────
 
 export default function Studio() {
   const { agentId } = useParams<{ agentId: string }>();
@@ -517,6 +661,7 @@ export default function Studio() {
   const [savedMsg, setSavedMsg] = useState(false);
 
   const [showDeployModal, setShowDeployModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -970,7 +1115,10 @@ export default function Studio() {
               Deploy
             </button>
           )}
-          <button className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150">
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
+          >
             Share
           </button>
           <button className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150">
@@ -1604,6 +1752,17 @@ export default function Studio() {
           <ChatPanel agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
         </div>
       </div>
+
+      {/* ── Share modal ── */}
+      {showShareModal && (
+        <ShareModal
+          agentId={agent.id}
+          isLive={isLive}
+          onClose={() => setShowShareModal(false)}
+          onToggleLive={isLive ? handleUnpublish : handlePublish}
+          publishing={publishing}
+        />
+      )}
 
       {/* ── Deploy confirmation modal ── */}
       {showDeployModal && (

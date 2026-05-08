@@ -16,6 +16,14 @@ function extractSpreadsheetId(url: string): string {
   return match?.[1] ?? url;
 }
 
+// Maps a model name to its provider, mirroring the frontend catalogue.
+function getProviderForModel(model: string): string {
+  if (model.startsWith("claude-")) return "anthropic";
+  if (model.startsWith("gemini-")) return "google";
+  if (model.includes("llama") || model.includes("mixtral") || model.includes("whisper")) return "groq";
+  return "openai";
+}
+
 // Finds every TOOL_CALL marker in an AI reply, tolerates missing brackets and nested JSON.
 function extractToolCallMarkers(text: string): Array<{ raw: string; json: string }> {
   const results: Array<{ raw: string; json: string }> = [];
@@ -319,18 +327,64 @@ async function callGroq(
   return completion.choices[0]?.message?.content ?? "No response from model.";
 }
 
-// ─── Route ────────────────────────────────────────────────────────────────────
+// ─── Public agent info endpoint ───────────────────────────────────────────────
+
+router.get("/public/agents/:agentId", async (req: Request, res: Response) => {
+  const { agentId } = req.params as { agentId: string };
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  const { data, error } = await sb
+    .from("agents")
+    .select("id, name, description, status, model")
+    .eq("id", agentId)
+    .maybeSingle();
+
+  if (error || !data) { res.status(404).json({ error: "Agent not found" }); return; }
+  req.log.info({ agentId, status: (data as { status: string }).status }, "public agent info fetched");
+  res.json({ agent: data });
+});
+
+// ─── Chat route ───────────────────────────────────────────────────────────────
 
 router.post("/chat", async (req: Request, res: Response) => {
   const { message, instructions, model, provider, apiKey, conversationHistory, agentId, userId } =
     req.body as ChatBody;
 
   if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
-  if (!apiKey?.trim()) { res.status(400).json({ error: "apiKey is required" }); return; }
 
-  const resolvedModel    = model?.trim()    || "gpt-4o-mini";
-  const resolvedProvider = provider?.trim() || "openai";
-  const baseInstructions = instructions?.trim() || "You are a helpful assistant.";
+  // Resolve API key. If none provided (public/shared chat), auto-fetch owner's key via service role.
+  let resolvedApiKey    = apiKey?.trim() ?? "";
+  let resolvedModel     = model?.trim()    || "gpt-4o-mini";
+  let resolvedProvider  = provider?.trim() || "openai";
+  let baseInstructions  = instructions?.trim() || "You are a helpful assistant.";
+
+  if (!resolvedApiKey && agentId?.trim()) {
+    const sb = getServiceClient();
+    if (sb) {
+      const { data: agentRow } = await sb
+        .from("agents")
+        .select("user_id, model, instructions")
+        .eq("id", agentId.trim())
+        .eq("status", "live")
+        .maybeSingle();
+      if (agentRow) {
+        if (!model?.trim())        resolvedModel        = (agentRow.model as string)        || "gpt-4o-mini";
+        if (!instructions?.trim()) baseInstructions     = (agentRow.instructions as string) || "You are a helpful assistant.";
+        if (!provider?.trim())     resolvedProvider     = getProviderForModel(resolvedModel);
+        const { data: keyRow } = await sb
+          .from("api_keys")
+          .select("api_key")
+          .eq("user_id", agentRow.user_id as string)
+          .eq("provider", resolvedProvider)
+          .maybeSingle();
+        if (keyRow?.api_key) resolvedApiKey = keyRow.api_key as string;
+      }
+    }
+  }
+
+  if (!resolvedApiKey) { res.status(400).json({ error: "apiKey is required" }); return; }
+
   const history: ConversationMessage[] = Array.isArray(conversationHistory) ? conversationHistory : [];
 
   req.log.info(
@@ -371,11 +425,11 @@ router.post("/chat", async (req: Request, res: Response) => {
   try {
     let reply: string;
     switch (resolvedProvider) {
-      case "anthropic": reply = await callAnthropic(apiKey, resolvedModel, systemPrompt, history, message.trim()); break;
-      case "google":    reply = await callGoogle   (apiKey, resolvedModel, systemPrompt, history, message.trim()); break;
-      case "groq":      reply = await callGroq     (apiKey, resolvedModel, systemPrompt, history, message.trim()); break;
+      case "anthropic": reply = await callAnthropic(resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
+      case "google":    reply = await callGoogle   (resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
+      case "groq":      reply = await callGroq     (resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
       case "openai":
-      default:          reply = await callOpenAI   (apiKey, resolvedModel, systemPrompt, history, message.trim()); break;
+      default:          reply = await callOpenAI   (resolvedApiKey, resolvedModel, systemPrompt, history, message.trim()); break;
     }
 
     // ── Tool call execution ───────────────────────────────────────────────────
