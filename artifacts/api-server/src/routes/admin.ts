@@ -282,4 +282,34 @@ router.get("/admin/automations", async (req: Request, res: Response) => {
   res.json({ automations });
 });
 
+// ─── GET /api/admin/revenue ───────────────────────────────────────────────────
+
+router.get("/admin/revenue", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+
+  const { sb } = result;
+
+  const { data, error } = await sb
+    .from("profiles")
+    .select("plan");
+
+  if (error) {
+    req.log.error({ err: error }, "failed to fetch profiles for revenue");
+    res.status(500).json({ error: "Failed to fetch revenue data" });
+    return;
+  }
+
+  type ProfileRow = { plan: string | null };
+  const rows = (data as ProfileRow[]) ?? [];
+
+  const freeUsers     = rows.filter((r) => !r.plan || r.plan === "free").length;
+  const proUsers      = rows.filter((r) => r.plan === "pro").length;
+  const businessUsers = rows.filter((r) => r.plan === "business").length;
+  const monthlyRevenue = proUsers * 29 + businessUsers * 99;
+
+  req.log.info({ freeUsers, proUsers, businessUsers, monthlyRevenue }, "admin revenue fetched");
+  res.json({ freeUsers, proUsers, businessUsers, monthlyRevenue });
+});
+
 export default router;
