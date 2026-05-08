@@ -507,10 +507,11 @@ type DeployTab = "socials" | "code" | "website";
 interface DeployModalProps {
   agentId: string;
   agentName: string;
+  userId: string;
   onClose: () => void;
 }
 
-function DeployModal({ agentId, agentName, onClose }: DeployModalProps) {
+function DeployModal({ agentId, agentName, userId, onClose }: DeployModalProps) {
   const [tab, setTab] = useState<DeployTab>("socials");
   const [codeLang, setCodeLang] = useState<"python" | "javascript">("python");
   const [codeCopied, setCodeCopied] = useState(false);
@@ -523,6 +524,12 @@ function DeployModal({ agentId, agentName, onClose }: DeployModalProps) {
   const [starters, setStarters] = useState<string[]>([""]);
   const [widgetSize, setWidgetSize] = useState<"regular" | "large">("regular");
   const colorInputRef = useRef<HTMLInputElement>(null);
+
+  // Deployment save state
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [embedCode, setEmbedCode] = useState<string | null>(null);
+  const [embedCopied, setEmbedCopied] = useState(false);
 
   const apiUrl = `${window.location.origin}/api/chat`;
 
@@ -564,6 +571,39 @@ console.log(data.reply);`;
   }
   function removeStarter(i: number) {
     setStarters((p) => p.filter((_, idx) => idx !== i));
+  }
+
+  async function handleCreateDeployment() {
+    setSaveError("");
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("widget_deployments").insert({
+        agent_id: agentId,
+        user_id: userId,
+        widget_name: widgetName.trim() || agentName,
+        description: widgetDesc.trim() || null,
+        color: widgetColor,
+        starting_message: startingMsg.trim(),
+        conversation_starters: starters.filter((s) => s.trim()),
+        size: widgetSize,
+      });
+      if (error) throw error;
+
+      const origin = window.location.origin;
+      const code = `<script>\n  window.EverydayAI = {\n    agentId: "${agentId}",\n    color: "${widgetColor}",\n    size: "${widgetSize}",\n    startingMessage: "${startingMsg.replace(/"/g, '\\"')}"\n  };\n<\/script>\n<script src="${origin}/widget.js"><\/script>`;
+      setEmbedCode(code);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCopyEmbed() {
+    if (!embedCode) return;
+    void navigator.clipboard.writeText(embedCode);
+    setEmbedCopied(true);
+    setTimeout(() => setEmbedCopied(false), 2000);
   }
 
   const tabs: { id: DeployTab; label: string }[] = [
@@ -929,20 +969,93 @@ console.log(data.reply);`;
                 </div>
               </div>
 
+              {/* Error */}
+              {saveError && (
+                <p className="text-xs text-red-400/80 px-1">{saveError}</p>
+              )}
+
               {/* Actions */}
               <div className="flex gap-3 pt-1">
                 <button
+                  onClick={() => window.open(`/chat/${agentId}`, "_blank")}
                   className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-white/50 hover:border-white/20 hover:text-white/75 transition-all duration-150"
                 >
                   Preview Widget
                 </button>
                 <button
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                  onClick={() => void handleCreateDeployment()}
+                  disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: "#3b5bfc" }}
                 >
-                  Create Deployment
+                  {saving ? "Saving…" : "Create Deployment"}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── Success screen (shown after deployment created) ── */}
+          {embedCode && (
+            <div className="flex flex-col gap-5">
+              {/* Title */}
+              <div className="flex flex-col items-center gap-2 pt-2 pb-1 text-center">
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl"
+                  style={{ backgroundColor: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}
+                >
+                  🎉
+                </div>
+                <h3 className="text-base font-bold text-white">Widget Created!</h3>
+                <p className="text-xs text-white/40 leading-relaxed">
+                  Paste this snippet into your website's HTML before the closing <code className="text-white/60">&lt;/body&gt;</code> tag.
+                </p>
+              </div>
+
+              {/* Embed code block */}
+              <div className="rounded-xl overflow-hidden border border-white/6" style={{ backgroundColor: "#0d1117" }}>
+                <div
+                  className="flex items-center justify-between px-4 py-2.5 border-b border-white/5"
+                  style={{ backgroundColor: "rgba(255,255,255,0.03)" }}
+                >
+                  <span className="text-[11px] font-medium text-white/35 uppercase tracking-wider">Embed Script</span>
+                  <button
+                    onClick={handleCopyEmbed}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-lg transition-all duration-150"
+                    style={
+                      embedCopied
+                        ? { backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }
+                        : { backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.55)" }
+                    }
+                  >
+                    {embedCopied ? (
+                      <>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2"/></svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre
+                  className="text-xs px-5 py-4 overflow-x-auto leading-relaxed whitespace-pre"
+                  style={{ color: "#a5b4fc", fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+                >
+                  <code>{embedCode}</code>
+                </pre>
+              </div>
+
+              {/* Done */}
+              <button
+                onClick={onClose}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                style={{ backgroundColor: "#3b5bfc" }}
+              >
+                Done
+              </button>
             </div>
           )}
 
@@ -2220,6 +2333,7 @@ export default function Studio() {
         <DeployModal
           agentId={agent.id}
           agentName={agent.name}
+          userId={userId}
           onClose={() => setShowDeployModal(false)}
         />
       )}
