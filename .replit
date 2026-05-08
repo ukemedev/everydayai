@@ -64,6 +64,7 @@ externalPort = 3000
 [userenv.shared]
 VITE_SUPABASE_URL = "https://stgrsijraeswmxiyinzz.supabase.co"
 VITE_SUPABASE_ANON_KEY = "sb_publishable_bDf9PxNeU6mstlfIdmomag_bpXbwpFw"
+ALLOWED_ORIGINS = "https://4fa7be1b-cbce-487a-907c-e6aaf0210a27-00-3de2kjsfw3qjw.riker.replit.dev"
 
 [nix]
 channel = "stable-25_05"

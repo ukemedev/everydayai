@@ -1,6 +1,7 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import { v4 as uuidv4 } from "uuid";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import router from "./routes";
@@ -9,15 +10,34 @@ import { logger } from "./lib/logger";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// ── Allowed origins ───────────────────────────────────────────────────────────
+const extraOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? [];
+
+const allowedOrigins = [
+  "https://4fa7be1b-cbce-487a-907c-e6aaf0210a27-00-3de2kjsfw3qjw.riker.replit.dev",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  ...extraOrigins,
+];
+
+// ── App ───────────────────────────────────────────────────────────────────────
 const app: Express = express();
 
 // Trust the reverse proxy so express-rate-limit can read the real client IP
-// from X-Forwarded-For without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
 app.set("trust proxy", 1);
 
+// ── Request ID (before pinoHttp so the logger picks it up) ───────────────────
+app.use((req: Request, res: Response, next: NextFunction) => {
+  req.id = uuidv4();
+  res.setHeader("X-Request-ID", req.id as string);
+  next();
+});
+
+// ── Structured logging ────────────────────────────────────────────────────────
 app.use(
   pinoHttp({
     logger,
+    genReqId: (req) => req.id as string,
     serializers: {
       req(req) {
         return {
@@ -34,12 +54,46 @@ app.use(
     },
   }),
 );
-app.use(cors());
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, curl, server-to-server)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn("CORS blocked:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-ID"],
+  }),
+);
+
+// ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ── Static files ──────────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, "../public")));
 
+// ── API routes ────────────────────────────────────────────────────────────────
 app.use("/api", router);
+
+// ── CORS error handler ────────────────────────────────────────────────────────
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  if (err.message === "Not allowed by CORS") {
+    logger.warn({ origin: req.headers.origin, ip: req.ip }, "CORS request blocked");
+    res.status(403).json({ error: "Origin not allowed" });
+    return;
+  }
+  logger.error({ err, url: req.url }, "Unhandled error");
+  res.status(500).json({ error: "Internal server error" });
+});
 
 export default app;
