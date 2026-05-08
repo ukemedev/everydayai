@@ -1,12 +1,16 @@
+import AdminLayout from "@/components/AdminLayout";
+
 export default function Admin() {
   console.log("Admin page rendered");
 
   return (
-    <div
-      className="min-h-screen w-full flex items-center justify-center"
-      style={{ backgroundColor: "#0a0f1e" }}
-    >
-      <p className="text-white text-xl font-semibold">Admin Panel — Coming Soon</p>
-    </div>
+    <AdminLayout activeItemId="overview">
+      <div className="flex-1 p-6 md:p-8">
+        <h1 className="text-2xl font-bold text-white">Overview</h1>
+        <p className="mt-2 text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
+          Admin dashboard — content coming soon.
+        </p>
+      </div>
+    </AdminLayout>
   );
 }
