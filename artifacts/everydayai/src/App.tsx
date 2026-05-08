@@ -12,6 +12,7 @@ import Settings from "@/pages/Settings";
 import Automations from "@/pages/Automations";
 import Chat from "@/pages/Chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { useTheme } from "@/lib/useTheme";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ function Router() {
 }
 
 function App() {
+  useTheme(); // applies CSS vars + html.light class globally on every page
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

@@ -36,6 +36,25 @@ export const lightColors = {
 
 export type ThemeColors = typeof darkColors | typeof lightColors;
 
+function applyThemeToDom(isDark: boolean) {
+  const r = document.documentElement;
+  r.classList.toggle("light", !isDark);
+  r.style.colorScheme = isDark ? "dark" : "light";
+  r.style.setProperty("--theme-bg-page",       isDark ? "#0a0f1e" : "#f8fafc");
+  r.style.setProperty("--theme-bg-header",      isDark ? "#0d1117" : "#f1f5f9");
+  r.style.setProperty("--theme-bg-card",        isDark ? "#111827" : "#ffffff");
+  r.style.setProperty("--theme-bg-input",       isDark ? "#0a0f1e" : "#ffffff");
+  r.style.setProperty("--theme-bg-bubble",      isDark ? "#1a2235" : "#e8edf5");
+  r.style.setProperty("--theme-text-1",         isDark ? "#ffffff"               : "#0f172a");
+  r.style.setProperty("--theme-text",           isDark ? "rgba(255,255,255,0.85)": "#1e293b");
+  r.style.setProperty("--theme-text-muted",     isDark ? "rgba(255,255,255,0.55)": "#64748b");
+  r.style.setProperty("--theme-text-faint",     isDark ? "rgba(255,255,255,0.35)": "#94a3b8");
+  r.style.setProperty("--theme-text-vfaint",    isDark ? "rgba(255,255,255,0.20)": "#cbd5e1");
+  r.style.setProperty("--theme-border",         isDark ? "rgba(255,255,255,0.08)": "#e2e8f0");
+  r.style.setProperty("--theme-border-dim",     isDark ? "rgba(255,255,255,0.05)": "#f1f5f9");
+  r.style.setProperty("--theme-border-sub",     isDark ? "rgba(255,255,255,0.10)": "#d1d5db");
+}
+
 export function useTheme() {
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -46,15 +65,11 @@ export function useTheme() {
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem("everydayai-theme", isDark ? "dark" : "light");
-      document.documentElement.style.colorScheme = isDark ? "dark" : "light";
-    } catch {}
+    applyThemeToDom(isDark);
+    try { localStorage.setItem("everydayai-theme", isDark ? "dark" : "light"); } catch {}
   }, [isDark]);
 
-  function toggle() {
-    setIsDark((v) => !v);
-  }
+  function toggle() { setIsDark((v) => !v); }
 
   const colors = isDark ? darkColors : lightColors;
 
