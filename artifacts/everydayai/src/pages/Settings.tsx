@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-import { useTheme } from "@/lib/useTheme";
 
 interface TelegramState {
   botToken: string;
@@ -77,7 +76,6 @@ function mask(key: string): string {
 }
 
 export default function Settings() {
-  const { colors, isDark, toggle } = useTheme();
   const [, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -197,13 +195,13 @@ export default function Settings() {
   const font = { fontFamily: "'Inter', sans-serif" };
 
   const inputStyle = {
-    backgroundColor: colors.bgInput,
-    color: colors.text,
-    border: `1px solid ${colors.border}`,
+    backgroundColor: "#0a0f1e",
+    color: "#ffffff",
+    border: "1px solid rgba(255,255,255,0.08)",
   };
 
   return (
-    <div className="flex min-h-screen w-full" style={{ ...font, backgroundColor: colors.bgPage }}>
+    <div className="flex min-h-screen w-full" style={{ ...font, backgroundColor: "#0a0f1e" }}>
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg" style={{ backgroundColor: "#16a34a" }}>
@@ -223,11 +221,11 @@ export default function Settings() {
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-screen w-60 flex flex-col border-r z-40 transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
-        style={{ backgroundColor: colors.bgSidebar, borderColor: colors.borderDim }}
+        style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)" }}
       >
         <div className="px-5 py-6 flex items-center justify-between">
-          <span className="font-bold text-lg tracking-tight" style={{ color: colors.text }}>EverydayAI</span>
-          <button className="md:hidden" onClick={() => setSidebarOpen(false)} style={{ color: colors.textFaint }}>✕</button>
+          <span className="font-bold text-lg tracking-tight text-white">EverydayAI</span>
+          <button className="md:hidden" onClick={() => setSidebarOpen(false)} style={{ color: "rgba(255,255,255,0.35)" }}>✕</button>
         </div>
 
         <nav className="flex-1 px-3 flex flex-col gap-1">
@@ -239,7 +237,7 @@ export default function Settings() {
               key={item.label}
               onClick={() => { navigate(item.path); setSidebarOpen(false); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-              style={{ color: colors.textMuted }}
+              style={{ color: "rgba(255,255,255,0.55)" }}
             >
               <span className="text-base">{item.icon}</span>
               {item.label}
@@ -247,49 +245,39 @@ export default function Settings() {
           ))}
           <button
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-            style={{ backgroundColor: colors.navActive, color: colors.navActiveText }}
+            style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#3b5bfc" }}
           >
             <span className="text-base">⚙️</span>
             Settings
           </button>
         </nav>
 
-        <div className="px-4 py-5 border-t flex flex-col gap-3" style={{ borderColor: colors.borderDim }}>
+        <div className="px-4 py-5 border-t flex flex-col gap-3" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           {userEmail && (
-            <p className="text-xs truncate" style={{ color: colors.textFaint }} title={userEmail}>{userEmail}</p>
+            <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }} title={userEmail}>{userEmail}</p>
           )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggle}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-base transition-all hover:opacity-80 flex-shrink-0"
-              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? "☀️" : "🌙"}
-            </button>
-            <button
-              onClick={handleLogOut}
-              className="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-              style={{ color: colors.textMuted, border: `1px solid ${colors.borderSubtle}` }}
-            >
-              Log Out
-            </button>
-          </div>
+          <button
+            onClick={handleLogOut}
+            className="w-full py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            style={{ color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.10)" }}
+          >
+            Log Out
+          </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 md:ml-60 min-h-screen px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: colors.bgPage }}>
+      <main className="flex-1 md:ml-60 min-h-screen px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
 
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 mb-6">
-          <button onClick={() => setSidebarOpen(true)} className="text-xl" style={{ color: colors.text }}>☰</button>
-          <span className="font-bold text-lg" style={{ color: colors.text }}>Settings</span>
+          <button onClick={() => setSidebarOpen(true)} className="text-xl text-white">☰</button>
+          <span className="font-bold text-lg text-white">Settings</span>
         </div>
 
         <div className="max-w-3xl">
-          <h1 className="text-2xl font-bold" style={{ color: colors.text }}>API Keys</h1>
-          <p className="text-sm mt-1" style={{ color: colors.textMuted }}>
+          <h1 className="text-2xl font-bold text-white">API Keys</h1>
+          <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.55)" }}>
             Add your own API keys to power your agents. Keys are stored securely and never shared.
           </p>
 
@@ -302,7 +290,7 @@ export default function Settings() {
                 <div
                   key={provider.id}
                   className="rounded-2xl border p-5 flex flex-col gap-4"
-                  style={{ backgroundColor: colors.bgCard, borderColor: colors.border }}
+                  style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -313,8 +301,8 @@ export default function Settings() {
                         {provider.icon}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold" style={{ color: colors.text }}>{provider.name}</p>
-                        <p className="text-xs mt-0.5" style={{ color: colors.textFaint }}>{provider.description}</p>
+                        <p className="text-sm font-semibold text-white">{provider.name}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{provider.description}</p>
                       </div>
                     </div>
                     {connected && (
@@ -327,9 +315,9 @@ export default function Settings() {
                   {connected && (
                     <div
                       className="flex items-center justify-between rounded-lg px-3 py-2 border"
-                      style={{ backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", borderColor: colors.border }}
+                      style={{ backgroundColor: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}
                     >
-                      <span className="text-sm font-mono tracking-wider" style={{ color: colors.textMuted }}>
+                      <span className="text-sm font-mono tracking-wider" style={{ color: "rgba(255,255,255,0.55)" }}>
                         {state.maskedKey}
                       </span>
                       <button
@@ -368,15 +356,15 @@ export default function Settings() {
 
           {/* Integrations section */}
           <div className="mt-12">
-            <h1 className="text-2xl font-bold" style={{ color: colors.text }}>Integrations</h1>
-            <p className="text-sm mt-1" style={{ color: colors.textMuted }}>
+            <h1 className="text-2xl font-bold text-white">Integrations</h1>
+            <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.55)" }}>
               Connect external services to power your agent tools.
             </p>
 
             <div className="mt-8">
               <div
                 className="rounded-2xl border p-5 flex flex-col gap-4 max-w-md"
-                style={{ backgroundColor: colors.bgCard, borderColor: colors.border }}
+                style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -387,8 +375,8 @@ export default function Settings() {
                       📱
                     </div>
                     <div>
-                      <p className="text-sm font-semibold" style={{ color: colors.text }}>Telegram</p>
-                      <p className="text-xs mt-0.5" style={{ color: colors.textFaint }}>Send messages via Telegram bot</p>
+                      <p className="text-sm font-semibold text-white">Telegram</p>
+                      <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>Send messages via Telegram bot</p>
                     </div>
                   </div>
                   {telegram.savedBotToken && (
@@ -401,15 +389,15 @@ export default function Settings() {
                 {telegram.savedBotToken && (
                   <div
                     className="flex items-center justify-between rounded-lg px-3 py-2 border"
-                    style={{ backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.03)", borderColor: colors.border }}
+                    style={{ backgroundColor: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}
                   >
                     <div className="flex flex-col gap-0.5 min-w-0">
-                      <span className="text-xs" style={{ color: colors.textFaint }}>Bot Token</span>
-                      <span className="text-sm font-mono tracking-wider" style={{ color: colors.textMuted }}>{telegram.savedBotToken}</span>
+                      <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Bot Token</span>
+                      <span className="text-sm font-mono tracking-wider" style={{ color: "rgba(255,255,255,0.55)" }}>{telegram.savedBotToken}</span>
                       {telegram.savedChatId && (
                         <>
-                          <span className="text-xs mt-1" style={{ color: colors.textFaint }}>Chat ID</span>
-                          <span className="text-sm font-mono" style={{ color: colors.textMuted }}>{telegram.savedChatId}</span>
+                          <span className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>Chat ID</span>
+                          <span className="text-sm font-mono" style={{ color: "rgba(255,255,255,0.55)" }}>{telegram.savedChatId}</span>
                         </>
                       )}
                     </div>

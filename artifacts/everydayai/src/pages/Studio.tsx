@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { marked } from "marked";
 import { useLocation, useParams } from "wouter";
 import { supabase } from "@/lib/supabase";
-import { useTheme } from "@/lib/useTheme";
+
 
 // ─── Model catalogue ──────────────────────────────────────────────────────────
 
@@ -1659,7 +1659,6 @@ export default function Studio() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
-  useTheme();
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 

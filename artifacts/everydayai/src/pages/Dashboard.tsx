@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-import { useTheme } from "@/lib/useTheme";
 
 const navItems = [
   { icon: "🏠", label: "Home", id: "home" },
@@ -32,8 +31,6 @@ interface CreateAgentModalProps {
 }
 
 function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
-  const { colors } = useTheme();
-  const bgInput = colors.bgInput;
   const [agentName, setAgentName] = useState("");
   const [agentDescription, setAgentDescription] = useState("");
   const [model, setModel] = useState("gpt-4o-mini");
@@ -67,53 +64,52 @@ function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
     >
       <div
         className="w-full max-w-md rounded-2xl border px-7 py-7 flex flex-col gap-5"
-        style={{ backgroundColor: colors.bgCard, borderColor: colors.border, fontFamily: "'Inter', sans-serif" }}
+        style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)", fontFamily: "'Inter', sans-serif" }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold" style={{ color: colors.text }}>Create a New Agent</h2>
+          <h2 className="text-lg font-bold text-white">Create a New Agent</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-xl leading-none transition-all"
-            style={{ color: colors.textFaint }}
+            style={{ color: "rgba(255,255,255,0.35)" }}
           >×</button>
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: colors.textMuted }}>Agent Name</label>
+          <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Agent Name</label>
           <input
             type="text"
             placeholder="e.g. Smith's Solar Assistant"
             value={agentName}
             onChange={(e) => { setAgentName(e.target.value); setNameError(""); }}
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none transition-colors"
+            className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none transition-colors"
             style={{
-              backgroundColor: bgInput,
-              color: colors.text,
-              border: `1px solid ${nameError ? "#f87171" : colors.border}`,
+              backgroundColor: "#0a0f1e",
+              border: `1px solid ${nameError ? "#f87171" : "rgba(255,255,255,0.08)"}`,
             }}
           />
           {nameError && <p className="text-xs text-red-400">{nameError}</p>}
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: colors.textMuted }}>Description</label>
+          <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Description</label>
           <textarea
             placeholder="Describe your agent in a few words"
             value={agentDescription}
             onChange={(e) => setAgentDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none focus:border-[#3b5bfc] transition-colors resize-none"
-            style={{ backgroundColor: bgInput, color: colors.text, border: `1px solid ${colors.border}` }}
+            className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none focus:border-[#3b5bfc] transition-colors resize-none"
+            style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: colors.textMuted }}>Model</label>
+          <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Model</label>
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none transition-colors appearance-none cursor-pointer"
-            style={{ backgroundColor: bgInput, color: colors.text, border: `1px solid ${colors.border}` }}
+            className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none transition-colors appearance-none cursor-pointer"
+            style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
           >
             {modelOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -136,7 +132,7 @@ function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
             onClick={onClose}
             disabled={loading}
             className="text-sm text-center transition-colors duration-150 disabled:opacity-50"
-            style={{ color: colors.textFaint }}
+            style={{ color: "rgba(255,255,255,0.35)" }}
           >
             Cancel
           </button>
@@ -149,7 +145,6 @@ function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
 // ─── Agent Card ───────────────────────────────────────────────────────────────
 
 function AgentCard({ agent }: { agent: Agent }) {
-  const { colors } = useTheme();
   const [, navigate] = useLocation();
   const modelLabel = modelOptions.find((m) => m.value === agent.model)?.label ?? agent.model;
   const isLive = agent.status === "live";
@@ -158,12 +153,12 @@ function AgentCard({ agent }: { agent: Agent }) {
     <div
       onClick={() => navigate(`/studio/${agent.id}`)}
       className="h-40 rounded-2xl border p-4 flex flex-col justify-between hover:opacity-90 transition-all duration-200 cursor-pointer"
-      style={{ backgroundColor: colors.bgCard, borderColor: colors.border }}
+      style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
     >
       <div className="flex flex-col gap-1 overflow-hidden">
-        <p className="text-sm font-semibold truncate" style={{ color: colors.text }}>{agent.name}</p>
+        <p className="text-sm font-semibold text-white truncate">{agent.name}</p>
         {agent.description && (
-          <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: colors.textFaint }}>
+          <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
             {agent.description}
           </p>
         )}
@@ -193,7 +188,6 @@ function AgentCard({ agent }: { agent: Agent }) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { colors, isDark, toggle } = useTheme();
   const [, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState("home");
@@ -235,7 +229,7 @@ export default function Dashboard() {
   const font = { fontFamily: "'Inter', sans-serif" };
 
   return (
-    <div className="flex min-h-screen w-full" style={{ ...font, backgroundColor: colors.bgPage }}>
+    <div className="flex min-h-screen w-full" style={{ ...font, backgroundColor: "#0a0f1e" }}>
 
       {showCreateModal && (
         <CreateAgentModal onClose={() => setShowCreateModal(false)} onCreated={handleAgentCreated} />
@@ -259,16 +253,16 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-screen w-60 flex flex-col border-r z-40 transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
-        style={{ backgroundColor: colors.bgSidebar, borderColor: colors.borderDim }}
+        style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)" }}
       >
         <div className="px-5 py-6 flex items-center justify-between">
-          <span className="font-bold text-lg tracking-tight" style={{ color: colors.text }}>
+          <span className="font-bold text-lg tracking-tight text-white">
             EverydayAI
           </span>
           <button
             className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
             onClick={() => setSidebarOpen(false)}
-            style={{ color: colors.textFaint }}
+            style={{ color: "rgba(255,255,255,0.35)" }}
           >
             ✕
           </button>
@@ -283,8 +277,8 @@ export default function Dashboard() {
                 onClick={() => { setActiveNav(item.id); setSidebarOpen(false); }}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
                 style={{
-                  backgroundColor: isActive ? colors.navActive : "transparent",
-                  color: isActive ? colors.navActiveText : colors.textMuted,
+                  backgroundColor: isActive ? "rgba(59,91,252,0.15)" : "transparent",
+                  color: isActive ? "#3b5bfc" : "rgba(255,255,255,0.55)",
                 }}
               >
                 <span className="text-base">{item.icon}</span>
@@ -295,7 +289,7 @@ export default function Dashboard() {
           <button
             onClick={() => { navigate("/automations"); setSidebarOpen(false); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-            style={{ color: colors.textMuted }}
+            style={{ color: "rgba(255,255,255,0.55)" }}
           >
             <span className="text-base">⚡</span>
             Automations
@@ -303,58 +297,47 @@ export default function Dashboard() {
           <button
             onClick={() => { navigate("/settings"); setSidebarOpen(false); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-            style={{ color: colors.textMuted }}
+            style={{ color: "rgba(255,255,255,0.55)" }}
           >
             <span className="text-base">⚙️</span>
             Settings
           </button>
         </nav>
 
-        <div className="px-4 py-5 border-t flex flex-col gap-3" style={{ borderColor: colors.borderDim }}>
+        <div className="px-4 py-5 border-t flex flex-col gap-3" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
           {userEmail && (
-            <p className="text-xs truncate" style={{ color: colors.textFaint }} title={userEmail}>
+            <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }} title={userEmail}>
               {userEmail}
             </p>
           )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggle}
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-base transition-all hover:opacity-80 flex-shrink-0"
-              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)" }}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? "☀️" : "🌙"}
-            </button>
-            <button
-              onClick={handleLogOut}
-              className="flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-              style={{
-                color: colors.textMuted,
-                border: `1px solid ${colors.borderSubtle}`,
-              }}
-            >
-              Log Out
-            </button>
-          </div>
+          <button
+            onClick={handleLogOut}
+            className="w-full py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            style={{
+              color: "rgba(255,255,255,0.55)",
+              border: "1px solid rgba(255,255,255,0.10)",
+            }}
+          >
+            Log Out
+          </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 md:ml-60 min-h-screen px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: colors.bgPage }}>
+      <main className="flex-1 md:ml-60 min-h-screen px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
 
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center gap-3 mb-6">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-xl transition-colors"
-            style={{ color: colors.text }}
+            className="text-xl transition-colors text-white"
           >
             ☰
           </button>
-          <span className="font-bold text-lg" style={{ color: colors.text }}>EverydayAI</span>
+          <span className="font-bold text-lg text-white">EverydayAI</span>
         </div>
 
-        <h1 className="text-2xl font-bold mb-6" style={{ color: colors.text }}>Welcome back 👋</h1>
+        <h1 className="text-2xl font-bold mb-6 text-white">Welcome back 👋</h1>
 
         {/* Blue banner */}
         <div
@@ -374,10 +357,10 @@ export default function Dashboard() {
 
         {/* My Agents */}
         <div>
-          <h2 className="text-base font-semibold mb-4" style={{ color: colors.text }}>My Agents</h2>
+          <h2 className="text-base font-semibold mb-4 text-white">My Agents</h2>
 
           {loadingAgents ? (
-            <div className="flex items-center gap-2 text-sm" style={{ color: colors.textVeryFaint }}>
+            <div className="flex items-center gap-2 text-sm" style={{ color: "rgba(255,255,255,0.20)" }}>
               <div className="w-4 h-4 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
               Loading agents…
             </div>
@@ -389,18 +372,15 @@ export default function Dashboard() {
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer hover:opacity-80 transition-all duration-200 group"
-                style={{ borderColor: colors.border }}
+                style={{ borderColor: "rgba(255,255,255,0.08)" }}
               >
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
-                  style={{
-                    backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(59,91,252,0.08)",
-                    color: "#3b5bfc",
-                  }}
+                  style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#3b5bfc" }}
                 >
                   +
                 </div>
-                <span className="text-xs" style={{ color: colors.textFaint }}>
+                <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
                   Create New Agent
                 </span>
               </button>
