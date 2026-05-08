@@ -1,4 +1,6 @@
 export default function Admin() {
+  console.log("Admin page rendered");
+
   return (
     <div
       className="min-h-screen w-full flex items-center justify-center"

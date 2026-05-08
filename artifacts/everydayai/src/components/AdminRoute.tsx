@@ -8,8 +8,7 @@ interface AdminRouteProps {
 
 export default function AdminRoute({ component: Component }: AdminRouteProps) {
   const [, navigate] = useLocation();
-  const [checking, setChecking] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [status, setStatus] = useState<"checking" | "allowed" | "denied">("checking");
 
   useEffect(() => {
     async function verify() {
@@ -17,7 +16,6 @@ export default function AdminRoute({ component: Component }: AdminRouteProps) {
 
       if (!session) {
         navigate("/login");
-        setChecking(false);
         return;
       }
 
@@ -29,32 +27,30 @@ export default function AdminRoute({ component: Component }: AdminRouteProps) {
         });
 
         if (res.ok) {
-          setIsAdmin(true);
+          setStatus("allowed");
         } else {
+          setStatus("denied");
           navigate("/dashboard");
         }
       } catch {
+        setStatus("denied");
         navigate("/dashboard");
       }
-
-      setChecking(false);
     }
 
     verify();
   }, [navigate]);
 
-  if (checking) {
-    return (
-      <div
-        className="min-h-screen w-full flex items-center justify-center"
-        style={{ backgroundColor: "#0a0f1e" }}
-      >
-        <div className="w-6 h-6 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
-      </div>
-    );
+  if (status === "allowed") {
+    return <Component />;
   }
 
-  if (!isAdmin) return null;
-
-  return <Component />;
+  return (
+    <div
+      className="min-h-screen w-full flex items-center justify-center"
+      style={{ backgroundColor: "#0a0f1e" }}
+    >
+      <div className="w-6 h-6 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+    </div>
+  );
 }
