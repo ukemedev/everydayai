@@ -30,23 +30,31 @@ export default function AdminLayout({ children, activeItemId = "overview" }: Adm
   const [, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  function handleNav(path: string) {
+    navigate(path);
+    setSidebarOpen(false);
+  }
+
   return (
     <div
       className="flex min-h-screen w-full"
       style={{ fontFamily: "'Inter', sans-serif", backgroundColor: "#0a0f1e" }}
     >
-      {/* Mobile overlay backdrop */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 md:hidden"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* ── Mobile backdrop — sits above everything except the sidebar ── */}
+      <div
+        className="fixed inset-0 z-40 md:hidden transition-opacity duration-300"
+        style={{
+          backgroundColor: "rgba(0,0,0,0.65)",
+          opacity: sidebarOpen ? 1 : 0,
+          pointerEvents: sidebarOpen ? "auto" : "none",
+        }}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
 
-      {/* Sidebar */}
+      {/* ── Sidebar — z-50 so it always sits above the backdrop ── */}
       <aside
-        className={`fixed top-0 left-0 h-screen w-60 flex flex-col border-r z-40 transition-transform duration-300 ease-in-out
+        className={`fixed top-0 left-0 h-screen w-60 flex flex-col border-r z-50 transition-transform duration-300 ease-in-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
         style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)" }}
       >
@@ -59,9 +67,10 @@ export default function AdminLayout({ children, activeItemId = "overview" }: Adm
             </span>
           </div>
           <button
-            className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+            className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg"
             onClick={() => setSidebarOpen(false)}
             style={{ color: "rgba(255,255,255,0.35)" }}
+            aria-label="Close sidebar"
           >
             <X size={16} />
           </button>
@@ -75,7 +84,7 @@ export default function AdminLayout({ children, activeItemId = "overview" }: Adm
             return (
               <button
                 key={item.id}
-                onClick={() => { navigate(item.path); setSidebarOpen(false); }}
+                onClick={() => handleNav(item.path)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
                 style={{
                   backgroundColor: active ? "#3b5bfc" : "transparent",
@@ -95,7 +104,7 @@ export default function AdminLayout({ children, activeItemId = "overview" }: Adm
           style={{ borderColor: "rgba(255,255,255,0.05)" }}
         >
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => { navigate("/dashboard"); setSidebarOpen(false); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150"
             style={{ color: "rgba(255,255,255,0.45)" }}
           >
@@ -105,8 +114,12 @@ export default function AdminLayout({ children, activeItemId = "overview" }: Adm
         </div>
       </aside>
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col md:ml-60 min-h-screen">
+      {/* ── Main area ──
+            Mobile: full viewport width (sidebar is fixed/off-screen, not in flow)
+            Desktop: offset by sidebar width with md:ml-60
+            min-w-0 prevents flex children from overflowing their container
+      ── */}
+      <div className="flex flex-col min-h-screen w-full md:ml-60 min-w-0">
         {/* Mobile top bar */}
         <div
           className="md:hidden flex items-center gap-3 px-4 py-4 border-b flex-shrink-0"
@@ -114,17 +127,21 @@ export default function AdminLayout({ children, activeItemId = "overview" }: Adm
         >
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-white"
+            className="text-white flex-shrink-0"
+            aria-label="Open sidebar"
           >
             <Menu size={20} />
           </button>
-          <div className="flex flex-col">
-            <span className="font-bold text-sm text-white leading-tight">Admin Panel</span>
-            <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>EverydayAI</span>
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-sm text-white leading-tight truncate">Admin Panel</span>
+            <span className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }}>EverydayAI</span>
           </div>
         </div>
 
-        {children}
+        {/* Page content — overflow-x-auto here ensures any table inside can scroll horizontally */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-x-auto">
+          {children}
+        </div>
       </div>
     </div>
   );
