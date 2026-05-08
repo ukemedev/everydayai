@@ -1337,7 +1337,7 @@ function ShareModal({ agentId, isLive, publishing, onClose, onToggleLive }: Shar
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-white/10 px-7 py-7 flex flex-col gap-6"
+        className="w-full max-w-md rounded-2xl border border-white/10 px-7 py-7 flex flex-col gap-6 overflow-hidden"
         style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif" }}
       >
         {/* Header */}
@@ -1411,13 +1411,13 @@ function ShareModal({ agentId, isLive, publishing, onClose, onToggleLive }: Shar
         {/* Email share */}
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Share via email</label>
-          <form onSubmit={handleEmailShare} className="flex gap-2">
+          <form onSubmit={handleEmailShare} className="flex gap-2 min-w-0">
             <input
               type="email"
               value={shareEmail}
               onChange={(e) => setShareEmail(e.target.value)}
               placeholder="colleague@example.com"
-              className="flex-1 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+              className="flex-1 min-w-0 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
               style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
             />
             <button
