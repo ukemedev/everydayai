@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -6,31 +6,58 @@ import { supabase } from "@/lib/supabase";
 
 interface Automation {
   id: string;
+  user_id: string;
   name: string;
-  description: string;
-  trigger: string;
-  actions: string[];
-  enabled: boolean;
+  description: string | null;
+  trigger_type: string;
+  actions: string[] | null;
+  status: string;
+  created_at: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatTrigger(t: string): string {
+  const map: Record<string, string> = {
+    form_submission: "Form Submission",
+    webhook: "Webhook",
+    schedule: "Schedule",
+    new_email: "New Email",
+    manual: "Manual Trigger",
+  };
+  return map[t] ?? t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatAction(a: string): string {
+  const map: Record<string, string> = {
+    google_sheets: "Google Sheets",
+    telegram: "Telegram",
+    gmail: "Gmail",
+    whatsapp: "WhatsApp",
+    notion: "Notion",
+    slack: "Slack",
+    airtable: "Airtable",
+  };
+  return map[a] ?? a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ─── Create Automation Modal ──────────────────────────────────────────────────
 
 interface CreateModalProps {
   onClose: () => void;
-  onCreate: (description: string) => void;
+  onCreate: (description: string) => Promise<void>;
+  error: string;
 }
 
-function CreateAutomationModal({ onClose, onCreate }: CreateModalProps) {
+function CreateAutomationModal({ onClose, onCreate, error }: CreateModalProps) {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleBuild() {
+  async function handleBuild() {
     if (!description.trim()) return;
     setLoading(true);
-    setTimeout(() => {
-      onCreate(description.trim());
-      setLoading(false);
-    }, 900);
+    await onCreate(description.trim());
+    setLoading(false);
   }
 
   return (
@@ -61,7 +88,7 @@ function CreateAutomationModal({ onClose, onCreate }: CreateModalProps) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={5}
-            placeholder={`e.g. Every time someone fills my Google Form, send them a welcome email and save their info to Google Sheets`}
+            placeholder="e.g. Every time someone fills my Google Form, send them a welcome email and save their info to Google Sheets"
             className="w-full rounded-xl px-4 py-3 text-sm text-white/85 resize-none outline-none transition-all duration-150 placeholder-white/25"
             style={{
               backgroundColor: "rgba(255,255,255,0.05)",
@@ -71,6 +98,10 @@ function CreateAutomationModal({ onClose, onCreate }: CreateModalProps) {
             onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)")}
           />
         </div>
+
+        {error && (
+          <p className="text-xs text-red-400 -mt-2">{error}</p>
+        )}
 
         <div className="flex items-center gap-3">
           <button
@@ -104,12 +135,13 @@ function CreateAutomationModal({ onClose, onCreate }: CreateModalProps) {
 
 interface CardProps {
   automation: Automation;
-  onToggle: (id: string) => void;
+  onToggle: (id: string, currentStatus: string) => void;
   onDelete: (id: string) => void;
 }
 
 function AutomationCard({ automation, onToggle, onDelete }: CardProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const isActive = automation.status === "active";
 
   return (
     <div
@@ -128,22 +160,24 @@ function AutomationCard({ automation, onToggle, onDelete }: CardProps) {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white truncate">{automation.name}</p>
-          <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{automation.description}</p>
+          {automation.description && (
+            <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{automation.description}</p>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 mt-3">
             <span
               className="text-[11px] font-medium px-2.5 py-1 rounded-full"
               style={{ backgroundColor: "rgba(139,92,246,0.15)", color: "#a78bfa" }}
             >
-              {automation.trigger}
+              {formatTrigger(automation.trigger_type)}
             </span>
-            {automation.actions.map((action) => (
+            {(automation.actions ?? []).map((action) => (
               <span
                 key={action}
                 className="text-[11px] font-medium px-2.5 py-1 rounded-full"
                 style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#7b93ff" }}
               >
-                {action}
+                {formatAction(action)}
               </span>
             ))}
           </div>
@@ -177,17 +211,16 @@ function AutomationCard({ automation, onToggle, onDelete }: CardProps) {
           </button>
         )}
 
-        {/* Toggle */}
         <button
-          onClick={() => onToggle(automation.id)}
+          onClick={() => onToggle(automation.id, automation.status)}
           className="relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0"
           style={{
-            backgroundColor: automation.enabled ? "#16a34a" : "rgba(255,255,255,0.12)",
+            backgroundColor: isActive ? "#16a34a" : "rgba(255,255,255,0.12)",
           }}
         >
           <span
             className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200"
-            style={{ left: automation.enabled ? "calc(100% - 1.375rem)" : "0.125rem" }}
+            style={{ left: isActive ? "calc(100% - 1.375rem)" : "0.125rem" }}
           />
         </button>
       </div>
@@ -201,58 +234,119 @@ export default function Automations() {
   const [, navigate] = useLocation();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [automations, setAutomations] = useState<Automation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createError, setCreateError] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiProvider, setApiProvider] = useState<string>("openai");
 
-  // Load user email for sidebar
-  useState(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
-  });
+  const fetchAutomations = useCallback(async (uid: string) => {
+    const { data, error } = await supabase
+      .from("automations")
+      .select("*")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) setAutomations(data as Automation[]);
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user) { navigate("/login"); return; }
+
+      setUserEmail(user.email ?? null);
+      setUserId(user.id);
+
+      // Find a usable API key across providers
+      for (const p of ["openai", "anthropic", "groq", "google"]) {
+        const { data } = await supabase
+          .from("api_keys")
+          .select("api_key")
+          .eq("user_id", user.id)
+          .eq("provider", p)
+          .maybeSingle();
+        if (data?.api_key) {
+          setApiKey(data.api_key as string);
+          setApiProvider(p === "google" ? "openai" : p); // backend only supports openai/groq
+          break;
+        }
+      }
+
+      await fetchAutomations(user.id);
+      setLoading(false);
+    }
+    void init();
+  }, [navigate, fetchAutomations]);
 
   async function handleLogOut() {
     await supabase.auth.signOut();
     navigate("/login");
   }
 
-  function handleCreate(description: string) {
-    const words = description.split(" ");
-    const name = words.slice(0, 5).join(" ") + (words.length > 5 ? "…" : "");
+  async function handleCreate(description: string) {
+    setCreateError("");
 
-    const hasForms = /form|submission|submit/i.test(description);
-    const hasSheets = /sheet|spreadsheet/i.test(description);
-    const hasEmail = /email|gmail|send/i.test(description);
-    const hasTelegram = /telegram|notify|notification/i.test(description);
-    const hasWebhook = /webhook|api|request/i.test(description);
+    if (!apiKey) {
+      setCreateError("No API key found. Add an OpenAI or Groq key in Settings first.");
+      return;
+    }
+    if (!userId) return;
 
-    const trigger = hasForms ? "Form Submission" : hasWebhook ? "Webhook" : "Manual Trigger";
-    const actions: string[] = [];
-    if (hasSheets) actions.push("Google Sheets");
-    if (hasEmail) actions.push("Gmail");
-    if (hasTelegram) actions.push("Telegram");
-    if (actions.length === 0) actions.push("Notification");
+    try {
+      const res = await fetch("/api/automations/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description, apiKey, provider: apiProvider }),
+      });
 
-    const newAutomation: Automation = {
-      id: crypto.randomUUID(),
-      name,
-      description,
-      trigger,
-      actions,
-      enabled: true,
-    };
+      const data = await res.json() as { automation?: { name: string; description: string; trigger_type: string; actions: string[] }; error?: string };
 
-    setAutomations((prev) => [newAutomation, ...prev]);
-    setShowCreateModal(false);
+      if (!res.ok) {
+        setCreateError(data.error ?? "Failed to build automation. Please try again.");
+        return;
+      }
+
+      const analyzed = data.automation!;
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("automations")
+        .insert({
+          user_id: userId,
+          name: analyzed.name,
+          description: analyzed.description,
+          trigger_type: analyzed.trigger_type,
+          actions: analyzed.actions,
+          status: "active",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        setCreateError(insertError.message);
+        return;
+      }
+
+      setAutomations((prev) => [inserted as Automation, ...prev]);
+      setShowCreateModal(false);
+    } catch {
+      setCreateError("Network error. Please try again.");
+    }
   }
 
-  function handleToggle(id: string) {
+  async function handleToggle(id: string, currentStatus: string) {
+    const newStatus = currentStatus === "active" ? "paused" : "active";
     setAutomations((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a))
+      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
     );
+    await supabase.from("automations").update({ status: newStatus }).eq("id", id);
   }
 
-  function handleDelete(id: string) {
+  async function handleDelete(id: string) {
     setAutomations((prev) => prev.filter((a) => a.id !== id));
+    await supabase.from("automations").delete().eq("id", id);
   }
 
   return (
@@ -262,8 +356,9 @@ export default function Automations() {
     >
       {showCreateModal && (
         <CreateAutomationModal
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => { setShowCreateModal(false); setCreateError(""); }}
           onCreate={handleCreate}
+          error={createError}
         />
       )}
 
@@ -294,7 +389,7 @@ export default function Automations() {
           ))}
 
           <button
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-left"
             style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#3b5bfc" }}
           >
             <span className="text-base">⚡</span>
@@ -341,7 +436,7 @@ export default function Automations() {
           </div>
           {automations.length > 0 && (
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => { setCreateError(""); setShowCreateModal(true); }}
               className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
               style={{ backgroundColor: "#3b5bfc" }}
             >
@@ -350,8 +445,14 @@ export default function Automations() {
           )}
         </div>
 
-        {/* Empty state */}
-        {automations.length === 0 ? (
+        {/* Loading */}
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-white/30 py-24 justify-center">
+            <div className="w-4 h-4 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+            Loading automations…
+          </div>
+        ) : automations.length === 0 ? (
+          /* Empty state */
           <div className="flex flex-col items-center justify-center py-28 gap-5">
             <div
               className="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl"
@@ -366,7 +467,7 @@ export default function Automations() {
               </p>
             </div>
             <button
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => { setCreateError(""); setShowCreateModal(true); }}
               className="mt-2 px-6 py-3 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
               style={{ backgroundColor: "#3b5bfc" }}
             >
