@@ -128,9 +128,10 @@ interface Message {
   id: string;
   role: "user" | "agent";
   text: string;
-  type?: "no-key" | "tool-debug";
+  type?: "no-key" | "tool-debug" | "limit-reached";
   provider?: string;
   toolCall?: ToolCallDebug;
+  limitData?: { current: number; limit: number };
 }
 
 // ─── Tool debug card ──────────────────────────────────────────────────────────
@@ -301,9 +302,31 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json() as {
+        reply?: string;
+        toolCalls?: ToolCallDebug[];
+        error?: string;
+        current?: number;
+        limit?: number;
+      };
 
-      if (!res.ok) throw new Error(data.error ?? "Request failed");
+      if (!res.ok) {
+        if (data.error === "MESSAGE_LIMIT_REACHED") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "agent",
+              type: "limit-reached",
+              text: "",
+              limitData: { current: data.current ?? 0, limit: data.limit ?? 50 },
+            },
+          ]);
+          setIsTyping(false);
+          return;
+        }
+        throw new Error(data.error ?? "Request failed");
+      }
 
       const newMessages: Message[] = [];
 
@@ -390,6 +413,34 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                 return (
                   <div key={msg.id} className="px-1">
                     <ToolDebugCard toolCall={msg.toolCall} />
+                  </div>
+                );
+              }
+
+              // Message limit reached banner
+              if (msg.type === "limit-reached") {
+                return (
+                  <div key={msg.id} className="flex items-start gap-2">
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
+                      style={{ backgroundColor: "rgba(251,191,36,0.2)" }}
+                    >
+                      ⚠️
+                    </div>
+                    <div
+                      className="max-w-[85%] px-3.5 py-3 rounded-2xl text-sm leading-relaxed"
+                      style={{
+                        backgroundColor: "rgba(251,191,36,0.12)",
+                        border: "1px solid rgba(251,191,36,0.25)",
+                        borderBottomLeftRadius: "4px",
+                      }}
+                    >
+                      <p className="text-amber-400 text-xs font-semibold mb-1">Monthly limit reached</p>
+                      <p className="text-amber-200/80 text-xs leading-relaxed">
+                        You have reached your {msg.limitData?.limit ?? 50} message limit for this month.{" "}
+                        Upgrade your plan to continue.
+                      </p>
+                    </div>
                   </div>
                 );
               }

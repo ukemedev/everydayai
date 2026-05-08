@@ -7,6 +7,7 @@ import automationsRouter from "./automations";
 import telegramRouter from "./telegram";
 import adminRouter from "./admin";
 import blogRouter from "./blog";
+import agentsRouter from "./agents";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(automationsRouter);
 router.use(telegramRouter);
 router.use(adminRouter);
 router.use(blogRouter);
+router.use(agentsRouter);
 
 export default router;

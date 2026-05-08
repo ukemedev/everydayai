@@ -26,29 +26,54 @@ interface CreateAgentModalProps {
 }
 
 function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
-  const [agentName, setAgentName] = useState("");
+  const [agentName, setAgentName]             = useState("");
   const [agentDescription, setAgentDescription] = useState("");
-  const [model, setModel] = useState("gpt-4o-mini");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [nameError, setNameError] = useState("");
+  const [model, setModel]                     = useState("gpt-4o-mini");
+  const [loading, setLoading]                 = useState(false);
+  const [error, setError]                     = useState("");
+  const [nameError, setNameError]             = useState("");
 
   async function handleCreate() {
     setNameError("");
     setError("");
     if (!agentName.trim()) { setNameError("Agent name is required."); return; }
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError("You must be logged in."); setLoading(false); return; }
-    const { error: insertError } = await supabase.from("agents").insert({
-      name: agentName.trim(),
-      description: agentDescription.trim() || null,
-      model,
-      user_id: user.id,
-    });
-    if (insertError) { setError(insertError.message); setLoading(false); return; }
-    setLoading(false);
-    onCreated();
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setError("You must be logged in."); setLoading(false); return; }
+
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name:        agentName.trim(),
+          description: agentDescription.trim() || undefined,
+          model,
+        }),
+      });
+
+      const data = await res.json() as { error?: string; limit?: number; plan?: string };
+
+      if (!res.ok) {
+        if (data.error === "AGENT_LIMIT_REACHED") {
+          onClose();
+          alert(`You've reached your ${data.plan ?? "free"} plan limit of ${data.limit} agent${data.limit === 1 ? "" : "s"}. Upgrade your plan to create more agents.`);
+          return;
+        }
+        setError(data.error ?? "Failed to create agent");
+        return;
+      }
+
+      onCreated();
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -185,9 +210,9 @@ function AgentCard({ agent }: { agent: Agent }) {
 export default function Dashboard() {
   const [, navigate] = useLocation();
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loadingAgents, setLoadingAgents] = useState(true);
-  const [successMessage, setSuccessMessage] = useState("");
+  const [agents, setAgents]                   = useState<Agent[]>([]);
+  const [loadingAgents, setLoadingAgents]     = useState(true);
+  const [successMessage, setSuccessMessage]   = useState("");
 
   const fetchAgents = useCallback(async () => {
     setLoadingAgents(true);
@@ -199,9 +224,7 @@ export default function Dashboard() {
     setLoadingAgents(false);
   }, []);
 
-  useEffect(() => {
-    fetchAgents();
-  }, [fetchAgents]);
+  useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
   function handleAgentCreated() {
     setShowCreateModal(false);

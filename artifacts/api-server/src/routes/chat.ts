@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
+import { checkMessageLimit } from "../lib/planLimits.js";
 import { appendToSheet } from "../lib/googleSheets.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendEmail } from "../lib/gmail.js";
@@ -353,6 +354,20 @@ router.post("/chat", async (req: Request, res: Response) => {
 
   if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
 
+  // ── Message limit check (only for authenticated studio sessions) ───────────
+  if (userId?.trim()) {
+    const limitCheck = await checkMessageLimit(userId.trim());
+    if (!limitCheck.allowed) {
+      res.status(403).json({
+        error:   "MESSAGE_LIMIT_REACHED",
+        current: limitCheck.current,
+        limit:   limitCheck.limit,
+        plan:    "free",
+      });
+      return;
+    }
+  }
+
   // Resolve API key. If none provided (public/shared chat), auto-fetch owner's key via service role.
   let resolvedApiKey    = apiKey?.trim() ?? "";
   let resolvedModel     = model?.trim()    || "gpt-4o-mini";
@@ -582,6 +597,29 @@ router.post("/chat", async (req: Request, res: Response) => {
     // ─────────────────────────────────────────────────────────────────────────
 
     req.log.info({ provider: resolvedProvider, model: resolvedModel, hasDocContext: docContext.length > 0 }, "chat completion successful");
+
+    // Increment message count for authenticated sessions
+    if (userId?.trim()) {
+      const sb = getServiceClient();
+      if (sb) {
+        try {
+          const { data: profile } = await sb
+            .from("profiles")
+            .select("message_count")
+            .eq("id", userId.trim())
+            .single();
+          if (profile) {
+            await sb
+              .from("profiles")
+              .update({ message_count: (profile.message_count ?? 0) + 1 })
+              .eq("id", userId.trim());
+          }
+        } catch {
+          // Non-fatal — chat already succeeded
+        }
+      }
+    }
+
     res.json({ reply, toolCalls: toolCallResults.length > 0 ? toolCallResults : null });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : "Unknown error";
