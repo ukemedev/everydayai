@@ -12,6 +12,11 @@ export default function Home() {
           EverydayAI
         </span>
         <div className="flex items-center gap-3">
+          <Link href="/pricing">
+            <button className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 hover:text-white transition-colors duration-200">
+              Pricing
+            </button>
+          </Link>
           <Link href="/login">
             <button className="px-5 py-2 rounded-lg text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200">
               Log In

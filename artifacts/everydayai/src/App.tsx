@@ -19,6 +19,7 @@ import AdminAgents from "@/pages/AdminAgents";
 import AdminAutomations from "@/pages/AdminAutomations";
 import AdminRevenue from "@/pages/AdminRevenue";
 import AdminBlog from "@/pages/AdminBlog";
+import Pricing from "@/pages/Pricing";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/pricing" component={Pricing} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/dashboard">
