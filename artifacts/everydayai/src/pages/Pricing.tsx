@@ -186,21 +186,21 @@ export default function Pricing() {
       style={{ backgroundColor: "#0a0f1e", fontFamily: "'Inter', sans-serif" }}
     >
       {/* Navbar */}
-      <nav className="w-full flex items-center justify-between px-8 py-5">
+      <nav className="w-full flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5">
         <Link href="/">
-          <span className="text-white font-bold text-xl tracking-tight cursor-pointer">
+          <span className="text-white font-bold text-lg sm:text-xl tracking-tight cursor-pointer shrink-0">
             EverydayAI
           </span>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <Link href="/login">
-            <button className="px-5 py-2 rounded-lg text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200">
+            <button className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
               Log In
             </button>
           </Link>
           <Link href="/signup">
             <button
-              className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 active:scale-95"
+              className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium text-white transition-all duration-200 hover:opacity-90 active:scale-95 whitespace-nowrap"
               style={{ backgroundColor: "#3b5bfc" }}
             >
               Get Started
