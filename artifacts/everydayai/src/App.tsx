@@ -16,6 +16,7 @@ import AdminRoute from "@/components/AdminRoute";
 import Admin from "@/pages/Admin";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminAgents from "@/pages/AdminAgents";
+import AdminAutomations from "@/pages/AdminAutomations";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,9 @@ function Router() {
       </Route>
       <Route path="/admin/agents">
         {() => <AdminRoute component={AdminAgents} />}
+      </Route>
+      <Route path="/admin/automations">
+        {() => <AdminRoute component={AdminAutomations} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
