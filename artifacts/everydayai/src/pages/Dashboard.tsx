@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import AppLayout from "@/components/AppLayout";
+import UpgradeModal from "@/components/UpgradeModal";
 
 const modelOptions = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -23,9 +24,10 @@ interface Agent {
 interface CreateAgentModalProps {
   onClose: () => void;
   onCreated: () => void;
+  onLimitReached: () => void;
 }
 
-function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
+function CreateAgentModal({ onClose, onCreated, onLimitReached }: CreateAgentModalProps) {
   const [agentName, setAgentName]             = useState("");
   const [agentDescription, setAgentDescription] = useState("");
   const [model, setModel]                     = useState("gpt-4o-mini");
@@ -61,7 +63,7 @@ function CreateAgentModal({ onClose, onCreated }: CreateAgentModalProps) {
       if (!res.ok) {
         if (data.error === "AGENT_LIMIT_REACHED") {
           onClose();
-          alert(`You've reached your ${data.plan ?? "free"} plan limit of ${data.limit} agent${data.limit === 1 ? "" : "s"}. Upgrade your plan to create more agents.`);
+          onLimitReached();
           return;
         }
         setError(data.error ?? "Failed to create agent");
@@ -209,10 +211,11 @@ function AgentCard({ agent }: { agent: Agent }) {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [agents, setAgents]                   = useState<Agent[]>([]);
-  const [loadingAgents, setLoadingAgents]     = useState(true);
-  const [successMessage, setSuccessMessage]   = useState("");
+  const [showCreateModal, setShowCreateModal]   = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [agents, setAgents]                     = useState<Agent[]>([]);
+  const [loadingAgents, setLoadingAgents]       = useState(true);
+  const [successMessage, setSuccessMessage]     = useState("");
 
   const fetchAgents = useCallback(async () => {
     setLoadingAgents(true);
@@ -236,8 +239,18 @@ export default function Dashboard() {
   return (
     <AppLayout activeItemId="home">
       {showCreateModal && (
-        <CreateAgentModal onClose={() => setShowCreateModal(false)} onCreated={handleAgentCreated} />
+        <CreateAgentModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleAgentCreated}
+          onLimitReached={() => setShowUpgradeModal(true)}
+        />
       )}
+
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        reason="agent_limit"
+      />
 
       {successMessage && (
         <div className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg" style={{ backgroundColor: "#16a34a" }}>

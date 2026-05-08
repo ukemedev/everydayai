@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { marked } from "marked";
 import { useLocation, useParams } from "wouter";
 import { supabase } from "@/lib/supabase";
+import UpgradeModal from "@/components/UpgradeModal";
 
 
 // ─── Model catalogue ──────────────────────────────────────────────────────────
@@ -240,6 +241,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -366,6 +368,12 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
   const noInstructions = !instructions.trim();
 
   return (
+    <>
+    <UpgradeModal
+      isOpen={showUpgradeModal}
+      onClose={() => setShowUpgradeModal(false)}
+      reason="message_limit"
+    />
     <div
       className="flex-1 flex flex-col min-h-0 border-l border-white/5"
       style={{ backgroundColor: "#0d1117" }}
@@ -428,18 +436,25 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                       ⚠️
                     </div>
                     <div
-                      className="max-w-[85%] px-3.5 py-3 rounded-2xl text-sm leading-relaxed"
+                      className="max-w-[85%] px-3.5 py-3 rounded-2xl text-sm leading-relaxed flex flex-col gap-2.5"
                       style={{
                         backgroundColor: "rgba(251,191,36,0.12)",
                         border: "1px solid rgba(251,191,36,0.25)",
                         borderBottomLeftRadius: "4px",
                       }}
                     >
-                      <p className="text-amber-400 text-xs font-semibold mb-1">Monthly limit reached</p>
+                      <p className="text-amber-400 text-xs font-semibold">Monthly limit reached</p>
                       <p className="text-amber-200/80 text-xs leading-relaxed">
-                        You have reached your {msg.limitData?.limit ?? 50} message limit for this month.{" "}
-                        Upgrade your plan to continue.
+                        You have reached your {msg.limitData?.limit ?? 50} message limit for this month.
+                        Upgrade your plan to continue chatting.
                       </p>
+                      <button
+                        onClick={() => setShowUpgradeModal(true)}
+                        className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90 active:scale-95"
+                        style={{ backgroundColor: "rgba(251,191,36,0.25)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.35)" }}
+                      >
+                        Upgrade Plan →
+                      </button>
                     </div>
                   </div>
                 );
@@ -552,6 +567,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
         </div>
       </div>
     </div>
+    </>
   );
 }
 
