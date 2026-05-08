@@ -9,6 +9,7 @@ import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Studio from "@/pages/Studio";
 import Settings from "@/pages/Settings";
+import Automations from "@/pages/Automations";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,9 @@ function Router() {
       </Route>
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
+      </Route>
+      <Route path="/automations">
+        {() => <ProtectedRoute component={Automations} />}
       </Route>
       <Route component={NotFound} />
     </Switch>
