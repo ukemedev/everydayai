@@ -8,6 +8,8 @@ import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
 import { appendToSheet } from "../lib/googleSheets.js";
+import { sendTelegramMessage } from "../lib/telegram.js";
+import { sendEmail } from "../lib/gmail.js";
 
 // pdf-parse and mammoth are externalized in esbuild — load via require at runtime
 const _require = createRequire(import.meta.url);
@@ -346,36 +348,37 @@ router.post("/chat", async (req: Request, res: Response) => {
     if (toolCallMatch && agentTools.length > 0) {
       req.log.info({ raw: toolCallMatch[1] }, "tool call detected in AI response");
       try {
-        const toolCall = JSON.parse(toolCallMatch[1]) as {
+        const toolCallParsed = JSON.parse(toolCallMatch[1]) as {
           tool_id: string;
           inputs: Record<string, string>;
-          spreadsheet_id: string;
+          spreadsheet_id?: string;
           sheet_name?: string;
         };
 
-        const tool = agentTools.find((t) => t.id === toolCall.tool_id);
+        const tool = agentTools.find((t) => t.id === toolCallParsed.tool_id);
 
-        if (tool && tool.connector === "google_sheets" && userId?.trim()) {
+        if (tool && userId?.trim()) {
           const sb = getServiceClient();
           let resultMsg = "";
+          const uid = userId.trim();
 
-          if (sb) {
+          if (tool.connector === "google_sheets" && sb) {
             const { data: integration } = await sb
               .from("integrations")
               .select("access_token")
-              .eq("user_id", userId.trim())
+              .eq("user_id", uid)
               .eq("provider", "google")
               .maybeSingle();
 
             if (integration?.access_token) {
               const rowData = tool.required_inputs?.length
-                ? tool.required_inputs.map((i) => toolCall.inputs[i.name] ?? "")
-                : Object.values(toolCall.inputs);
+                ? tool.required_inputs.map((i: { name: string }) => toolCallParsed.inputs[i.name] ?? "")
+                : Object.values(toolCallParsed.inputs);
 
               const sheetResult = await appendToSheet(
                 integration.access_token as string,
-                toolCall.spreadsheet_id,
-                toolCall.sheet_name ?? "Sheet1",
+                toolCallParsed.spreadsheet_id ?? "",
+                toolCallParsed.sheet_name ?? "Sheet1",
                 rowData
               );
 
@@ -387,28 +390,102 @@ router.post("/chat", async (req: Request, res: Response) => {
               toolCallResult = {
                 name:      tool.tool_name,
                 status:    succeeded ? "success" : "failed",
-                data:      toolCall.inputs,
+                data:      toolCallParsed.inputs,
                 response:  succeeded ? "Row appended successfully" : (sheetResult.error ?? "Unknown error"),
                 timestamp: new Date().toISOString(),
               };
-
-              req.log.info(
-                { toolId: toolCall.tool_id, success: succeeded },
-                "tool execution complete"
-              );
             } else {
               resultMsg = "⚠ Google Sheets not connected. Please connect Google in the Tools tab.";
               toolCallResult = {
                 name:      tool.tool_name,
                 status:    "failed",
-                data:      toolCall.inputs,
+                data:      toolCallParsed.inputs,
                 response:  "Google account not connected",
                 timestamp: new Date().toISOString(),
               };
             }
+
+          } else if (tool.connector === "telegram" && sb) {
+            const { data: integration } = await sb
+              .from("integrations")
+              .select("access_token, refresh_token")
+              .eq("user_id", uid)
+              .eq("provider", "telegram")
+              .maybeSingle();
+
+            const botToken = integration?.access_token as string | undefined;
+            const chatId   = integration?.refresh_token as string | undefined;
+
+            if (botToken && chatId) {
+              const message = toolCallParsed.inputs.message ?? JSON.stringify(toolCallParsed.inputs);
+              const tgResult = await sendTelegramMessage(botToken, chatId, message);
+              const succeeded = tgResult.success;
+
+              resultMsg = succeeded
+                ? "✓ Telegram message sent"
+                : `⚠ Could not send Telegram message: ${tgResult.error}`;
+
+              toolCallResult = {
+                name:      tool.tool_name,
+                status:    succeeded ? "success" : "failed",
+                data:      toolCallParsed.inputs,
+                response:  succeeded ? "Message delivered" : (tgResult.error ?? "Unknown error"),
+                timestamp: new Date().toISOString(),
+              };
+            } else {
+              resultMsg = "⚠ Telegram not connected. Please add your Bot Token and Chat ID in Settings.";
+              toolCallResult = {
+                name:      tool.tool_name,
+                status:    "failed",
+                data:      toolCallParsed.inputs,
+                response:  "Telegram credentials not configured",
+                timestamp: new Date().toISOString(),
+              };
+            }
+
+          } else if (tool.connector === "gmail" && sb) {
+            const { data: integration } = await sb
+              .from("integrations")
+              .select("access_token")
+              .eq("user_id", uid)
+              .eq("provider", "google")
+              .maybeSingle();
+
+            if (integration?.access_token) {
+              const to      = toolCallParsed.inputs.to ?? toolCallParsed.inputs.email ?? "";
+              const subject = toolCallParsed.inputs.subject ?? "(no subject)";
+              const body    = toolCallParsed.inputs.body ?? toolCallParsed.inputs.message ?? "";
+
+              const gmailResult = await sendEmail(integration.access_token as string, to, subject, body);
+              const succeeded = gmailResult.success;
+
+              resultMsg = succeeded
+                ? "✓ Email sent via Gmail"
+                : `⚠ Could not send email: ${gmailResult.error}`;
+
+              toolCallResult = {
+                name:      tool.tool_name,
+                status:    succeeded ? "success" : "failed",
+                data:      toolCallParsed.inputs,
+                response:  succeeded ? `Email delivered to ${to}` : (gmailResult.error ?? "Unknown error"),
+                timestamp: new Date().toISOString(),
+              };
+            } else {
+              resultMsg = "⚠ Gmail not connected. Please connect Google in the Tools tab.";
+              toolCallResult = {
+                name:      tool.tool_name,
+                status:    "failed",
+                data:      toolCallParsed.inputs,
+                response:  "Google account not connected",
+                timestamp: new Date().toISOString(),
+              };
+            }
+          } else {
+            resultMsg = "";
           }
 
-          reply = reply.replace(toolCallMatch[0], `[${resultMsg}]`);
+          req.log.info({ toolId: tool.id, connector: tool.connector, status: toolCallResult?.status }, "tool execution complete");
+          reply = reply.replace(toolCallMatch[0], resultMsg ? `[${resultMsg}]` : "");
         } else {
           reply = reply.replace(toolCallMatch[0], "");
         }

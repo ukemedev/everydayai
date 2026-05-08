@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
+interface TelegramState {
+  botToken: string;
+  chatId: string;
+  savedBotToken: string | null;
+  savedChatId: string | null;
+  saving: boolean;
+  removing: boolean;
+}
+
 const font = { fontFamily: "'Inter', sans-serif" };
 
 const providers = [
@@ -77,6 +86,14 @@ export default function Settings() {
       providers.map((p) => [p.id, { inputValue: "", maskedKey: null, saving: false, removing: false }])
     )
   );
+  const [telegram, setTelegram] = useState<TelegramState>({
+    botToken: "",
+    chatId: "",
+    savedBotToken: null,
+    savedChatId: null,
+    saving: false,
+    removing: false,
+  });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -98,7 +115,66 @@ export default function Settings() {
           return next;
         });
       });
+
+    supabase
+      .from("integrations")
+      .select("access_token, refresh_token")
+      .eq("provider", "telegram")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.access_token) {
+          setTelegram((prev) => ({
+            ...prev,
+            savedBotToken: mask(data.access_token as string),
+            savedChatId: data.refresh_token as string | null,
+          }));
+        }
+      });
   }, []);
+
+  async function handleSaveTelegram() {
+    const botToken = telegram.botToken.trim();
+    const chatId   = telegram.chatId.trim();
+    if (!botToken || !chatId) return;
+
+    setTelegram((prev) => ({ ...prev, saving: true }));
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setTelegram((prev) => ({ ...prev, saving: false })); return; }
+
+    const { error } = await supabase.from("integrations").upsert(
+      {
+        user_id:       user.id,
+        provider:      "telegram",
+        access_token:  botToken,
+        refresh_token: chatId,
+        expires_at:    null,
+      },
+      { onConflict: "user_id,provider" }
+    );
+
+    if (!error) {
+      setTelegram((prev) => ({
+        ...prev,
+        botToken: "",
+        chatId: "",
+        savedBotToken: mask(botToken),
+        savedChatId: chatId,
+        saving: false,
+      }));
+      showToast("Telegram connected successfully");
+    } else {
+      setTelegram((prev) => ({ ...prev, saving: false }));
+      showToast("Failed to save Telegram credentials");
+    }
+  }
+
+  async function handleRemoveTelegram() {
+    setTelegram((prev) => ({ ...prev, removing: true }));
+    await supabase.from("integrations").delete().eq("provider", "telegram");
+    setTelegram({ botToken: "", chatId: "", savedBotToken: null, savedChatId: null, saving: false, removing: false });
+    showToast("Telegram disconnected");
+  }
 
   function showToast(msg: string) {
     setToast(msg);
@@ -221,6 +297,7 @@ export default function Settings() {
 
           <div className="grid grid-cols-1 gap-4 mt-8 sm:grid-cols-2">
             {providers.map((provider) => {
+
               const state = keyStates[provider.id];
               const connected = !!state.maskedKey;
 
@@ -296,6 +373,100 @@ export default function Settings() {
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Integrations section ── */}
+          <div className="mt-12">
+            <h1 className="text-2xl font-bold text-white">Integrations</h1>
+            <p className="text-sm text-white/45 mt-1">
+              Connect external services to power your agent tools.
+            </p>
+
+            <div className="mt-8">
+              {/* Telegram card */}
+              <div
+                className="rounded-2xl border border-white/8 p-5 flex flex-col gap-4 max-w-md"
+                style={{ backgroundColor: "#111827" }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
+                      style={{ backgroundColor: "rgba(38,155,214,0.15)" }}
+                    >
+                      📱
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white">Telegram</p>
+                      <p className="text-xs text-white/35 mt-0.5">Send messages via Telegram bot</p>
+                    </div>
+                  </div>
+                  {telegram.savedBotToken && (
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                    >
+                      Connected
+                    </span>
+                  )}
+                </div>
+
+                {telegram.savedBotToken && (
+                  <div
+                    className="flex items-center justify-between rounded-lg px-3 py-2 border border-white/8"
+                    style={{ backgroundColor: "rgba(255,255,255,0.03)" }}
+                  >
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-xs text-white/40">Bot Token</span>
+                      <span className="text-sm text-white/50 font-mono tracking-wider">{telegram.savedBotToken}</span>
+                      {telegram.savedChatId && (
+                        <>
+                          <span className="text-xs text-white/40 mt-1">Chat ID</span>
+                          <span className="text-sm text-white/50 font-mono">{telegram.savedChatId}</span>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleRemoveTelegram}
+                      disabled={telegram.removing}
+                      className="text-xs text-red-400/80 hover:text-red-400 transition-colors duration-150 disabled:opacity-50 ml-3 flex-shrink-0"
+                    >
+                      {telegram.removing ? "Removing…" : "Remove"}
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="password"
+                    placeholder={telegram.savedBotToken ? "Replace Bot Token…" : "Bot Token (from BotFather)"}
+                    value={telegram.botToken}
+                    onChange={(e) => setTelegram((prev) => ({ ...prev, botToken: e.target.value }))}
+                    className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
+                    style={{ backgroundColor: "#0a0f1e" }}
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Chat ID (e.g. 123456789)"
+                      value={telegram.chatId}
+                      onChange={(e) => setTelegram((prev) => ({ ...prev, chatId: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveTelegram(); }}
+                      className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
+                      style={{ backgroundColor: "#0a0f1e" }}
+                    />
+                    <button
+                      onClick={handleSaveTelegram}
+                      disabled={!telegram.botToken.trim() || !telegram.chatId.trim() || telegram.saving}
+                      className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                      style={{ backgroundColor: "#3b5bfc" }}
+                    >
+                      {telegram.saving ? "Saving…" : telegram.savedBotToken ? "Replace" : "Save"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>

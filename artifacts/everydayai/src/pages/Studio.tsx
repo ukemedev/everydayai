@@ -1446,9 +1446,9 @@ export default function Studio() {
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       { icon: "📊", name: "Google Sheets", desc: "Save data to spreadsheets",       soon: false },
-                      { icon: "💬", name: "WhatsApp",      desc: "Send WhatsApp messages",          soon: true  },
                       { icon: "📱", name: "Telegram",      desc: "Send Telegram notifications",     soon: false },
                       { icon: "📧", name: "Gmail",         desc: "Send emails automatically",       soon: false },
+                      { icon: "💬", name: "WhatsApp",      desc: "Send WhatsApp messages",          soon: true  },
                       { icon: "📸", name: "Instagram",     desc: "Post or reply on Instagram",      soon: true  },
                     ].map(({ icon, name, desc, soon }) => (
                       <div

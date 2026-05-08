@@ -11,6 +11,7 @@ const CALLBACK_URL = `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/google/c
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/gmail.send",
 ];
 
 function getOAuth2Client() {
