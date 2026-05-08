@@ -1441,6 +1441,201 @@ function ShareModal({ agentId, isLive, publishing, onClose, onToggleLive }: Shar
 
 // ─── Studio page ──────────────────────────────────────────────────────────────
 
+interface AgentVersion {
+  id: string;
+  agent_id: string;
+  version_number: number;
+  instructions: string | null;
+  model: string | null;
+  published_at: string;
+}
+
+function VersionHistoryModal({
+  agentId,
+  onClose,
+  onRestore,
+}: {
+  agentId: string;
+  onClose: () => void;
+  onRestore: (instructions: string, model: string, versionNumber: number) => void;
+}) {
+  const [versions, setVersions] = useState<AgentVersion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [confirmVersion, setConfirmVersion] = useState<AgentVersion | null>(null);
+  const [restoring, setRestoring] = useState(false);
+
+  useEffect(() => {
+    supabase
+      .from("agent_versions")
+      .select("*")
+      .eq("agent_id", agentId)
+      .order("version_number", { ascending: false })
+      .then(({ data }) => {
+        setVersions((data as AgentVersion[]) ?? []);
+        setLoading(false);
+      });
+  }, [agentId]);
+
+  async function doRestore(version: AgentVersion) {
+    setRestoring(true);
+    await supabase
+      .from("agents")
+      .update({
+        instructions: version.instructions,
+        model: version.model,
+        prompt_model: version.model,
+      })
+      .eq("id", agentId);
+    setRestoring(false);
+    onRestore(version.instructions ?? "", version.model ?? "", version.version_number);
+    onClose();
+  }
+
+  const font = { fontFamily: "'Inter', sans-serif" };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-white/10 flex flex-col overflow-hidden"
+        style={{ backgroundColor: "#0d1117", maxHeight: "80vh", ...font }}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-white/5 flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white">Version History</h2>
+            <p className="text-sm text-white/40 mt-0.5">Track changes to your agent</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-white/30 hover:text-white/70 transition-colors ml-4 flex-shrink-0 mt-0.5"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+            </div>
+          ) : versions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-14 text-center gap-2">
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center mb-2"
+                style={{ backgroundColor: "rgba(59,91,252,0.12)" }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#3b5bfc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-white/50">No versions yet</p>
+              <p className="text-xs text-white/30 leading-relaxed max-w-[200px]">
+                Publish your agent to create the first version.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {versions.map((v, idx) => {
+                const isCurrent = idx === 0;
+                const date = new Date(v.published_at);
+                const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                const timeStr = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+                return (
+                  <div
+                    key={v.id}
+                    className="rounded-xl border p-4 flex flex-col gap-2.5"
+                    style={{
+                      backgroundColor: isCurrent ? "rgba(59,91,252,0.06)" : "#111827",
+                      borderColor: isCurrent ? "rgba(59,91,252,0.25)" : "rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    {/* Row: version label + badge + action */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">v{v.version_number}</span>
+                        {isCurrent && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                          >
+                            Current
+                          </span>
+                        )}
+                      </div>
+                      {!isCurrent && (
+                        confirmVersion?.id === v.id ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-white/40">
+                              Restore v{v.version_number}? This will replace your current instructions.
+                            </span>
+                            <button
+                              onClick={() => setConfirmVersion(null)}
+                              disabled={restoring}
+                              className="text-[11px] text-white/40 hover:text-white/70 transition-colors disabled:opacity-40 flex-shrink-0"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => doRestore(v)}
+                              disabled={restoring}
+                              className="text-[11px] font-semibold px-2.5 py-1 rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-60 flex items-center gap-1 flex-shrink-0"
+                              style={{ backgroundColor: "#3b5bfc" }}
+                            >
+                              {restoring ? (
+                                <>
+                                  <span className="w-2.5 h-2.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                                  Restoring…
+                                </>
+                              ) : "Yes, Restore"}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmVersion(v)}
+                            className="text-xs font-medium px-3 py-1.5 rounded-lg border transition-all duration-150 hover:border-white/25 hover:text-white/80 flex-shrink-0"
+                            style={{ color: "rgba(255,255,255,0.5)", borderColor: "rgba(255,255,255,0.14)" }}
+                          >
+                            Restore
+                          </button>
+                        )
+                      )}
+                    </div>
+
+                    {/* Meta: date + model */}
+                    <div className="flex items-center gap-2 text-[11px] text-white/40 flex-wrap">
+                      <span>{dateStr} at {timeStr}</span>
+                      {v.model && (
+                        <>
+                          <span className="text-white/20">·</span>
+                          <span className="font-mono">{v.model}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Instructions preview */}
+                    {v.instructions && (
+                      <p className="text-[11px] text-white/35 leading-relaxed">
+                        {v.instructions.slice(0, 100)}{v.instructions.length > 100 ? "…" : ""}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Studio() {
   const { agentId } = useParams<{ agentId: string }>();
   const [, navigate] = useLocation();
@@ -1457,6 +1652,7 @@ export default function Studio() {
 
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -1796,12 +1992,35 @@ export default function Studio() {
       .from("agents")
       .update({ status: "live" })
       .eq("id", agent.id);
-    setPublishing(false);
     if (!error) {
+      // Save a version snapshot
+      const [{ count }, { data: { user } }] = await Promise.all([
+        supabase
+          .from("agent_versions")
+          .select("id", { count: "exact", head: true })
+          .eq("agent_id", agent.id),
+        supabase.auth.getUser(),
+      ]);
+      if (user) {
+        await supabase.from("agent_versions").insert({
+          agent_id: agent.id,
+          user_id: user.id,
+          version_number: (count ?? 0) + 1,
+          instructions,
+          model,
+        });
+      }
       setAgent((prev) => prev ? { ...prev, status: "live" } : prev);
       setShowDeployModal(false);
       showToast("Agent is now Live! 🎉");
     }
+    setPublishing(false);
+  }
+
+  function handleVersionRestore(instr: string, mdl: string, vnum: number) {
+    setInstructions(instr);
+    setModel(mdl);
+    showToast(`Restored to v${vnum}!`);
   }
 
   async function handleUnpublish() {
@@ -1915,7 +2134,10 @@ export default function Studio() {
           >
             Share
           </button>
-          <button className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150">
+          <button
+            onClick={() => setShowVersionModal(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
+          >
             Version History
           </button>
         </div>
@@ -2565,6 +2787,15 @@ export default function Studio() {
           agentName={agent.name}
           userId={userId}
           onClose={() => setShowDeployModal(false)}
+        />
+      )}
+
+      {/* ── Version History modal ── */}
+      {showVersionModal && agent && (
+        <VersionHistoryModal
+          agentId={agent.id}
+          onClose={() => setShowVersionModal(false)}
+          onRestore={handleVersionRestore}
         />
       )}
 
