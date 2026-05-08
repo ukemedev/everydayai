@@ -11,6 +11,10 @@ const __dirname = dirname(__filename);
 
 const app: Express = express();
 
+// Trust the reverse proxy so express-rate-limit can read the real client IP
+// from X-Forwarded-For without throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

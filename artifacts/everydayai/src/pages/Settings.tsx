@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import AppLayout from "@/components/AppLayout";
 
@@ -71,13 +70,12 @@ interface KeyState {
   removing: boolean;
 }
 
-function mask(key: string): string {
-  if (key.length <= 4) return "••••";
-  return "••••••••••••" + key.slice(-4);
+async function getAuthHeader(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session ? `Bearer ${session.access_token}` : null;
 }
 
 export default function Settings() {
-  const [, navigate] = useLocation();
   const [toast, setToast] = useState("");
   const [keyStates, setKeyStates] = useState<Record<string, KeyState>>(
     Object.fromEntries(
@@ -89,21 +87,25 @@ export default function Settings() {
   });
 
   useEffect(() => {
-    supabase
-      .from("api_keys")
-      .select("provider, api_key")
-      .then(({ data }) => {
-        if (!data) return;
-        setKeyStates((prev) => {
-          const next = { ...prev };
-          for (const row of data as { provider: string; api_key: string }[]) {
-            if (next[row.provider]) {
-              next[row.provider] = { ...next[row.provider], maskedKey: mask(row.api_key) };
-            }
+    void (async () => {
+      const auth = await getAuthHeader();
+      if (!auth) return;
+
+      const res = await fetch("/api/keys/list", { headers: { Authorization: auth } });
+      if (!res.ok) return;
+      const data = await res.json() as { keys: { provider: string; masked: string }[] };
+
+      setKeyStates((prev) => {
+        const next = { ...prev };
+        for (const { provider, masked } of data.keys) {
+          if (next[provider]) {
+            next[provider] = { ...next[provider], maskedKey: masked };
           }
-          return next;
-        });
+        }
+        return next;
       });
+    })();
+
     supabase
       .from("integrations")
       .select("access_token, refresh_token")
@@ -111,9 +113,11 @@ export default function Settings() {
       .maybeSingle()
       .then(({ data }) => {
         if (data?.access_token) {
+          const raw = data.access_token as string;
+          const masked = "••••••••••••" + (raw.length > 4 ? raw.slice(-4) : raw);
           setTelegram((prev) => ({
             ...prev,
-            savedBotToken: mask(data.access_token as string),
+            savedBotToken: masked,
             savedChatId: data.refresh_token as string | null,
           }));
         }
@@ -132,7 +136,8 @@ export default function Settings() {
       { onConflict: "user_id,provider" }
     );
     if (!error) {
-      setTelegram((prev) => ({ ...prev, botToken: "", chatId: "", savedBotToken: mask(botToken), savedChatId: chatId, saving: false }));
+      const masked = "••••••••••••" + (botToken.length > 4 ? botToken.slice(-4) : botToken);
+      setTelegram((prev) => ({ ...prev, botToken: "", chatId: "", savedBotToken: masked, savedChatId: chatId, saving: false }));
       showToast("Telegram connected successfully");
     } else {
       setTelegram((prev) => ({ ...prev, saving: false }));
@@ -157,18 +162,29 @@ export default function Settings() {
   }
 
   async function handleSave(providerId: string) {
-    const state = keyStates[providerId];
+    const state    = keyStates[providerId];
     const keyValue = state.inputValue.trim();
     if (!keyValue) return;
     setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], saving: true } }));
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], saving: false } })); return; }
-    const { error } = await supabase.from("api_keys").upsert(
-      { user_id: user.id, provider: providerId, api_key: keyValue },
-      { onConflict: "user_id,provider" }
-    );
-    if (!error) {
-      setKeyStates((prev) => ({ ...prev, [providerId]: { inputValue: "", maskedKey: mask(keyValue), saving: false, removing: false } }));
+
+    const auth = await getAuthHeader();
+    if (!auth) {
+      setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], saving: false } }));
+      return;
+    }
+
+    const res = await fetch("/api/keys/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify({ provider: providerId, apiKey: keyValue }),
+    });
+
+    if (res.ok) {
+      const masked = "••••••••••••" + (keyValue.length > 4 ? keyValue.slice(-4) : keyValue);
+      setKeyStates((prev) => ({
+        ...prev,
+        [providerId]: { inputValue: "", maskedKey: masked, saving: false, removing: false },
+      }));
       showToast("API key saved successfully");
     } else {
       setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], saving: false } }));
@@ -178,9 +194,29 @@ export default function Settings() {
 
   async function handleRemove(providerId: string) {
     setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], removing: true } }));
-    await supabase.from("api_keys").delete().eq("provider", providerId);
-    setKeyStates((prev) => ({ ...prev, [providerId]: { inputValue: "", maskedKey: null, saving: false, removing: false } }));
-    showToast("API key removed");
+
+    const auth = await getAuthHeader();
+    if (!auth) {
+      setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], removing: false } }));
+      return;
+    }
+
+    const res = await fetch("/api/keys/delete", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify({ provider: providerId }),
+    });
+
+    if (res.ok) {
+      setKeyStates((prev) => ({
+        ...prev,
+        [providerId]: { inputValue: "", maskedKey: null, saving: false, removing: false },
+      }));
+      showToast("API key removed");
+    } else {
+      setKeyStates((prev) => ({ ...prev, [providerId]: { ...prev[providerId], removing: false } }));
+      showToast("Failed to remove key");
+    }
   }
 
   const inputStyle = {
@@ -201,12 +237,12 @@ export default function Settings() {
         <div className="max-w-3xl">
           <h1 className="text-2xl font-bold text-white">API Keys</h1>
           <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.55)" }}>
-            Add your own API keys to power your agents. Keys are stored securely and never shared.
+            Add your own API keys to power your agents. Keys are encrypted and stored securely.
           </p>
 
           <div className="grid grid-cols-1 gap-4 mt-8 sm:grid-cols-2">
             {providers.map((provider) => {
-              const state = keyStates[provider.id];
+              const state     = keyStates[provider.id];
               const connected = !!state.maskedKey;
 
               return (
@@ -259,12 +295,12 @@ export default function Settings() {
                       placeholder={connected ? "Replace with new key…" : provider.placeholder}
                       value={state.inputValue}
                       onChange={(e) => setInputVal(provider.id, e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleSave(provider.id); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") void handleSave(provider.id); }}
                       className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#3b5bfc] transition-colors"
                       style={inputStyle}
                     />
                     <button
-                      onClick={() => handleSave(provider.id)}
+                      onClick={() => void handleSave(provider.id)}
                       disabled={!state.inputValue.trim() || state.saving}
                       className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 flex-shrink-0"
                       style={{ backgroundColor: "#3b5bfc" }}
@@ -349,7 +385,7 @@ export default function Settings() {
                       placeholder="Chat ID (e.g. 123456789)"
                       value={telegram.chatId}
                       onChange={(e) => setTelegram((prev) => ({ ...prev, chatId: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") handleSaveTelegram(); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") void handleSaveTelegram(); }}
                       className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#3b5bfc] transition-colors"
                       style={inputStyle}
                     />

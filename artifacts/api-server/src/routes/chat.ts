@@ -393,7 +393,11 @@ router.post("/chat", async (req: Request, res: Response) => {
           .eq("user_id", agentRow.user_id as string)
           .eq("provider", resolvedProvider)
           .maybeSingle();
-        if (keyRow?.api_key) resolvedApiKey = keyRow.api_key as string;
+        if (keyRow?.api_key) {
+          const { decrypt, isEncrypted } = await import("../lib/encryption.js");
+          const raw = keyRow.api_key as string;
+          resolvedApiKey = isEncrypted(raw) ? decrypt(raw) : raw;
+        }
       }
     }
   }
