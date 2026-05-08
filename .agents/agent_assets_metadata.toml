@@ -1,0 +1,74 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "G7RW0fqrFWDMZUYTDiWzg"
+uri = "file://screenshots/home-mobile.jpg"
+type = "image"
+title = "Home — Mobile"
+
+[[outputs]]
+id = "uzX1o_qzLY0WLkGfH9vf3"
+uri = "file://screenshots/home-desktop.jpg"
+type = "image"
+title = "Home — Desktop"
+
+[[outputs]]
+id = "aFZJY3LTRZTtNNPWgimJz"
+uri = "file://screenshots/login-mobile.jpg"
+type = "image"
+title = "Login — Mobile"
+
+[[outputs]]
+id = "-DpnZ7QP8iqCSWskQx5Om"
+uri = "file://screenshots/login-desktop.jpg"
+type = "image"
+title = "Login — Desktop"
+
+[[outputs]]
+id = "u8C7btf3YyPnqFTKwHO55"
+uri = "file://screenshots/signup-mobile.jpg"
+type = "image"
+title = "Sign Up — Mobile"
+
+[[outputs]]
+id = "Ojy9Q9ZhZKcViJDMchjzo"
+uri = "file://screenshots/signup-desktop.jpg"
+type = "image"
+title = "Sign Up — Desktop"
+
+[[outputs]]
+id = "yRLv9UqpUaZ9-iYVhuv6b"
+uri = "file://screenshots/dashboard-mobile.jpg"
+type = "image"
+title = "Dashboard — Mobile (redirects to Login)"
+
+[[outputs]]
+id = "Z_J4It5Imiz_6auARNYAC"
+uri = "file://screenshots/dashboard-desktop.jpg"
+type = "image"
+title = "Dashboard — Desktop (redirects to Login)"
+
+[[outputs]]
+id = "4RIneeoRRbEgWyRyW5TJ8"
+uri = "file://screenshots/automations-mobile.jpg"
+type = "image"
+title = "Automations — Mobile (redirects to Login)"
+
+[[outputs]]
+id = "paJ7BlCOUvVzL3yTInIGH"
+uri = "file://screenshots/automations-desktop.jpg"
+type = "image"
+title = "Automations — Desktop (redirects to Login)"
+
+[[outputs]]
+id = "gJOnyd_X4sKDqKzwF_QIQ"
+uri = "file://screenshots/settings-mobile.jpg"
+type = "image"
+title = "Settings — Mobile (redirects to Login)"
+
+[[outputs]]
+id = "LCMpe3IXQuTyBmUX5PENf"
+uri = "file://screenshots/settings-desktop.jpg"
+type = "image"
+title = "Settings — Desktop (redirects to Login)"
