@@ -8,6 +8,7 @@ import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
 import { checkMessageLimit } from "../lib/planLimits.js";
+import { sanitizeText, validateMessageLength, detectPromptInjection } from "../lib/sanitize.js";
 import { appendToSheet } from "../lib/googleSheets.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendEmail } from "../lib/gmail.js";
@@ -353,6 +354,20 @@ router.post("/chat", async (req: Request, res: Response) => {
     req.body as ChatBody;
 
   if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
+
+  // ── Sanitize and validate the incoming message ─────────────────────────────
+  const cleanMessage = sanitizeText(message);
+
+  if (!validateMessageLength(cleanMessage, 8000)) {
+    res.status(400).json({ error: "Message is too long. Maximum 8000 characters." });
+    return;
+  }
+
+  if (detectPromptInjection(cleanMessage)) {
+    req.log.warn({ agentId, userId }, "Prompt injection attempt detected");
+    res.status(400).json({ error: "Message contains disallowed content." });
+    return;
+  }
 
   // ── Message limit check (only for authenticated studio sessions) ───────────
   if (userId?.trim()) {
