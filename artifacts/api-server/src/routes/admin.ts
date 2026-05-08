@@ -182,4 +182,54 @@ router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => 
   res.json({ suspended: newSuspended });
 });
 
+// ─── GET /api/admin/agents ────────────────────────────────────────────────────
+
+router.get("/admin/agents", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+
+  const { sb } = result;
+
+  // Fetch all agents and all auth users in parallel
+  const [agentsRes, authRes] = await Promise.all([
+    sb.from("agents").select("id, name, description, model, status, user_id, created_at").order("created_at", { ascending: false }),
+    sb.auth.admin.listUsers({ perPage: 1000 }),
+  ]);
+
+  if (agentsRes.error) {
+    req.log.error({ err: agentsRes.error }, "failed to fetch agents");
+    res.status(500).json({ error: "Failed to fetch agents" });
+    return;
+  }
+
+  // Build email lookup map
+  const emailMap = new Map<string, string>();
+  for (const u of authRes.data?.users ?? []) {
+    emailMap.set(u.id, u.email ?? "");
+  }
+
+  type AgentRow = {
+    id: string;
+    name: string;
+    description: string | null;
+    model: string | null;
+    status: string | null;
+    user_id: string;
+    created_at: string;
+  };
+
+  const agents = (agentsRes.data as AgentRow[]).map((a) => ({
+    id:          a.id,
+    name:        a.name,
+    description: a.description ?? "",
+    model:       a.model ?? "",
+    status:      a.status ?? "draft",
+    owner_email: emailMap.get(a.user_id) ?? "",
+    created_at:  a.created_at,
+  }));
+
+  req.log.info({ count: agents.length }, "admin agents fetched");
+  res.json({ agents });
+});
+
 export default router;
