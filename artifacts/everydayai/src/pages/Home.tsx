@@ -7,24 +7,24 @@ export default function Home() {
       style={{ backgroundColor: "#0a0f1e", fontFamily: "'Inter', sans-serif" }}
     >
       {/* Navigation */}
-      <nav className="w-full flex items-center justify-between px-8 py-5">
-        <span className="text-white font-bold text-xl tracking-tight">
+      <nav className="w-full flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5">
+        <span className="text-white font-bold text-lg sm:text-xl tracking-tight shrink-0">
           EverydayAI
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <Link href="/pricing">
-            <button className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 hover:text-white transition-colors duration-200">
+            <button className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium text-white/60 hover:text-white transition-colors duration-200 whitespace-nowrap">
               Pricing
             </button>
           </Link>
           <Link href="/login">
-            <button className="px-5 py-2 rounded-lg text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200">
+            <button className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium text-white border border-white/20 hover:border-white/40 hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
               Log In
             </button>
           </Link>
           <Link href="/signup">
             <button
-              className="px-5 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:opacity-90 active:scale-95"
+              className="px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium text-white transition-all duration-200 hover:opacity-90 active:scale-95 whitespace-nowrap"
               style={{ backgroundColor: "#3b5bfc" }}
             >
               Get Started
