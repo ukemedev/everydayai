@@ -207,7 +207,17 @@ async function buildToolsContext(agentId: string): Promise<{ prompt: string; too
         t.required_inputs
           ?.map((i) => `  - ${i.name} (${i.label}): ${i.description}`)
           .join("\n") ?? "  (none)";
-      return `Tool ID: ${t.id}\nName: ${t.tool_name}\nDescription: ${t.tool_description ?? ""}\nConnector: ${t.connector}\nAction: ${t.action}\nRequired inputs:\n${inputs}`;
+
+      let connectorNotes = "";
+      if (t.connector === "google_sheets") {
+        connectorNotes = "\nNOTE: The spreadsheet destination is already configured — do NOT ask the user for any URL or spreadsheet ID. Just collect the required data fields and trigger the tool.";
+      } else if (t.connector === "telegram") {
+        connectorNotes = "\nNOTE: The Telegram bot is already configured — do NOT ask the user for any Telegram handle, chat ID, or bot token. When triggered, the notification is sent automatically. Your inputs should capture the data you want to notify about.";
+      } else if (t.connector === "gmail") {
+        connectorNotes = "\nNOTE: The Gmail account is already connected — do NOT ask the user for OAuth tokens or credentials. Just collect the recipient address, subject, and body from the conversation.";
+      }
+
+      return `Tool ID: ${t.id}\nName: ${t.tool_name}\nDescription: ${t.tool_description ?? ""}\nConnector: ${t.connector}\nAction: ${t.action}\nRequired inputs:\n${inputs}${connectorNotes}`;
     })
     .join("\n\n---\n\n");
 
@@ -215,9 +225,12 @@ async function buildToolsContext(agentId: string): Promise<{ prompt: string; too
 
 You have access to the following tools. When you have collected ALL required inputs from the user, output a tool call on its own line in EXACTLY this format (nothing else on that line), then continue with a friendly confirmation:
 
-[TOOL_CALL:{"tool_id":"<id>","inputs":{"<field_name>":"<value>"},"spreadsheet_id":"<id>","sheet_name":"Sheet1"}]
+[TOOL_CALL:{"tool_id":"<id>","inputs":{"<field_name>":"<value>"}}]
 
-To get the spreadsheet_id: ask the user for their Google Sheets URL and extract the ID (the part between /d/ and /edit or /view). The sheet_name is usually "Sheet1" unless the user specifies otherwise.
+CRITICAL RULES:
+- For google_sheets tools: NEVER ask the user for a spreadsheet URL or ID — it is already saved. Collect only the data fields listed under "Required inputs", then trigger the tool immediately.
+- For telegram tools: NEVER ask the user for a Telegram handle, chat ID, or bot token. The bot is pre-configured. Trigger the tool with a "message" input summarising what happened, then confirm to the user that the notification was sent.
+- For gmail tools: NEVER ask the user for credentials. Just collect to/subject/body from the conversation.
 
 Available tools:
 ---
@@ -414,10 +427,12 @@ router.post("/chat", async (req: Request, res: Response) => {
             }
 
           } else if (tool.connector === "telegram" && sb) {
+            // Always look up credentials via the tool owner's user_id, not the chat session uid
+            const toolOwnerId = (tool as { user_id?: string }).user_id ?? uid;
             const { data: integration } = await sb
               .from("integrations")
               .select("access_token, refresh_token")
-              .eq("user_id", uid)
+              .eq("user_id", toolOwnerId)
               .eq("provider", "telegram")
               .maybeSingle();
 
@@ -425,7 +440,10 @@ router.post("/chat", async (req: Request, res: Response) => {
             const chatId   = integration?.refresh_token as string | undefined;
 
             if (botToken && chatId) {
-              const message = toolCallParsed.inputs.message ?? JSON.stringify(toolCallParsed.inputs);
+              const summary = toolCallParsed.inputs.message
+                ?? Object.entries(toolCallParsed.inputs).map(([k, v]) => `${k}: ${v}`).join(", ");
+              const agentName = (tool as { tool_name: string }).tool_name;
+              const message   = `🔔 New notification from ${agentName}:\n${summary}`;
               const tgResult = await sendTelegramMessage(botToken, chatId, message);
               const succeeded = tgResult.success;
 
