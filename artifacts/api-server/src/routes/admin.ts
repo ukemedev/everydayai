@@ -312,6 +312,37 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
   res.json({ freeUsers, proUsers, businessUsers, monthlyRevenue });
 });
 
+// ─── PATCH /api/admin/users/:id/plan ─────────────────────────────────────────
+
+router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+  const { id } = req.params as { id: string };
+
+  const VALID_PLANS = ["free", "starter", "pro", "business"] as const;
+  const { plan } = req.body as { plan: string };
+
+  if (!plan || !VALID_PLANS.includes(plan as typeof VALID_PLANS[number])) {
+    res.status(400).json({ error: `plan must be one of: ${VALID_PLANS.join(", ")}` });
+    return;
+  }
+
+  const { error } = await sb
+    .from("profiles")
+    .update({ plan })
+    .eq("id", id);
+
+  if (error) {
+    req.log.error({ err: error, userId: id, plan }, "failed to update user plan");
+    res.status(500).json({ error: "Failed to update plan" });
+    return;
+  }
+
+  req.log.info({ userId: id, plan }, "user plan updated");
+  res.json({ plan });
+});
+
 // ─── GET /api/admin/settings ─────────────────────────────────────────────────
 
 router.get("/admin/settings", async (req: Request, res: Response) => {

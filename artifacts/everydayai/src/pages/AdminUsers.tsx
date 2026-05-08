@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ShieldCheck } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AdminUser {
   id: string;
@@ -13,6 +15,21 @@ interface AdminUser {
   suspended: boolean;
 }
 
+const PLANS = [
+  { value: "free",     label: "Free",     color: "rgba(255,255,255,0.55)", bg: "rgba(255,255,255,0.07)" },
+  { value: "starter",  label: "Starter",  color: "#10b981",               bg: "rgba(16,185,129,0.12)"  },
+  { value: "pro",      label: "Pro",      color: "#3b5bfc",               bg: "rgba(59,91,252,0.12)"   },
+  { value: "business", label: "Business", color: "#f59e0b",               bg: "rgba(245,158,11,0.12)"  },
+] as const;
+
+type PlanValue = typeof PLANS[number]["value"];
+
+function planStyle(plan: string) {
+  return PLANS.find((p) => p.value === plan) ?? PLANS[0];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ?? "";
@@ -20,28 +37,86 @@ async function getToken(): Promise<string> {
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+    month: "short", day: "numeric", year: "numeric",
   });
 }
 
-function PlanBadge({ plan }: { plan: string }) {
-  const styles: Record<string, { bg: string; color: string; label: string }> = {
-    pro:      { bg: "rgba(59,91,252,0.15)",  color: "#3b5bfc", label: "Pro" },
-    business: { bg: "rgba(245,158,11,0.15)", color: "#f59e0b", label: "Business" },
-    free:     { bg: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.50)", label: "Free" },
-  };
-  const s = styles[plan] ?? styles.free;
+// ─── Toast ────────────────────────────────────────────────────────────────────
+
+interface ToastState { message: string; isError: boolean; visible: boolean }
+
+function Toast({ message, isError, visible }: ToastState) {
   return (
-    <span
-      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ backgroundColor: s.bg, color: s.color }}
+    <div
+      className="fixed bottom-6 left-1/2 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-xl transition-all duration-300"
+      style={{
+        transform: `translateX(-50%) translateY(${visible ? "0" : "12px"})`,
+        opacity: visible ? 1 : 0,
+        pointerEvents: "none",
+        backgroundColor: isError ? "rgba(239,68,68,0.15)" : "#1a2238",
+        border: isError ? "1px solid rgba(239,68,68,0.30)" : "1px solid rgba(255,255,255,0.10)",
+        color: isError ? "#f87171" : "#fff",
+      }}
     >
-      {s.label}
-    </span>
+      {message}
+    </div>
   );
 }
+
+// ─── Plan Dropdown ────────────────────────────────────────────────────────────
+
+interface PlanDropdownProps {
+  userId: string;
+  currentPlan: string;
+  saving: boolean;
+  onChange: (userId: string, plan: PlanValue) => void;
+}
+
+function PlanDropdown({ userId, currentPlan, saving, onChange }: PlanDropdownProps) {
+  const ps = planStyle(currentPlan);
+
+  return (
+    <div className="relative flex items-center gap-2">
+      <div
+        className="relative rounded-lg overflow-hidden"
+        style={{ backgroundColor: ps.bg, border: `1px solid ${ps.color}22` }}
+      >
+        <select
+          value={currentPlan}
+          disabled={saving}
+          onChange={(e) => onChange(userId, e.target.value as PlanValue)}
+          className="appearance-none text-xs font-semibold pl-2.5 pr-6 py-1 bg-transparent cursor-pointer outline-none transition-opacity"
+          style={{ color: ps.color, opacity: saving ? 0.5 : 1 }}
+        >
+          {PLANS.map((p) => (
+            <option key={p.value} value={p.value} style={{ backgroundColor: "#0d1117", color: p.color }}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        {/* Chevron */}
+        <span
+          className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2"
+          style={{ color: ps.color }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </span>
+      </div>
+
+      {/* Per-row saving spinner */}
+      {saving && (
+        <div
+          className="w-3.5 h-3.5 rounded-full border-2 border-t-transparent animate-spin flex-shrink-0"
+          style={{ borderColor: `${ps.color} ${ps.color} ${ps.color} transparent` }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Status Badge ─────────────────────────────────────────────────────────────
 
 function StatusBadge({ suspended }: { suspended: boolean }) {
   return suspended ? (
@@ -61,11 +136,28 @@ function StatusBadge({ suspended }: { suspended: boolean }) {
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function AdminUsers() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [users, setUsers]         = useState<AdminUser[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(false);
   const [suspending, setSuspending] = useState<string | null>(null);
+  const [planSaving, setPlanSaving] = useState<string | null>(null);
+
+  const [toast, setToast]   = useState<ToastState>({ message: "", isError: false, visible: false });
+  const toastTimer           = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(message: string, isError = false) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, isError, visible: true });
+    toastTimer.current = setTimeout(
+      () => setToast((t) => ({ ...t, visible: false })),
+      2800
+    );
+  }
+
+  // ── fetch ─────────────────────────────────────────────────────────────────
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -86,6 +178,8 @@ export default function AdminUsers() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
+  // ── suspend ───────────────────────────────────────────────────────────────
+
   async function toggleSuspend(userId: string) {
     setSuspending(userId);
     try {
@@ -96,15 +190,38 @@ export default function AdminUsers() {
       });
       if (!res.ok) throw new Error("Failed");
       const { suspended } = (await res.json()) as { suspended: boolean };
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, suspended } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, suspended } : u)));
     } catch {
       // silently ignore — state not changed
     } finally {
       setSuspending(null);
     }
   }
+
+  // ── update plan ───────────────────────────────────────────────────────────
+
+  async function updatePlan(userId: string, plan: PlanValue) {
+    setPlanSaving(userId);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/users/${userId}/plan`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = (await res.json()) as { plan: string };
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, plan: data.plan } : u)));
+      const label = PLANS.find((p) => p.value === plan)?.label ?? plan;
+      showToast(`Plan updated to ${label}`);
+    } catch {
+      showToast("Failed to update plan", true);
+    } finally {
+      setPlanSaving(null);
+    }
+  }
+
+  // ── render ────────────────────────────────────────────────────────────────
 
   return (
     <AdminLayout activeItemId="users">
@@ -132,7 +249,7 @@ export default function AdminUsers() {
               className="overflow-x-auto rounded-xl"
               style={{ border: "1px solid rgba(255,255,255,0.06)" }}
             >
-              <table className="w-full text-sm min-w-[640px]">
+              <table className="w-full text-sm min-w-[680px]">
                 <thead>
                   <tr style={{ backgroundColor: "#131a2e", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     {["Email", "Plan", "Agents", "Joined", "Status", "Actions"].map((col) => (
@@ -167,9 +284,14 @@ export default function AdminUsers() {
                         </div>
                       </td>
 
-                      {/* Plan */}
+                      {/* Plan — dropdown */}
                       <td className="px-4 py-3">
-                        <PlanBadge plan={user.plan ?? "free"} />
+                        <PlanDropdown
+                          userId={user.id}
+                          currentPlan={user.plan ?? "free"}
+                          saving={planSaving === user.id}
+                          onChange={updatePlan}
+                        />
                       </td>
 
                       {/* Agents */}
@@ -210,6 +332,8 @@ export default function AdminUsers() {
           )}
         </div>
       </div>
+
+      <Toast {...toast} />
     </AdminLayout>
   );
 }
