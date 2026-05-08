@@ -11,11 +11,14 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-router.get("/admin/verify", async (req: Request, res: Response) => {
+async function requireAdmin(
+  req: Request,
+  res: Response
+): Promise<{ sb: ReturnType<typeof getServiceClient> } | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
-    return;
+    return null;
   }
 
   const token = authHeader.slice(7);
@@ -23,42 +26,73 @@ router.get("/admin/verify", async (req: Request, res: Response) => {
 
   if (!sb) {
     res.status(503).json({ error: "Service unavailable" });
-    return;
+    return null;
   }
 
   const { data: { user }, error } = await sb.auth.getUser(token);
   if (error || !user) {
     res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+
+  const { data: profile, error: profileError } = await sb
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError || profile?.is_admin !== true) {
+    res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+
+  return { sb };
+}
+
+// ─── GET /api/admin/verify ────────────────────────────────────────────────────
+
+router.get("/admin/verify", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  req.log.info("admin verified");
+  res.json({ isAdmin: true });
+});
+
+// ─── GET /api/admin/stats ─────────────────────────────────────────────────────
+
+router.get("/admin/stats", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+
+  const { sb } = result;
+  if (!sb) {
+    res.status(503).json({ error: "Service unavailable" });
     return;
   }
 
-  try {
-    const { data: profile, error: profileError } = await sb
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .maybeSingle();
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    if (profileError) {
-      req.log.warn({ err: profileError, userId: user.id }, "profiles query failed");
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
+  const [usersRes, agentsRes, automationsRes, messagesRes] = await Promise.all([
+    sb.from("profiles").select("*", { count: "exact", head: true }),
+    sb.from("agents").select("*", { count: "exact", head: true }),
+    sb.from("automations").select("*", { count: "exact", head: true }),
+    Promise.resolve(
+      sb.from("messages")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", startOfMonth)
+    ).catch(() => ({ count: 0, error: null })),
+  ]);
 
-    const isAdmin = profile?.is_admin === true;
+  const stats = {
+    totalUsers:        usersRes.count       ?? 0,
+    totalAgents:       agentsRes.count      ?? 0,
+    totalAutomations:  automationsRes.count ?? 0,
+    messagesThisMonth: messagesRes.count    ?? 0,
+  };
 
-    if (!isAdmin) {
-      req.log.info({ userId: user.id }, "admin verify denied — not an admin");
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-
-    req.log.info({ userId: user.id }, "admin verified");
-    res.json({ isAdmin: true });
-  } catch (err) {
-    req.log.error({ err }, "admin verify threw unexpectedly");
-    res.status(401).json({ error: "Unauthorized" });
-  }
+  req.log.info(stats, "admin stats fetched");
+  res.json(stats);
 });
 
 export default router;
