@@ -532,6 +532,9 @@ export default function Studio() {
   const [userId, setUserId] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingGoogle, setCheckingGoogle] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
+  const [googleDisconnectConfirm, setGoogleDisconnectConfirm] = useState(false);
 
   // Knowledge Base
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -580,6 +583,26 @@ export default function Studio() {
       .maybeSingle();
     setGoogleConnected(!!data);
     setCheckingGoogle(false);
+    if (data) {
+      supabase.auth.getUser().then(({ data: u }) => {
+        setGoogleEmail(u.user?.email ?? null);
+      });
+    } else {
+      setGoogleEmail(null);
+    }
+  }
+
+  async function handleDisconnectGoogle() {
+    setDisconnectingGoogle(true);
+    await supabase
+      .from("integrations")
+      .delete()
+      .eq("user_id", userId)
+      .eq("provider", "google");
+    setGoogleConnected(false);
+    setGoogleEmail(null);
+    setDisconnectingGoogle(false);
+    setGoogleDisconnectConfirm(false);
   }
 
   useEffect(() => {
@@ -1433,38 +1456,88 @@ export default function Studio() {
 
                   {/* Google row */}
                   <div
-                    className="rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3"
+                    className="rounded-xl border border-white/8 overflow-hidden"
                     style={{ backgroundColor: "#111827" }}
                   >
-                    <span className="text-xl flex-shrink-0">📊</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-white">Google</p>
-                      <p className="text-xs text-white/40 mt-0.5">Sheets &amp; Drive access</p>
+                    <div className="px-4 py-3.5 flex items-center gap-3">
+                      <span className="text-xl flex-shrink-0">📊</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-white">Google</p>
+                        <p className="text-xs text-white/40 mt-0.5">
+                          {googleConnected && googleEmail ? googleEmail : "Sheets, Drive & Gmail access"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {checkingGoogle ? (
+                          <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white/70 animate-spin block" />
+                        ) : googleConnected ? (
+                          <>
+                            <span
+                              className="text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
+                              style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                            >
+                              <span className="text-[10px]">✓</span> Connected
+                            </span>
+                            <button
+                              onClick={() => setGoogleDisconnectConfirm(true)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all duration-150"
+                              style={{ color: "rgba(248,113,113,0.8)", borderColor: "rgba(248,113,113,0.25)" }}
+                            >
+                              Disconnect
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (!userId) return;
+                              window.open(`/api/auth/google?userId=${userId}`, "_blank");
+                            }}
+                            disabled={!userId}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
+                            style={{ backgroundColor: "#3b5bfc" }}
+                          >
+                            Connect Google Account
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-shrink-0">
-                      {checkingGoogle ? (
-                        <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white/70 animate-spin block" />
-                      ) : googleConnected ? (
-                        <span
-                          className="text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
-                          style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
-                        >
-                          <span className="text-[10px]">✓</span> Connected
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (!userId) return;
-                            window.open(`/api/auth/google?userId=${userId}`, "_blank");
-                          }}
-                          disabled={!userId}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
-                          style={{ backgroundColor: "#3b5bfc" }}
-                        >
-                          Connect Google Account
-                        </button>
-                      )}
-                    </div>
+
+                    {/* Disconnect confirmation panel */}
+                    {googleDisconnectConfirm && (
+                      <div
+                        className="px-4 py-3.5 border-t border-white/5 flex items-start gap-3"
+                        style={{ backgroundColor: "rgba(239,68,68,0.05)" }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-red-400/90">Are you sure?</p>
+                          <p className="text-[11px] text-white/40 mt-0.5 leading-relaxed">
+                            Your tools using this service will stop working.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                          <button
+                            onClick={() => setGoogleDisconnectConfirm(false)}
+                            disabled={disconnectingGoogle}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all disabled:opacity-40"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleDisconnectGoogle}
+                            disabled={disconnectingGoogle}
+                            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 flex items-center gap-1.5"
+                            style={{ backgroundColor: "#dc2626" }}
+                          >
+                            {disconnectingGoogle ? (
+                              <>
+                                <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                                Disconnecting…
+                              </>
+                            ) : "Disconnect"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
