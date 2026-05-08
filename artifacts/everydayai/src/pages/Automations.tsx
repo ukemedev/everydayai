@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
+import AppLayout from "@/components/AppLayout";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -236,7 +237,6 @@ export default function Automations() {
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
   const [createError, setCreateError] = useState("");
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [apiProvider, setApiProvider] = useState<string>("openai");
@@ -257,9 +257,7 @@ export default function Automations() {
       const user = session?.user;
       if (!user) { navigate("/login"); return; }
 
-      setUserEmail(user.email ?? null);
       setUserId(user.id);
-
       // Find a usable API key across providers
       for (const p of ["openai", "anthropic", "groq", "google"]) {
         const { data } = await supabase
@@ -280,11 +278,6 @@ export default function Automations() {
     }
     void init();
   }, [navigate, fetchAutomations]);
-
-  async function handleLogOut() {
-    await supabase.auth.signOut();
-    navigate("/login");
-  }
 
   async function handleCreate(description: string) {
     setCreateError("");
@@ -350,10 +343,7 @@ export default function Automations() {
   }
 
   return (
-    <div
-      className="flex min-h-screen w-full"
-      style={{ fontFamily: "'Inter', sans-serif" }}
-    >
+    <AppLayout activeItemId="automations">
       {showCreateModal && (
         <CreateAutomationModal
           onClose={() => { setShowCreateModal(false); setCreateError(""); }}
@@ -362,68 +352,8 @@ export default function Automations() {
         />
       )}
 
-      {/* Sidebar */}
-      <aside
-        className="w-60 flex-shrink-0 flex flex-col fixed top-0 left-0 h-screen border-r border-white/5"
-        style={{ backgroundColor: "#0d1117" }}
-      >
-        <div className="px-5 py-6">
-          <span className="text-white font-bold text-lg tracking-tight">EverydayAI</span>
-        </div>
-
-        <nav className="flex-1 px-3 flex flex-col gap-1">
-          {[
-            { icon: "🏠", label: "Home", path: "/dashboard" },
-            { icon: "📚", label: "Learn", path: "/dashboard" },
-            { icon: "🎛️", label: "Studio", path: "/dashboard" },
-          ].map((item) => (
-            <button
-              key={item.label}
-              onClick={() => navigate(item.path)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-              style={{ color: "rgba(255,255,255,0.55)" }}
-            >
-              <span className="text-base">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-
-          <button
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-left"
-            style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#3b5bfc" }}
-          >
-            <span className="text-base">⚡</span>
-            Automations
-          </button>
-
-          <button
-            onClick={() => navigate("/settings")}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-            style={{ color: "rgba(255,255,255,0.55)" }}
-          >
-            <span className="text-base">⚙️</span>
-            Settings
-          </button>
-        </nav>
-
-        <div className="px-4 py-5 border-t border-white/5 flex flex-col gap-3">
-          {userEmail && (
-            <p className="text-xs text-white/35 truncate" title={userEmail}>
-              {userEmail}
-            </p>
-          )}
-          <button
-            onClick={handleLogOut}
-            className="w-full py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
-          >
-            Log Out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content */}
       <main
-        className="flex-1 ml-60 min-h-screen px-8 py-8"
+        className="flex-1 px-4 md:px-8 py-6 md:py-8"
         style={{ backgroundColor: "#0a0f1e" }}
       >
         {/* Header row */}
@@ -487,6 +417,6 @@ export default function Automations() {
           </div>
         )}
       </main>
-    </div>
+    </AppLayout>
   );
 }

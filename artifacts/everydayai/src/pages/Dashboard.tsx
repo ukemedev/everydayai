@@ -1,12 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-
-const navItems = [
-  { icon: "🏠", label: "Home", id: "home" },
-  { icon: "📚", label: "Learn", id: "learn" },
-  { icon: "🎛️", label: "Studio", id: "studio" },
-];
+import AppLayout from "@/components/AppLayout";
 
 const modelOptions = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -189,9 +184,6 @@ function AgentCard({ agent }: { agent: Agent }) {
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState("home");
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
@@ -208,9 +200,6 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
     fetchAgents();
   }, [fetchAgents]);
 
@@ -221,16 +210,8 @@ export default function Dashboard() {
     setTimeout(() => setSuccessMessage(""), 3500);
   }
 
-  async function handleLogOut() {
-    await supabase.auth.signOut();
-    navigate("/login");
-  }
-
-  const font = { fontFamily: "'Inter', sans-serif" };
-
   return (
-    <div className="flex min-h-screen w-full" style={{ ...font, backgroundColor: "#0a0f1e" }}>
-
+    <AppLayout activeItemId="home">
       {showCreateModal && (
         <CreateAgentModal onClose={() => setShowCreateModal(false)} onCreated={handleAgentCreated} />
       )}
@@ -241,102 +222,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Mobile overlay backdrop */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 md:hidden"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={`fixed top-0 left-0 h-screen w-60 flex flex-col border-r z-40 transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
-        style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)" }}
-      >
-        <div className="px-5 py-6 flex items-center justify-between">
-          <span className="font-bold text-lg tracking-tight text-white">
-            EverydayAI
-          </span>
-          <button
-            className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
-            onClick={() => setSidebarOpen(false)}
-            style={{ color: "rgba(255,255,255,0.35)" }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <nav className="flex-1 px-3 flex flex-col gap-1">
-          {navItems.map((item) => {
-            const isActive = activeNav === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveNav(item.id); setSidebarOpen(false); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-                style={{
-                  backgroundColor: isActive ? "rgba(59,91,252,0.15)" : "transparent",
-                  color: isActive ? "#3b5bfc" : "rgba(255,255,255,0.55)",
-                }}
-              >
-                <span className="text-base">{item.icon}</span>
-                {item.label}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => { navigate("/automations"); setSidebarOpen(false); }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-            style={{ color: "rgba(255,255,255,0.55)" }}
-          >
-            <span className="text-base">⚡</span>
-            Automations
-          </button>
-          <button
-            onClick={() => { navigate("/settings"); setSidebarOpen(false); }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
-            style={{ color: "rgba(255,255,255,0.55)" }}
-          >
-            <span className="text-base">⚙️</span>
-            Settings
-          </button>
-        </nav>
-
-        <div className="px-4 py-5 border-t flex flex-col gap-3" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-          {userEmail && (
-            <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }} title={userEmail}>
-              {userEmail}
-            </p>
-          )}
-          <button
-            onClick={handleLogOut}
-            className="w-full py-2 rounded-lg text-sm font-medium transition-all duration-150"
-            style={{
-              color: "rgba(255,255,255,0.55)",
-              border: "1px solid rgba(255,255,255,0.10)",
-            }}
-          >
-            Log Out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 md:ml-60 min-h-screen px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
-
-        {/* Mobile top bar */}
-        <div className="md:hidden flex items-center gap-3 mb-6">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-xl transition-colors text-white"
-          >
-            ☰
-          </button>
-          <span className="font-bold text-lg text-white">EverydayAI</span>
-        </div>
-
+      <main className="flex-1 px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
         <h1 className="text-2xl font-bold mb-6 text-white">Welcome back 👋</h1>
 
         {/* Blue banner */}
@@ -388,6 +274,6 @@ export default function Dashboard() {
           )}
         </div>
       </main>
-    </div>
+    </AppLayout>
   );
 }
