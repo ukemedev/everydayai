@@ -128,10 +128,106 @@ router.get("/auth/google/callback", async (req: Request, res: Response) => {
     }
 
     req.log.info({ userId }, "Google OAuth tokens saved successfully");
-    res.redirect("/dashboard?connected=google");
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Google Connected</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #0a0f1e;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+      padding: 40px;
+    }
+    .icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(34,197,94,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+    }
+    h1 { font-size: 18px; font-weight: 700; }
+    p  { font-size: 14px; color: rgba(255,255,255,0.45); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✓</div>
+    <h1>Google Connected!</h1>
+    <p>This window will close automatically…</p>
+  </div>
+  <script>
+    setTimeout(function() { window.close(); }, 1800);
+  </script>
+</body>
+</html>`);
   } catch (err) {
     logger.error({ err, userId }, "Google OAuth token exchange failed");
-    res.redirect("/dashboard?error=google_failed");
+    res.send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Connection Failed</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #0a0f1e;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+      padding: 40px;
+    }
+    .icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: rgba(239,68,68,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+    }
+    h1 { font-size: 18px; font-weight: 700; }
+    p  { font-size: 14px; color: rgba(255,255,255,0.45); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">✕</div>
+    <h1>Connection Failed</h1>
+    <p>Something went wrong. Please try again.</p>
+  </div>
+  <script>
+    setTimeout(function() { window.close(); }, 3000);
+  </script>
+</body>
+</html>`);
   }
 });
 
