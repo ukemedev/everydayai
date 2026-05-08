@@ -531,6 +531,26 @@ function DeployModal({ agentId, agentName, userId, onClose }: DeployModalProps) 
   const [embedCode, setEmbedCode] = useState<string | null>(null);
   const [embedCopied, setEmbedCopied] = useState(false);
 
+  // ── Telegram deployment state ──────────────────────────────────────────────
+  const [telegramOpen, setTelegramOpen] = useState(false);
+  const [tgBotToken, setTgBotToken] = useState("");
+  const [tgBotUsername, setTgBotUsername] = useState("");
+  const [tgConnecting, setTgConnecting] = useState(false);
+  const [tgError, setTgError] = useState("");
+  const [tgDeployment, setTgDeployment] = useState<{ bot_username: string | null } | null>(null);
+  const [tgLoadingDeployment, setTgLoadingDeployment] = useState(true);
+  const [tgDisconnecting, setTgDisconnecting] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/telegram/deployment/${agentId}`)
+      .then((r) => r.json())
+      .then((d: { deployment: { bot_username: string | null } | null }) => {
+        setTgDeployment(d.deployment ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setTgLoadingDeployment(false));
+  }, [agentId]);
+
   const apiUrl = `${window.location.origin}/api/chat`;
 
   const pythonCode = `import requests
@@ -604,6 +624,48 @@ console.log(data.reply);`;
     void navigator.clipboard.writeText(embedCode);
     setEmbedCopied(true);
     setTimeout(() => setEmbedCopied(false), 2000);
+  }
+
+  async function handleConnectTelegram() {
+    setTgConnecting(true);
+    setTgError("");
+    try {
+      const webhookUrl = `${window.location.origin}/api/telegram/webhook/${agentId}`;
+      const res = await fetch("/api/telegram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          botToken: tgBotToken.trim(),
+          botUsername: tgBotUsername.trim(),
+          agentId,
+          userId,
+          webhookUrl,
+        }),
+      });
+      const data = await res.json() as { error?: string; deployment?: { bot_username: string | null } };
+      if (!res.ok) throw new Error(data.error ?? "Failed to connect bot");
+      setTgDeployment(data.deployment ?? { bot_username: tgBotUsername.trim() || null });
+      setTelegramOpen(false);
+      setTgBotToken("");
+      setTgBotUsername("");
+    } catch (err) {
+      setTgError(err instanceof Error ? err.message : "Failed to connect bot");
+    } finally {
+      setTgConnecting(false);
+    }
+  }
+
+  async function handleDisconnectTelegram() {
+    setTgDisconnecting(true);
+    try {
+      await fetch(`/api/telegram/deployment/${agentId}`, { method: "DELETE" });
+      setTgDeployment(null);
+      setTelegramOpen(false);
+    } catch {
+      // silent — state still cleared
+    } finally {
+      setTgDisconnecting(false);
+    }
   }
 
   const tabs: { id: DeployTab; label: string }[] = [
@@ -736,42 +798,210 @@ console.log(data.reply);`;
           {/* TAB 1: Socials */}
           {tab === "socials" && (
             <div className="flex flex-col gap-3">
-              {socials.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center gap-4 rounded-xl px-4 py-4 border border-white/6 transition-all duration-150"
-                  style={{ backgroundColor: "#0d1117", opacity: s.soon ? 0.55 : 1 }}
-                >
-                  <div
-                    className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-                  >
-                    {s.icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-white">{s.name}</p>
-                      {s.soon && (
-                        <span
-                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                          style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
+              {socials.map((s) => {
+                if (s.id === "telegram") {
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-col rounded-xl border border-white/6 overflow-hidden transition-all duration-150"
+                      style={{
+                        backgroundColor: "#0d1117",
+                        borderColor: tgDeployment ? "rgba(74,222,128,0.2)" : undefined,
+                      }}
+                    >
+                      {/* Header row */}
+                      <div className="flex items-center gap-4 px-4 py-4">
+                        <div
+                          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
                         >
-                          Coming Soon
-                        </span>
+                          {s.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-white">{s.name}</p>
+                            {tgDeployment && (
+                              <span
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                style={{ backgroundColor: "rgba(74,222,128,0.12)", color: "#4ade80" }}
+                              >
+                                Connected
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+                        </div>
+
+                        {/* Right-side action */}
+                        {tgLoadingDeployment ? (
+                          <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        ) : tgDeployment ? (
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {tgDeployment.bot_username && (
+                              <a
+                                href={`https://t.me/${tgDeployment.bot_username}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/10 hover:border-white/20 transition-all"
+                                style={{ color: "rgba(255,255,255,0.6)" }}
+                              >
+                                Test Bot
+                              </a>
+                            )}
+                            <button
+                              onClick={() => void handleDisconnectTelegram()}
+                              disabled={tgDisconnecting}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                              style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171" }}
+                            >
+                              {tgDisconnecting ? "Disconnecting…" : "Disconnect"}
+                            </button>
+                          </div>
+                        ) : !telegramOpen ? (
+                          <button
+                            onClick={() => setTelegramOpen(true)}
+                            className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                            style={{ backgroundColor: "#3b5bfc" }}
+                          >
+                            Connect Telegram
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => { setTelegramOpen(false); setTgError(""); setTgBotToken(""); setTgBotUsername(""); }}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/8 transition-all"
+                            style={{ color: "rgba(255,255,255,0.4)" }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Connected info bar */}
+                      {tgDeployment?.bot_username && (
+                        <div className="px-4 pb-4 pt-0">
+                          <div
+                            className="flex items-center gap-2 rounded-xl px-3 py-2.5 border border-white/5"
+                            style={{ backgroundColor: "rgba(74,222,128,0.04)" }}
+                          >
+                            <span className="text-xs text-white/40">Bot:</span>
+                            <a
+                              href={`https://t.me/${tgDeployment.bot_username}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs font-semibold hover:underline"
+                              style={{ color: "#4ade80" }}
+                            >
+                              @{tgDeployment.bot_username}
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Setup form */}
+                      {telegramOpen && !tgDeployment && (
+                        <div className="px-4 pb-5 pt-0 flex flex-col gap-3 border-t border-white/5">
+                          <div className="pt-4">
+                            <h3 className="text-sm font-semibold text-white mb-1.5">Deploy to Telegram</h3>
+                            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                              1. Open Telegram and search{" "}
+                              <span className="text-white/70 font-medium">@BotFather</span>
+                              <br />
+                              2. Send <span className="text-white/70 font-mono">/newbot</span> and follow the steps
+                              <br />
+                              3. Copy your bot token and paste below
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>
+                                Bot Token
+                              </label>
+                              <input
+                                type="text"
+                                value={tgBotToken}
+                                onChange={(e) => setTgBotToken(e.target.value)}
+                                placeholder="1234567890:ABCdef..."
+                                className="rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                                style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>
+                                Bot Username
+                              </label>
+                              <input
+                                type="text"
+                                value={tgBotUsername}
+                                onChange={(e) => setTgBotUsername(e.target.value)}
+                                placeholder="my_business_bot"
+                                className="rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                                style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                              />
+                            </div>
+                          </div>
+                          {tgError && (
+                            <p className="text-xs px-1" style={{ color: "#f87171" }}>{tgError}</p>
+                          )}
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => void handleConnectTelegram()}
+                              disabled={tgConnecting || !tgBotToken.trim()}
+                              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ backgroundColor: "#3b5bfc" }}
+                            >
+                              {tgConnecting ? "Connecting…" : "Connect Bot"}
+                            </button>
+                            <button
+                              onClick={() => { setTelegramOpen(false); setTgError(""); setTgBotToken(""); setTgBotUsername(""); }}
+                              className="px-4 py-2.5 rounded-xl text-sm font-medium border border-white/8 transition-all"
+                              style={{ color: "rgba(255,255,255,0.4)" }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
-                  </div>
-                  {!s.soon && (
-                    <button
-                      className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
-                      style={{ backgroundColor: "#3b5bfc" }}
+                  );
+                }
+
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-4 rounded-xl px-4 py-4 border border-white/6 transition-all duration-150"
+                    style={{ backgroundColor: "#0d1117", opacity: s.soon ? 0.55 : 1 }}
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
                     >
-                      {s.btnLabel}
-                    </button>
-                  )}
-                </div>
-              ))}
+                      {s.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-white">{s.name}</p>
+                        {s.soon && (
+                          <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                            style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
+                          >
+                            Coming Soon
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+                    </div>
+                    {!s.soon && (
+                      <button
+                        className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                        style={{ backgroundColor: "#3b5bfc" }}
+                      >
+                        {s.btnLabel}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
