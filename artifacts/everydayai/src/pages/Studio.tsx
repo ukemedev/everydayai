@@ -143,7 +143,7 @@ function ToolDebugCard({ toolCall }: { toolCall: ToolCallDebug }) {
   return (
     <div
       className="rounded-xl text-xs overflow-hidden"
-      style={{ backgroundColor: "var(--theme-bg-bubble)", borderLeft: "3px solid rgba(59,91,252,0.5)" }}
+      style={{ backgroundColor: "#1a2235", borderLeft: "3px solid rgba(59,91,252,0.5)" }}
     >
       {/* Header row */}
       <div className="flex items-center justify-between px-3 py-2.5 gap-3">
@@ -345,7 +345,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
   return (
     <div
       className="flex-1 flex flex-col min-h-0 border-l border-white/5"
-      style={{ backgroundColor: "var(--theme-bg-header)" }}
+      style={{ backgroundColor: "#0d1117" }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 flex-shrink-0">
@@ -406,7 +406,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                     </div>
                     <div
                       className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed"
-                      style={{ backgroundColor: "var(--theme-bg-bubble)", borderBottomLeftRadius: "4px" }}
+                      style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}
                     >
                       <p className="text-amber-400/90 text-xs mb-1.5 font-medium">No API key found</p>
                       <p className="text-white/60 text-xs leading-relaxed">
@@ -442,7 +442,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                     style={
                       msg.role === "user"
                         ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
-                        : { backgroundColor: "var(--theme-bg-bubble)", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
+                        : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
                     }
                   >
                     {msg.role === "agent"
@@ -461,7 +461,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                 >
                   🤖
                 </div>
-                <div className="rounded-2xl" style={{ backgroundColor: "var(--theme-bg-bubble)", borderBottomLeftRadius: "4px" }}>
+                <div className="rounded-2xl" style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}>
                   <TypingDots />
                 </div>
               </div>
@@ -475,7 +475,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
       <div className="px-4 pb-4 pt-2 flex-shrink-0 border-t border-white/5">
         <div
           className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 focus-within:border-[#3b5bfc]/50 transition-colors"
-          style={{ backgroundColor: "var(--theme-bg-card)" }}
+          style={{ backgroundColor: "#111827" }}
         >
           <input
             ref={inputRef}
@@ -759,7 +759,7 @@ console.log(data.reply);`;
     >
       <div
         className="w-full max-w-xl rounded-2xl border border-white/10 flex flex-col overflow-hidden"
-        style={{ backgroundColor: "var(--theme-bg-card)", fontFamily: "'Inter', sans-serif", maxHeight: "90vh" }}
+        style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif", maxHeight: "90vh" }}
       >
         {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 pt-6 pb-0 flex-shrink-0">
@@ -809,7 +809,7 @@ console.log(data.reply);`;
                       key={s.id}
                       className="flex flex-col rounded-xl border border-white/6 overflow-hidden transition-all duration-150"
                       style={{
-                        backgroundColor: "var(--theme-bg-header)",
+                        backgroundColor: "#0d1117",
                         borderColor: tgDeployment ? "rgba(74,222,128,0.2)" : undefined,
                       }}
                     >
@@ -973,7 +973,7 @@ console.log(data.reply);`;
                   <div
                     key={s.id}
                     className="flex items-center gap-4 rounded-xl px-4 py-4 border border-white/6 transition-all duration-150"
-                    style={{ backgroundColor: "var(--theme-bg-header)", opacity: s.soon ? 0.55 : 1 }}
+                    style={{ backgroundColor: "#0d1117", opacity: s.soon ? 0.55 : 1 }}
                   >
                     <div
                       className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -1045,7 +1045,7 @@ console.log(data.reply);`;
               </div>
 
               {/* Code block */}
-              <div className="relative rounded-xl overflow-hidden border border-white/6" style={{ backgroundColor: "var(--theme-bg-header)" }}>
+              <div className="relative rounded-xl overflow-hidden border border-white/6" style={{ backgroundColor: "#0d1117" }}>
                 {/* Top bar */}
                 <div
                   className="flex items-center justify-between px-4 py-2.5 border-b border-white/5"
@@ -1209,7 +1209,7 @@ console.log(data.reply);`;
               )}
 
               {/* Actions */}
-              <div className="flex gap-3 pt-1">
+              <div className="flex flex-col xs:flex-row gap-2 pt-1">
                 <button
                   onClick={() => window.open(`/chat/${agentId}`, "_blank")}
                   className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-white/50 hover:border-white/20 hover:text-white/75 transition-all duration-150"
@@ -1246,7 +1246,7 @@ console.log(data.reply);`;
               </div>
 
               {/* Embed code block */}
-              <div className="rounded-xl overflow-hidden border border-white/6" style={{ backgroundColor: "var(--theme-bg-header)" }}>
+              <div className="rounded-xl overflow-hidden border border-white/6" style={{ backgroundColor: "#0d1117" }}>
                 <div
                   className="flex items-center justify-between px-4 py-2.5 border-b border-white/5"
                   style={{ backgroundColor: "rgba(255,255,255,0.03)" }}
@@ -1338,7 +1338,7 @@ function ShareModal({ agentId, isLive, publishing, onClose, onToggleLive }: Shar
     >
       <div
         className="w-full max-w-md rounded-2xl border border-white/10 px-7 py-7 flex flex-col gap-6"
-        style={{ backgroundColor: "var(--theme-bg-card)", fontFamily: "'Inter', sans-serif" }}
+        style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif" }}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -1505,7 +1505,7 @@ function VersionHistoryModal({
     >
       <div
         className="w-full max-w-md rounded-2xl border border-white/10 flex flex-col overflow-hidden"
-        style={{ backgroundColor: "var(--theme-bg-header)", maxHeight: "80vh", ...font }}
+        style={{ backgroundColor: "#0d1117", maxHeight: "80vh", ...font }}
       >
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-white/5 flex-shrink-0">
@@ -1556,7 +1556,7 @@ function VersionHistoryModal({
                     key={v.id}
                     className="rounded-xl border p-4 flex flex-col gap-2.5"
                     style={{
-                      backgroundColor: isCurrent ? "rgba(59,91,252,0.06)" : "var(--theme-bg-card)",
+                      backgroundColor: isCurrent ? "rgba(59,91,252,0.06)" : "#111827",
                       borderColor: isCurrent ? "rgba(59,91,252,0.25)" : "rgba(255,255,255,0.08)",
                     }}
                   >
@@ -2048,7 +2048,7 @@ export default function Studio() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--theme-bg-page)", ...font }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0a0f1e", ...font }}>
         <div className="w-6 h-6 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
       </div>
     );
@@ -2056,7 +2056,7 @@ export default function Studio() {
 
   if (notFound || !agent) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: "var(--theme-bg-page)", ...font }}>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: "#0a0f1e", ...font }}>
         <p className="text-white/50 text-sm">Agent not found.</p>
         <button onClick={() => navigate("/dashboard")} className="text-[#3b5bfc] text-sm hover:underline">
           ← Back to Dashboard
@@ -2068,22 +2068,22 @@ export default function Studio() {
   const isLive = agent.status === "live";
 
   return (
-    <div className="h-screen flex flex-col" style={{ backgroundColor: "var(--theme-bg-page)", ...font }}>
+    <div className="h-screen flex flex-col" style={{ backgroundColor: "#0a0f1e", ...font }}>
 
       {/* Top bar */}
       <header
-        className="flex items-center justify-between px-8 py-4 border-b border-white/5 flex-shrink-0 z-10"
-        style={{ backgroundColor: "var(--theme-bg-header)" }}
+        className="flex items-center justify-between px-3 py-3 md:px-8 md:py-4 border-b border-white/5 flex-shrink-0 z-10"
+        style={{ backgroundColor: "#0d1117" }}
       >
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0">
           <button
             onClick={() => navigate("/dashboard")}
             className="text-white/40 hover:text-white/80 text-sm transition-colors duration-150 flex items-center gap-1.5 flex-shrink-0"
           >
             ← Dashboard
           </button>
-          <span className="text-white/20 text-sm">|</span>
-          <div className="min-w-0">
+          <span className="text-white/20 text-sm hidden md:block">|</span>
+          <div className="min-w-0 hidden md:block">
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold text-white truncate">{agent.name}</h1>
               <span
@@ -2164,7 +2164,7 @@ export default function Studio() {
                 <div className="fixed inset-0 z-40" onClick={() => setShowMobileMenu(false)} />
                 <div
                   className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-white/10 z-50 flex flex-col overflow-hidden shadow-xl"
-                  style={{ backgroundColor: "var(--theme-bg-header)" }}
+                  style={{ backgroundColor: "#0d1117" }}
                 >
                   {isLive && (
                     <button
@@ -2193,7 +2193,7 @@ export default function Studio() {
         {/* ── Left column: tabs + content ── */}
         <div className="flex flex-col min-h-0 w-full md:w-[60%]">
           {/* Tabs */}
-          <div className="flex items-center gap-1 px-8 pt-4 border-b border-white/5 flex-shrink-0">
+          <div className="flex items-center gap-1 px-3 pt-3 md:px-8 md:pt-4 border-b border-white/5 flex-shrink-0">
             {tabs.map((tab) => {
               const isActive = activeTab === tab;
               return (
@@ -2201,7 +2201,7 @@ export default function Studio() {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className="px-4 py-2 text-sm font-medium transition-all duration-150 relative"
-                  style={{ color: isActive ? "var(--theme-text-1)" : "var(--theme-text-muted)" }}
+                  style={{ color: isActive ? "#ffffff" : "rgba(255,255,255,0.55)" }}
                 >
                   {tab}
                   {isActive && (
@@ -2216,7 +2216,7 @@ export default function Studio() {
           </div>
 
           {/* Tab content (scrollable) */}
-          <div className="flex-1 overflow-y-auto min-h-0 px-8 py-6">
+          <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 md:px-8 md:py-6">
             {activeTab === "Prompt" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div className="flex flex-col gap-1.5">
@@ -2224,13 +2224,13 @@ export default function Studio() {
                   <select
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    className="w-64 rounded-lg px-4 py-2.5 text-sm text-white border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors appearance-none cursor-pointer"
-                    style={{ backgroundColor: "var(--theme-bg-card)" }}
+                    className="w-full max-w-xs rounded-lg px-4 py-2.5 text-sm text-white border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors appearance-none cursor-pointer"
+                    style={{ backgroundColor: "#111827" }}
                   >
                     {modelGroups.map((group) => (
-                      <optgroup key={group.provider} label={group.label} style={{ backgroundColor: "var(--theme-bg-card)", color: "rgba(255,255,255,0.5)" }}>
+                      <optgroup key={group.provider} label={group.label} style={{ backgroundColor: "#111827", color: "rgba(255,255,255,0.5)" }}>
                         {group.models.map((opt) => (
-                          <option key={opt.value} value={opt.value} style={{ backgroundColor: "var(--theme-bg-card)" }}>
+                          <option key={opt.value} value={opt.value} style={{ backgroundColor: "#111827" }}>
                             {opt.label}
                           </option>
                         ))}
@@ -2257,7 +2257,7 @@ export default function Studio() {
                     placeholder="Write your agent instructions here..."
                     rows={16}
                     className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors resize-none leading-relaxed"
-                    style={{ backgroundColor: "var(--theme-bg-card)" }}
+                    style={{ backgroundColor: "#111827" }}
                   />
                 </div>
 
@@ -2276,7 +2276,7 @@ export default function Studio() {
             )}
 
             {activeTab === "Knowledge" && (
-              <div className="flex flex-col gap-6 p-8">
+              <div className="flex flex-col gap-6">
                 {/* Header */}
                 <div>
                   <h2 className="text-base font-semibold text-white">Knowledge Base</h2>
@@ -2298,7 +2298,7 @@ export default function Studio() {
                 {stagedFile ? (
                   <div
                     className="rounded-xl border border-white/10 px-5 py-4 flex items-center justify-between gap-4"
-                    style={{ backgroundColor: "var(--theme-bg-card)" }}
+                    style={{ backgroundColor: "#111827" }}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <span className="text-2xl flex-shrink-0">📄</span>
@@ -2389,7 +2389,7 @@ export default function Studio() {
                       <div
                         key={doc.id}
                         className="rounded-xl border border-white/8 px-4 py-3 flex items-center justify-between gap-4"
-                        style={{ backgroundColor: "var(--theme-bg-card)" }}
+                        style={{ backgroundColor: "#111827" }}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="text-xl flex-shrink-0">📄</span>
@@ -2402,7 +2402,7 @@ export default function Studio() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-2 flex-shrink-0">
                           <span
                             className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                             style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
@@ -2431,7 +2431,7 @@ export default function Studio() {
             )}
 
             {activeTab === "Tools" && (
-              <div className="flex flex-col gap-8 p-8 overflow-y-auto">
+              <div className="flex flex-col gap-8">
 
                 {/* ── Section 1: AI Tool Builder ── */}
                 <div className="flex flex-col gap-4">
@@ -2449,7 +2449,7 @@ export default function Studio() {
                       disabled={toolAnalyzing}
                       placeholder="e.g. When a customer gives their name and phone number, save it to my Google Sheet automatically"
                       className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none leading-relaxed disabled:opacity-50"
-                      style={{ backgroundColor: "var(--theme-bg-card)" }}
+                      style={{ backgroundColor: "#111827" }}
                     />
                     <div className="flex flex-col gap-2">
                       <button
@@ -2484,7 +2484,7 @@ export default function Studio() {
                     {toolPreview && (
                       <div
                         className="rounded-xl border border-white/10 overflow-hidden"
-                        style={{ backgroundColor: "var(--theme-bg-card)" }}
+                        style={{ backgroundColor: "#111827" }}
                       >
                         {/* Card header */}
                         <div
@@ -2552,7 +2552,7 @@ export default function Studio() {
                               onChange={(e) => { setSpreadsheetUrl(e.target.value); setToolError(""); }}
                               placeholder="https://docs.google.com/spreadsheets/d/..."
                               className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
-                              style={{ backgroundColor: "var(--theme-bg-page)" }}
+                              style={{ backgroundColor: "#0a0f1e" }}
                             />
                             <p className="text-[11px] text-white/30 leading-relaxed">
                               Paste the URL of the Google Sheet where data should be saved
@@ -2620,7 +2620,7 @@ export default function Studio() {
                         <div
                           key={tool.id}
                           className="rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3"
-                          style={{ backgroundColor: "var(--theme-bg-card)" }}
+                          style={{ backgroundColor: "#111827" }}
                         >
                           <span className="text-xl flex-shrink-0">
                             {CONNECTOR_ICONS[tool.connector] ?? "🔧"}
@@ -2631,7 +2631,7 @@ export default function Studio() {
                               <p className="text-xs text-white/40 mt-0.5 truncate">{tool.tool_description}</p>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-2 flex-shrink-0">
                             <span
                               className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                               style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
@@ -2673,7 +2673,7 @@ export default function Studio() {
                   {/* Google row */}
                   <div
                     className="rounded-xl border border-white/8 overflow-hidden"
-                    style={{ backgroundColor: "var(--theme-bg-card)" }}
+                    style={{ backgroundColor: "#111827" }}
                   >
                     <div className="px-4 py-3.5 flex items-center gap-3">
                       <span className="text-xl flex-shrink-0">📊</span>
@@ -2683,7 +2683,7 @@ export default function Studio() {
                           {googleConnected && googleEmail ? googleEmail : "Sheets, Drive & Gmail access"}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-2 flex-shrink-0">
                         {checkingGoogle ? (
                           <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white/70 animate-spin block" />
                         ) : googleConnected ? (
@@ -2763,7 +2763,7 @@ export default function Studio() {
                 {/* ── Section 4: Available Connectors ── */}
                 <div className="flex flex-col gap-4">
                   <h2 className="text-base font-semibold text-white">Available Connectors</h2>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {[
                       { icon: "📊", name: "Google Sheets", desc: "Save data to spreadsheets",       soon: false },
                       { icon: "📱", name: "Telegram",      desc: "Send Telegram notifications",     soon: false },
@@ -2775,7 +2775,7 @@ export default function Studio() {
                         key={name}
                         className="relative rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3 transition-all duration-150"
                         style={{
-                          backgroundColor: "var(--theme-bg-card)",
+                          backgroundColor: "#111827",
                           opacity: soon ? 0.6 : 1,
                         }}
                       >
@@ -2792,7 +2792,7 @@ export default function Studio() {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-white/35 mt-0.5 truncate">{desc}</p>
+                          <p className="text-xs text-white/35 mt-0.5 leading-tight">{desc}</p>
                         </div>
                       </div>
                     ))}
@@ -2824,7 +2824,7 @@ export default function Studio() {
 
       {/* ── Mobile chat overlay ── */}
       {showMobileChat && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: "var(--theme-bg-header)" }}>
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: "#0d1117" }}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 flex-shrink-0">
             <span className="text-sm font-semibold text-white">Test Agent</span>
             <button
