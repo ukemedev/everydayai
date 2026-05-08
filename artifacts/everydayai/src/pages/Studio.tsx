@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { marked } from "marked";
 import { useLocation, useParams } from "wouter";
 import { supabase } from "@/lib/supabase";
+import { useTheme } from "@/lib/useTheme";
 
 // ─── Model catalogue ──────────────────────────────────────────────────────────
 
@@ -436,14 +438,16 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                     </div>
                   )}
                   <div
-                    className="max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words"
+                    className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${msg.role === "user" ? "whitespace-pre-wrap" : ""}`}
                     style={
                       msg.role === "user"
                         ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
                         : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
                     }
                   >
-                    {msg.text}
+                    {msg.role === "agent"
+                      ? <span className="md-content" dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }} />
+                      : msg.text}
                   </div>
                 </div>
               );
@@ -1653,6 +1657,9 @@ export default function Studio() {
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showMobileChat, setShowMobileChat] = useState(false);
+  const { isDark, toggle: toggleTheme } = useTheme();
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -1696,6 +1703,7 @@ export default function Studio() {
         } else {
           setAgent(data as Agent);
           setModel(data.model ?? "gpt-4o-mini");
+          setInstructions(data.instructions ?? "");
         }
         setLoading(false);
       });
@@ -2097,20 +2105,31 @@ export default function Studio() {
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Desktop-only buttons */}
           <button
             onClick={() => navigate("/automations")}
-            className="px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 flex items-center gap-1.5"
+            className="hidden md:flex px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 items-center gap-1.5"
           >
             <span className="text-sm">⚡</span>
             Automations
           </button>
           <button
             onClick={() => navigate("/settings")}
-            className="px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 flex items-center gap-1.5"
+            className="hidden md:flex px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 items-center gap-1.5"
           >
             <span className="text-sm">⚙️</span>
             Settings
           </button>
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="px-2.5 py-2 rounded-lg text-sm transition-all hover:opacity-80"
+            style={{ color: "rgba(255,255,255,0.5)", backgroundColor: "rgba(255,255,255,0.06)" }}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {isDark ? "☀️" : "🌙"}
+          </button>
+          {/* Deploy — always visible */}
           <button
             onClick={() => setShowDeployModal(true)}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 hover:opacity-90 active:scale-95"
@@ -2118,28 +2137,65 @@ export default function Studio() {
           >
             Deploy
           </button>
+          {/* Desktop: Unpublish */}
           {isLive && (
             <button
               onClick={handleUnpublish}
               disabled={publishing}
-              className="px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 disabled:opacity-50"
+              className="hidden md:flex px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 disabled:opacity-50"
               style={{ color: "rgba(248,113,113,0.85)", borderColor: "rgba(248,113,113,0.25)" }}
             >
               {publishing ? "Saving…" : "Unpublish"}
             </button>
           )}
+          {/* Desktop: Share + Version History */}
           <button
             onClick={() => setShowShareModal(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
+            className="hidden md:flex px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
           >
             Share
           </button>
           <button
             onClick={() => setShowVersionModal(true)}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
+            className="hidden md:flex px-4 py-2 rounded-lg text-sm font-medium text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150"
           >
             Version History
           </button>
+          {/* Mobile "•••" dropdown */}
+          <div className="relative md:hidden">
+            <button
+              onClick={() => setShowMobileMenu((v) => !v)}
+              className="px-3 py-2 rounded-lg text-sm font-bold text-white/60 border border-white/10 hover:border-white/20 hover:text-white/80 transition-all duration-150 tracking-widest"
+            >
+              •••
+            </button>
+            {showMobileMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowMobileMenu(false)} />
+                <div
+                  className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-white/10 z-50 flex flex-col overflow-hidden shadow-xl"
+                  style={{ backgroundColor: "#0d1117" }}
+                >
+                  {isLive && (
+                    <button
+                      onClick={() => { setShowMobileMenu(false); handleUnpublish(); }}
+                      className="px-4 py-3 text-sm text-left transition-colors hover:bg-white/5"
+                      style={{ color: "rgba(248,113,113,0.85)" }}
+                    >
+                      Unpublish
+                    </button>
+                  )}
+                  <button onClick={() => { setShowMobileMenu(false); setShowShareModal(true); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Share</button>
+                  <button onClick={() => { setShowMobileMenu(false); setShowVersionModal(true); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Version History</button>
+                  <button onClick={() => { setShowMobileMenu(false); navigate("/automations"); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Automations</button>
+                  <button onClick={() => { setShowMobileMenu(false); navigate("/settings"); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Settings</button>
+                  <button onClick={() => { setShowMobileMenu(false); toggleTheme(); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5 flex items-center gap-2">
+                    {isDark ? "☀️" : "🌙"} {isDark ? "Light Mode" : "Dark Mode"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -2147,7 +2203,7 @@ export default function Studio() {
       <div className="flex flex-1 min-h-0">
 
         {/* ── Left column: tabs + content ── */}
-        <div className="flex flex-col min-h-0" style={{ width: "60%" }}>
+        <div className="flex flex-col min-h-0 w-full md:w-[60%]">
           {/* Tabs */}
           <div className="flex items-center gap-1 px-8 pt-4 border-b border-white/5 flex-shrink-0">
             {tabs.map((tab) => {
@@ -2760,14 +2816,41 @@ export default function Studio() {
           </div>
         </div>
 
-        {/* ── Right column: chat panel ── */}
+        {/* ── Right column: chat panel (desktop only) ── */}
         <div
-          className="flex flex-col overflow-hidden"
-          style={{ width: "40%", position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
+          className="hidden md:flex flex-col overflow-hidden md:w-[40%]"
+          style={{ position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
         >
-          <ChatPanel agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
+          <ChatPanel key={agent.id} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
         </div>
       </div>
+
+      {/* ── Mobile "Test Agent" FAB ── */}
+      <button
+        className="md:hidden fixed bottom-6 right-6 z-40 px-5 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-xl flex items-center gap-2 transition-all hover:opacity-90 active:scale-95"
+        style={{ backgroundColor: "#3b5bfc" }}
+        onClick={() => setShowMobileChat(true)}
+      >
+        🤖 Test Agent
+      </button>
+
+      {/* ── Mobile chat overlay ── */}
+      {showMobileChat && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: "#0d1117" }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 flex-shrink-0">
+            <span className="text-sm font-semibold text-white">Test Agent</span>
+            <button
+              onClick={() => setShowMobileChat(false)}
+              className="text-white/50 hover:text-white/80 text-xl w-8 h-8 flex items-center justify-center transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <ChatPanel key={`mobile-${agent.id}`} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
+          </div>
+        </div>
+      )}
 
       {/* ── Share modal ── */}
       {showShareModal && (

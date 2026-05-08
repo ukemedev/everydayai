@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
+import { marked } from "marked";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -203,14 +204,16 @@ export default function Chat() {
               )}
 
               <div
-                className="max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
+                className={`max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "whitespace-pre-wrap" : ""}`}
                 style={
                   msg.role === "user"
                     ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
                     : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px", border: "1px solid rgba(255,255,255,0.06)" }
                 }
               >
-                {msg.text}
+                {msg.role === "agent"
+                  ? <span className="md-content" dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }} />
+                  : msg.text}
               </div>
             </div>
           ))}
