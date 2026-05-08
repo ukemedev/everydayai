@@ -312,4 +312,57 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
   res.json({ freeUsers, proUsers, businessUsers, monthlyRevenue });
 });
 
+// ─── GET /api/admin/settings ─────────────────────────────────────────────────
+
+router.get("/admin/settings", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+
+  const { data, error } = await sb
+    .from("platform_settings")
+    .select("pricing_enabled")
+    .eq("id", 1)
+    .single();
+
+  if (error) {
+    req.log.error({ err: error }, "failed to fetch platform settings");
+    res.status(500).json({ error: "Failed to fetch settings" });
+    return;
+  }
+
+  req.log.info({ pricingEnabled: data.pricing_enabled }, "platform settings fetched");
+  res.json({ pricingEnabled: data.pricing_enabled ?? false });
+});
+
+// ─── PATCH /api/admin/settings ────────────────────────────────────────────────
+
+router.patch("/admin/settings", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+
+  const { pricingEnabled } = req.body as { pricingEnabled: boolean };
+  if (typeof pricingEnabled !== "boolean") {
+    res.status(400).json({ error: "pricingEnabled must be a boolean" });
+    return;
+  }
+
+  const { data, error } = await sb
+    .from("platform_settings")
+    .update({ pricing_enabled: pricingEnabled, updated_at: new Date().toISOString() })
+    .eq("id", 1)
+    .select("pricing_enabled")
+    .single();
+
+  if (error) {
+    req.log.error({ err: error }, "failed to update platform settings");
+    res.status(500).json({ error: "Failed to update settings" });
+    return;
+  }
+
+  req.log.info({ pricingEnabled: data.pricing_enabled }, "platform settings updated");
+  res.json({ pricingEnabled: data.pricing_enabled });
+});
+
 export default router;
