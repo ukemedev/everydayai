@@ -500,6 +500,458 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
   );
 }
 
+// ─── Deploy modal ─────────────────────────────────────────────────────────────
+
+type DeployTab = "socials" | "code" | "website";
+
+interface DeployModalProps {
+  agentId: string;
+  agentName: string;
+  onClose: () => void;
+}
+
+function DeployModal({ agentId, agentName, onClose }: DeployModalProps) {
+  const [tab, setTab] = useState<DeployTab>("socials");
+  const [codeLang, setCodeLang] = useState<"python" | "javascript">("python");
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  // Website tab state
+  const [widgetName, setWidgetName] = useState(agentName);
+  const [widgetDesc, setWidgetDesc] = useState("");
+  const [widgetColor, setWidgetColor] = useState("#3b5bfc");
+  const [startingMsg, setStartingMsg] = useState("Hi! How can I help you?");
+  const [starters, setStarters] = useState<string[]>([""]);
+  const [widgetSize, setWidgetSize] = useState<"regular" | "large">("regular");
+  const colorInputRef = useRef<HTMLInputElement>(null);
+
+  const apiUrl = `${window.location.origin}/api/chat`;
+
+  const pythonCode = `import requests
+
+response = requests.post(
+    "${apiUrl}",
+    json={
+        "message": "Hello",
+        "agentId": "${agentId}"
+    }
+)
+print(response.json()["reply"])`;
+
+  const jsCode = `const response = await fetch("${apiUrl}", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    message: "Hello",
+    agentId: "${agentId}"
+  })
+});
+const data = await response.json();
+console.log(data.reply);`;
+
+  const activeCode = codeLang === "python" ? pythonCode : jsCode;
+
+  function handleCopyCode() {
+    void navigator.clipboard.writeText(activeCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
+  }
+
+  function addStarter() {
+    if (starters.length < 3) setStarters((p) => [...p, ""]);
+  }
+  function updateStarter(i: number, val: string) {
+    setStarters((p) => p.map((s, idx) => (idx === i ? val : s)));
+  }
+  function removeStarter(i: number) {
+    setStarters((p) => p.filter((_, idx) => idx !== i));
+  }
+
+  const tabs: { id: DeployTab; label: string }[] = [
+    { id: "socials", label: "Socials" },
+    { id: "code",    label: "Custom Code" },
+    { id: "website", label: "Website" },
+  ];
+
+  const socials = [
+    {
+      id: "whatsapp",
+      name: "WhatsApp",
+      desc: "Deploy to any WhatsApp number",
+      btnLabel: "Connect WhatsApp",
+      soon: false,
+      icon: (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.974-1.404A9.953 9.953 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" fill="#25D366"/>
+          <path d="M9.04 7.4c-.2-.44-.41-.45-.6-.46H7.8c-.2 0-.52.07-.79.37S6 8.36 6 9.55c0 1.18.86 2.33 .98 2.49.12.17 1.66 2.65 4.09 3.6 2.02.8 2.43.64 2.87.6.43-.04 1.4-.57 1.6-1.12.2-.55.2-1.02.14-1.12-.06-.1-.22-.16-.46-.28-.24-.12-1.4-.69-1.61-.77-.22-.08-.38-.12-.54.12-.16.24-.62.77-.76.93-.14.16-.28.18-.52.06-.24-.12-1.01-.37-1.92-1.18-.71-.63-1.19-1.41-1.33-1.65-.14-.24-.01-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78z" fill="#fff"/>
+        </svg>
+      ),
+    },
+    {
+      id: "telegram",
+      name: "Telegram",
+      desc: "Deploy to your Telegram bot",
+      btnLabel: "Connect Telegram",
+      soon: false,
+      icon: (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" fill="#229ED9"/>
+          <path d="M17.5 7.5L5.5 12l4 1.5 1.5 4 2.5-3 3.5 2.5 1-9.5z" fill="#fff"/>
+          <path d="M9.5 13.5l.5 3.5 2-2.5" fill="#d6e4f0"/>
+        </svg>
+      ),
+    },
+    {
+      id: "messenger",
+      name: "Facebook Messenger",
+      desc: "Deploy to your Facebook page",
+      btnLabel: "Connect Messenger",
+      soon: false,
+      icon: (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" fill="url(#msgGrad)"/>
+          <defs>
+            <linearGradient id="msgGrad" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#0078FF"/>
+              <stop offset="1" stopColor="#A033FF"/>
+            </linearGradient>
+          </defs>
+          <path d="M12 6C8.686 6 6 8.507 6 11.6c0 1.613.7 3.056 1.824 4.07V17.5l1.79-1.006A6.292 6.292 0 0012 16.8c3.314 0 6-2.507 6-5.6S15.314 6 12 6zm.65 7.54l-1.53-1.63-2.99 1.63 3.29-3.49 1.57 1.63 2.95-1.63-3.29 3.49z" fill="#fff"/>
+        </svg>
+      ),
+    },
+    {
+      id: "instagram",
+      name: "Instagram",
+      desc: "Automate Instagram DMs",
+      btnLabel: "Connect Instagram",
+      soon: true,
+      icon: (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+          <rect width="20" height="20" x="2" y="2" rx="5.5" fill="url(#igGrad)"/>
+          <defs>
+            <radialGradient id="igGrad" cx="30%" cy="107%" r="150%">
+              <stop offset="0%" stopColor="#fdf497"/>
+              <stop offset="10%" stopColor="#fdf497"/>
+              <stop offset="50%" stopColor="#fd5949"/>
+              <stop offset="68%" stopColor="#d6249f"/>
+              <stop offset="100%" stopColor="#285AEB"/>
+            </radialGradient>
+          </defs>
+          <circle cx="12" cy="12" r="3.5" stroke="#fff" strokeWidth="1.8" fill="none"/>
+          <circle cx="17" cy="7" r="1" fill="#fff"/>
+          <rect x="3.5" y="3.5" width="17" height="17" rx="4" stroke="#fff" strokeWidth="1.5" fill="none"/>
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.70)", backdropFilter: "blur(3px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-xl rounded-2xl border border-white/10 flex flex-col overflow-hidden"
+        style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif", maxHeight: "90vh" }}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-0 flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white">Deploy Agent</h2>
+            <p className="text-xs text-white/40 mt-0.5">Choose how to distribute your agent</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-white/30 hover:text-white/70 hover:bg-white/5 transition-all text-lg leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* ── Tab bar ── */}
+        <div className="flex gap-1 px-6 pt-5 pb-0 flex-shrink-0">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+              style={
+                tab === t.id
+                  ? { backgroundColor: "rgba(59,91,252,0.18)", color: "#818cf8" }
+                  : { color: "rgba(255,255,255,0.4)" }
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Divider ── */}
+        <div className="mx-6 mt-4 border-t border-white/6 flex-shrink-0" />
+
+        {/* ── Tab content ── */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+
+          {/* TAB 1: Socials */}
+          {tab === "socials" && (
+            <div className="flex flex-col gap-3">
+              {socials.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-4 rounded-xl px-4 py-4 border border-white/6 transition-all duration-150"
+                  style={{ backgroundColor: "#0d1117", opacity: s.soon ? 0.55 : 1 }}
+                >
+                  <div
+                    className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                  >
+                    {s.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-white">{s.name}</p>
+                      {s.soon && (
+                        <span
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                          style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
+                        >
+                          Coming Soon
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+                  </div>
+                  {!s.soon && (
+                    <button
+                      className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                      style={{ backgroundColor: "#3b5bfc" }}
+                    >
+                      {s.btnLabel}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* TAB 2: Custom Code */}
+          {tab === "code" && (
+            <div className="flex flex-col gap-4">
+              {/* Language toggle */}
+              <div
+                className="flex gap-1 p-1 rounded-xl self-start"
+                style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+              >
+                {(["python", "javascript"] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setCodeLang(lang)}
+                    className="px-4 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all duration-150"
+                    style={
+                      codeLang === lang
+                        ? { backgroundColor: "#1e2a45", color: "#fff" }
+                        : { color: "rgba(255,255,255,0.4)" }
+                    }
+                  >
+                    {lang === "javascript" ? "JavaScript" : "Python"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Info callout */}
+              <div
+                className="rounded-xl px-4 py-3 flex items-start gap-3 border border-white/5"
+                style={{ backgroundColor: "rgba(59,91,252,0.08)" }}
+              >
+                <span className="text-base mt-0.5 flex-shrink-0">💡</span>
+                <p className="text-xs text-white/55 leading-relaxed">
+                  Send messages directly to this agent using your app or script. No API key required — the agent uses its own credentials.
+                </p>
+              </div>
+
+              {/* Code block */}
+              <div className="relative rounded-xl overflow-hidden border border-white/6" style={{ backgroundColor: "#0d1117" }}>
+                {/* Top bar */}
+                <div
+                  className="flex items-center justify-between px-4 py-2.5 border-b border-white/5"
+                  style={{ backgroundColor: "rgba(255,255,255,0.03)" }}
+                >
+                  <span className="text-[11px] font-medium text-white/35 uppercase tracking-wider">
+                    {codeLang === "python" ? "Python" : "JavaScript"}
+                  </span>
+                  <button
+                    onClick={handleCopyCode}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-lg transition-all duration-150"
+                    style={
+                      codeCopied
+                        ? { backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }
+                        : { backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.55)" }
+                    }
+                  >
+                    {codeCopied ? (
+                      <>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" strokeWidth="2"/></svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <pre
+                  className="text-xs px-5 py-4 overflow-x-auto leading-relaxed"
+                  style={{ color: "#a5b4fc", fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+                >
+                  <code>{activeCode}</code>
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: Website */}
+          {tab === "website" && (
+            <div className="flex flex-col gap-5">
+              {/* Widget Name */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Widget Name</label>
+                <input
+                  type="text"
+                  value={widgetName}
+                  onChange={(e) => setWidgetName(e.target.value)}
+                  className="rounded-xl px-3.5 py-2.5 text-sm text-white outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                  style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                />
+              </div>
+
+              {/* Widget Description */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Description</label>
+                <input
+                  type="text"
+                  value={widgetDesc}
+                  onChange={(e) => setWidgetDesc(e.target.value)}
+                  placeholder="A short description shown in the chat header"
+                  className="rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                  style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                />
+              </div>
+
+              {/* Color + Starting Message row */}
+              <div className="flex gap-4">
+                {/* Color picker */}
+                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                  <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Color</label>
+                  <button
+                    onClick={() => colorInputRef.current?.click()}
+                    className="w-11 h-10 rounded-xl border border-white/10 transition-all hover:border-white/25 flex-shrink-0"
+                    style={{ backgroundColor: widgetColor }}
+                  />
+                  <input
+                    ref={colorInputRef}
+                    type="color"
+                    value={widgetColor}
+                    onChange={(e) => setWidgetColor(e.target.value)}
+                    className="sr-only"
+                  />
+                </div>
+
+                {/* Starting message */}
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Starting Message</label>
+                  <input
+                    type="text"
+                    value={startingMsg}
+                    onChange={(e) => setStartingMsg(e.target.value)}
+                    className="rounded-xl px-3.5 py-2.5 text-sm text-white outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                    style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                  />
+                </div>
+              </div>
+
+              {/* Conversation starters */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                    Conversation Starters
+                    <span className="ml-1.5 normal-case text-white/25">({starters.length}/3)</span>
+                  </label>
+                  {starters.length < 3 && (
+                    <button
+                      onClick={addStarter}
+                      className="text-xs text-[#818cf8] hover:text-[#a5b4fc] transition-colors font-medium"
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
+                {starters.map((s, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={s}
+                      onChange={(e) => updateStarter(i, e.target.value)}
+                      placeholder={`Starter ${i + 1}…`}
+                      className="flex-1 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                      style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                    />
+                    <button
+                      onClick={() => removeStarter(i)}
+                      className="w-8 h-8 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/5 transition-all text-base flex items-center justify-center flex-shrink-0"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Size selector */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Widget Size</label>
+                <div className="flex gap-2">
+                  {(["regular", "large"] as const).map((sz) => (
+                    <button
+                      key={sz}
+                      onClick={() => setWidgetSize(sz)}
+                      className="flex-1 py-2.5 rounded-xl text-sm font-medium capitalize border transition-all duration-150"
+                      style={
+                        widgetSize === sz
+                          ? { backgroundColor: "rgba(59,91,252,0.18)", color: "#818cf8", borderColor: "rgba(59,91,252,0.35)" }
+                          : { backgroundColor: "transparent", color: "rgba(255,255,255,0.4)", borderColor: "rgba(255,255,255,0.08)" }
+                      }
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-white/50 hover:border-white/20 hover:text-white/75 transition-all duration-150"
+                >
+                  Preview Widget
+                </button>
+                <button
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                  style={{ backgroundColor: "#3b5bfc" }}
+                >
+                  Create Deployment
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Share modal ──────────────────────────────────────────────────────────────
 
 interface ShareModalProps {
@@ -1764,64 +2216,13 @@ export default function Studio() {
         />
       )}
 
-      {/* ── Deploy confirmation modal ── */}
+      {/* ── Deploy modal ── */}
       {showDeployModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowDeployModal(false); }}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-white/10 px-7 py-7 flex flex-col gap-5"
-            style={{ backgroundColor: "#111827", fontFamily: "'Inter', sans-serif" }}
-          >
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-base font-bold text-white">Publish Your Agent</h2>
-                <p className="text-sm text-white/45 mt-2 leading-relaxed">
-                  Any changes made will immediately go Live. Are you sure you want to continue?
-                </p>
-              </div>
-              <button
-                onClick={() => setShowDeployModal(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-white/30 hover:text-white/70 hover:bg-white/5 transition-all flex-shrink-0 text-lg leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Status preview */}
-            <div
-              className="flex items-center gap-3 rounded-xl px-4 py-3 border border-white/5"
-              style={{ backgroundColor: "rgba(34,197,94,0.06)" }}
-            >
-              <div className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-              <p className="text-sm text-white/70">
-                <span className="text-white font-medium">{agent.name}</span> will be set to{" "}
-                <span className="text-green-400 font-medium">Live</span>
-              </p>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={() => setShowDeployModal(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white/55 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150"
-              >
-                Go Back
-              </button>
-              <button
-                onClick={handlePublish}
-                disabled={publishing}
-                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ backgroundColor: "#3b5bfc" }}
-              >
-                {publishing ? "Publishing…" : "Yes, I'm Sure"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeployModal
+          agentId={agent.id}
+          agentName={agent.name}
+          onClose={() => setShowDeployModal(false)}
+        />
       )}
 
       {/* ── Toast ── */}
