@@ -245,8 +245,8 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
       >
         <button
           onClick={() => setMenuOpen((v) => !v)}
-          className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-white/10"
-          style={{ color: "rgba(255,255,255,0.5)" }}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-bold opacity-40 hover:opacity-100 active:opacity-100 group-hover:opacity-100 transition-opacity duration-150 hover:bg-white/10"
+          style={{ color: "rgba(255,255,255,0.8)" }}
           title="Options"
         >
           ···
