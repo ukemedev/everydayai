@@ -11,6 +11,11 @@ import { appendToSheet } from "../lib/googleSheets.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendEmail } from "../lib/gmail.js";
 
+function extractSpreadsheetId(url: string): string {
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  return match?.[1] ?? url;
+}
+
 // pdf-parse and mammoth are externalized in esbuild — load via require at runtime
 const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (
@@ -375,9 +380,12 @@ router.post("/chat", async (req: Request, res: Response) => {
                 ? tool.required_inputs.map((i: { name: string }) => toolCallParsed.inputs[i.name] ?? "")
                 : Object.values(toolCallParsed.inputs);
 
+              const sheetUrl = (tool.required_auth as { spreadsheet_url?: string } | null)?.spreadsheet_url ?? "";
+              const spreadsheetId = sheetUrl ? extractSpreadsheetId(sheetUrl) : (toolCallParsed.spreadsheet_id ?? "");
+
               const sheetResult = await appendToSheet(
                 integration.access_token as string,
-                toolCallParsed.spreadsheet_id ?? "",
+                spreadsheetId,
                 toolCallParsed.sheet_name ?? "Sheet1",
                 rowData
               );

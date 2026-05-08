@@ -527,6 +527,7 @@ export default function Studio() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [confirmingTool, setConfirmingTool] = useState(false);
+  const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
   const [deletingToolId, setDeletingToolId] = useState<string | null>(null);
   const [userId, setUserId] = useState("");
   const [googleConnected, setGoogleConnected] = useState(false);
@@ -694,6 +695,10 @@ export default function Studio() {
 
   async function handleConfirmTool() {
     if (!toolPreview || !agent) return;
+    if (toolPreview.connector === "google_sheets" && !spreadsheetUrl.trim()) {
+      setToolError("Please paste the Google Sheet URL before confirming.");
+      return;
+    }
     setConfirmingTool(true);
     setToolError("");
 
@@ -703,6 +708,11 @@ export default function Studio() {
       setConfirmingTool(false);
       return;
     }
+
+    const requiredAuth =
+      toolPreview.connector === "google_sheets"
+        ? { ...toolPreview.required_auth, spreadsheet_url: spreadsheetUrl.trim() }
+        : toolPreview.required_auth;
 
     const { data: saved, error } = await supabase
       .from("tools")
@@ -714,7 +724,7 @@ export default function Studio() {
         connector: toolPreview.connector,
         action: toolPreview.action,
         required_inputs: toolPreview.required_inputs,
-        required_auth: toolPreview.required_auth,
+        required_auth: requiredAuth,
         status: "active",
       })
       .select()
@@ -730,6 +740,7 @@ export default function Studio() {
     setTools((prev) => [saved as Tool, ...prev]);
     setToolPreview(null);
     setToolPrompt("");
+    setSpreadsheetUrl("");
     showToast("Tool added successfully!");
   }
 
@@ -1290,11 +1301,31 @@ export default function Studio() {
                           <p className="text-xs text-white/45">{toolPreview.required_auth.description}</p>
                         </div>
 
+                        {/* Google Sheet URL — only for google_sheets connector */}
+                        {toolPreview.connector === "google_sheets" && (
+                          <div className="px-5 py-4 border-b border-white/5 flex flex-col gap-2">
+                            <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">
+                              Google Sheet URL <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                              type="url"
+                              value={spreadsheetUrl}
+                              onChange={(e) => { setSpreadsheetUrl(e.target.value); setToolError(""); }}
+                              placeholder="https://docs.google.com/spreadsheets/d/..."
+                              className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
+                              style={{ backgroundColor: "#0a0f1e" }}
+                            />
+                            <p className="text-[11px] text-white/30 leading-relaxed">
+                              Paste the URL of the Google Sheet where data should be saved
+                            </p>
+                          </div>
+                        )}
+
                         {/* Actions */}
                         <div className="px-5 py-4 flex items-center gap-3">
                           <button
                             onClick={handleConfirmTool}
-                            disabled={confirmingTool}
+                            disabled={confirmingTool || (toolPreview.connector === "google_sheets" && !spreadsheetUrl.trim())}
                             className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2"
                             style={{ backgroundColor: "#3b5bfc" }}
                           >
@@ -1306,7 +1337,7 @@ export default function Studio() {
                             ) : "Confirm & Add Tool"}
                           </button>
                           <button
-                            onClick={() => { setToolPreview(null); setToolPrompt(""); }}
+                            onClick={() => { setToolPreview(null); setToolPrompt(""); setSpreadsheetUrl(""); }}
                             disabled={confirmingTool}
                             className="px-4 py-2.5 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all disabled:opacity-40"
                           >
