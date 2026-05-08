@@ -122,7 +122,7 @@ router.get("/auth/google/callback", async (req: Request, res: Response) => {
 
     if (dbErr) {
       logger.error({ err: dbErr, userId }, "Failed to save Google tokens to integrations table");
-      res.redirect("/dashboard?error=google_save_failed");
+      res.send(`<!DOCTYPE html><html><head><title>Error</title></head><body style="background:#0a0f1e;color:white;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;"><div style="font-size:48px;">❌</div><h2>Save Failed</h2><p style="color:#888;">Could not save tokens. Please try again.</p><script>setTimeout(()=>window.close(),3000);</script></body></html>`);
       return;
     }
 
