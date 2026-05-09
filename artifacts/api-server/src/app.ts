@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import helmet from "helmet";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { v4 as uuidv4 } from "uuid";
@@ -25,6 +26,15 @@ const app: Express = express();
 
 // Trust the reverse proxy so express-rate-limit can read the real client IP
 app.set("trust proxy", 1);
+
+// ── Security headers (first middleware) ───────────────────────────────────────
+app.use(
+  helmet({
+    contentSecurityPolicy: false,          // React frontend manages CSP
+    crossOriginEmbedderPolicy: false,      // needed for Supabase Storage files to load
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // needed for embedded widgets and public chat page
+  }),
+);
 
 // ── Request ID (before pinoHttp so the logger picks it up) ───────────────────
 app.use((req: Request, res: Response, next: NextFunction) => {
