@@ -290,26 +290,84 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
 
   const { sb } = result;
 
-  const { data, error } = await sb
-    .from("profiles")
-    .select("plan");
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  if (error) {
-    req.log.error({ err: error }, "failed to fetch profiles for revenue");
+  const [profilesRes, paymentsRes, recentRes, authRes] = await Promise.all([
+    sb.from("profiles").select("plan"),
+    // All successful payments (amount + created_at for totals)
+    sb.from("payments").select("amount, created_at").eq("status", "success"),
+    // Last 5 successful payments for the table
+    sb.from("payments")
+      .select("id, user_id, plan, amount, created_at")
+      .eq("status", "success")
+      .order("created_at", { ascending: false })
+      .limit(5),
+    sb.auth.admin.listUsers({ perPage: 1000 }),
+  ]);
+
+  if (profilesRes.error) {
+    req.log.error({ err: profilesRes.error }, "failed to fetch profiles for revenue");
     res.status(500).json({ error: "Failed to fetch revenue data" });
     return;
   }
 
+  // ── Plan counts ────────────────────────────────────────────────────────────
   type ProfileRow = { plan: string | null };
-  const rows = (data as ProfileRow[]) ?? [];
+  const rows = (profilesRes.data as ProfileRow[]) ?? [];
 
   const freeUsers     = rows.filter((r) => !r.plan || r.plan === "free").length;
+  const starterUsers  = rows.filter((r) => r.plan === "starter").length;
   const proUsers      = rows.filter((r) => r.plan === "pro").length;
   const businessUsers = rows.filter((r) => r.plan === "business").length;
-  const monthlyRevenue = proUsers * 29 + businessUsers * 99;
 
-  req.log.info({ freeUsers, proUsers, businessUsers, monthlyRevenue }, "admin revenue fetched");
-  res.json({ freeUsers, proUsers, businessUsers, monthlyRevenue });
+  // MRR estimate in Naira based on current subscriptions
+  const monthlyRevenue = starterUsers * 8000 + proUsers * 24000 + businessUsers * 56000;
+
+  // ── Actual payment totals ──────────────────────────────────────────────────
+  type PaymentRow = { amount: number; created_at: string };
+  const allPayments = (paymentsRes.data as PaymentRow[]) ?? [];
+
+  // Amounts stored in kobo — convert to naira
+  const totalRevenue = allPayments.reduce((sum, p) => sum + p.amount, 0) / 100;
+  const revenueThisMonth = allPayments
+    .filter((p) => p.created_at >= startOfMonth)
+    .reduce((sum, p) => sum + p.amount, 0) / 100;
+  const totalTransactions = allPayments.length;
+
+  // ── Recent payments with email lookup ─────────────────────────────────────
+  type RecentRow = { id: string; user_id: string; plan: string; amount: number; created_at: string };
+  const recentRows = (recentRes.data as RecentRow[]) ?? [];
+
+  const emailMap = new Map<string, string>();
+  for (const u of authRes.data?.users ?? []) {
+    emailMap.set(u.id, u.email ?? "");
+  }
+
+  const recentPayments = recentRows.map((p) => ({
+    id:         p.id,
+    email:      emailMap.get(p.user_id) ?? "unknown",
+    plan:       p.plan,
+    amount:     p.amount / 100,   // naira
+    created_at: p.created_at,
+  }));
+
+  req.log.info(
+    { freeUsers, starterUsers, proUsers, businessUsers, totalRevenue, totalTransactions },
+    "admin revenue fetched",
+  );
+
+  res.json({
+    freeUsers,
+    starterUsers,
+    proUsers,
+    businessUsers,
+    monthlyRevenue,
+    totalRevenue,
+    revenueThisMonth,
+    totalTransactions,
+    recentPayments,
+  });
 });
 
 // ─── PATCH /api/admin/users/:id/plan ─────────────────────────────────────────
