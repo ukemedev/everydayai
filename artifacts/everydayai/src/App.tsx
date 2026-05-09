@@ -20,6 +20,7 @@ import AdminAutomations from "@/pages/AdminAutomations";
 import AdminRevenue from "@/pages/AdminRevenue";
 import AdminBlog from "@/pages/AdminBlog";
 import Pricing from "@/pages/Pricing";
+import Billing from "@/pages/Billing";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,9 @@ function Router() {
       </Route>
       <Route path="/automations">
         {() => <ProtectedRoute component={Automations} />}
+      </Route>
+      <Route path="/billing">
+        {() => <ProtectedRoute component={Billing} />}
       </Route>
       <Route path="/chat/:agentId" component={Chat} />
       <Route path="/admin">

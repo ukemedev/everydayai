@@ -7,7 +7,8 @@ const navItems = [
   { id: "learn",       icon: "📚", label: "Learn",       path: "/dashboard" },
   { id: "studio",      icon: "🎛️", label: "Studio",      path: "/dashboard" },
   { id: "automations", icon: "⚡", label: "Automations", path: "/automations" },
-  { id: "settings",    icon: "⚙️", label: "Settings",    path: "/settings" },
+  { id: "billing",     icon: "💳", label: "Billing",     path: "/billing"    },
+  { id: "settings",    icon: "⚙️", label: "Settings",    path: "/settings"   },
 ];
 
 interface AppLayoutProps {

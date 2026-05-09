@@ -10,6 +10,7 @@ import blogRouter from "./blog";
 import agentsRouter from "./agents";
 import paystackRouter from "./paystack";
 import keysRouter from "./keys";
+import billingRouter from "./billing";
 import {
   generalLimiter,
   chatLimiter,
@@ -50,6 +51,9 @@ router.use("/automations", ((req, res, next) => {
 // All keys routes
 router.use("/keys", requireAuth as RequestHandler);
 
+// Billing route
+router.use("/billing", requireAuth as RequestHandler);
+
 // ── Routers ───────────────────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(chatRouter);
@@ -62,5 +66,6 @@ router.use(blogRouter);
 router.use(agentsRouter);
 router.use(paystackRouter);
 router.use(keysRouter);
+router.use(billingRouter);
 
 export default router;
