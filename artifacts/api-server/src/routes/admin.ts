@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { logAudit } from "../lib/auditLog.js";
 
 const router = Router();
 
@@ -14,7 +15,7 @@ function getServiceClient() {
 async function requireAdmin(
   req: Request,
   res: Response
-): Promise<{ sb: NonNullable<ReturnType<typeof getServiceClient>> } | null> {
+): Promise<{ sb: NonNullable<ReturnType<typeof getServiceClient>>; adminUserId: string } | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
@@ -46,7 +47,7 @@ async function requireAdmin(
     return null;
   }
 
-  return { sb };
+  return { sb, adminUserId: user.id };
 }
 
 // ─── GET /api/admin/verify ────────────────────────────────────────────────────
@@ -149,7 +150,7 @@ router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => 
   const result = await requireAdmin(req, res);
   if (!result) return;
 
-  const { sb } = result;
+  const { sb, adminUserId } = result;
   const { id } = req.params as { id: string };
 
   // Get current state
@@ -179,6 +180,15 @@ router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => 
   }
 
   req.log.info({ userId: id, suspended: newSuspended }, "user suspend toggled");
+
+  void logAudit({
+    user_id:     adminUserId,
+    action:      newSuspended ? "user_suspended" : "user_unsuspended",
+    resource:    "user",
+    resource_id: id,
+    req,
+  });
+
   res.json({ suspended: newSuspended });
 });
 
@@ -375,7 +385,7 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
 router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
-  const { sb } = result;
+  const { sb, adminUserId } = result;
   const { id } = req.params as { id: string };
 
   const VALID_PLANS = ["free", "starter", "pro", "business"] as const;
@@ -385,6 +395,15 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
     res.status(400).json({ error: `plan must be one of: ${VALID_PLANS.join(", ")}` });
     return;
   }
+
+  // Fetch current plan before update (for audit metadata)
+  const { data: currentProfile } = await sb
+    .from("profiles")
+    .select("plan")
+    .eq("id", id)
+    .maybeSingle();
+
+  const oldPlan = (currentProfile as { plan?: string } | null)?.plan ?? "free";
 
   const { error } = await sb
     .from("profiles")
@@ -398,6 +417,16 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
   }
 
   req.log.info({ userId: id, plan }, "user plan updated");
+
+  void logAudit({
+    user_id:     adminUserId,
+    action:      "plan_changed",
+    resource:    "user",
+    resource_id: id,
+    metadata:    { oldPlan, newPlan: plan },
+    req,
+  });
+
   res.json({ plan });
 });
 
@@ -452,6 +481,65 @@ router.patch("/admin/settings", async (req: Request, res: Response) => {
 
   req.log.info({ pricingEnabled: data.pricing_enabled }, "platform settings updated");
   res.json({ pricingEnabled: data.pricing_enabled });
+});
+
+// ─── GET /api/admin/audit ─────────────────────────────────────────────────────
+
+router.get("/admin/audit", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+
+  const { data: logs, error } = await sb
+    .from("audit_logs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    req.log.error({ err: error }, "failed to fetch audit logs");
+    res.status(500).json({ error: "Failed to fetch audit logs" });
+    return;
+  }
+
+  // Build email map from auth users for all distinct user_ids in these logs
+  type AuditRow = {
+    id: string;
+    user_id: string | null;
+    action: string;
+    resource: string | null;
+    resource_id: string | null;
+    metadata: Record<string, unknown> | null;
+    ip_address: string | null;
+    user_agent: string | null;
+    created_at: string;
+  };
+
+  const auditRows = (logs ?? []) as AuditRow[];
+  const distinctUserIds = [...new Set(auditRows.map((l) => l.user_id).filter(Boolean))] as string[];
+
+  const emailMap = new Map<string, string>();
+  if (distinctUserIds.length > 0) {
+    const { data: authRes } = await sb.auth.admin.listUsers({ perPage: 1000 });
+    for (const u of authRes?.users ?? []) {
+      emailMap.set(u.id, u.email ?? "");
+    }
+  }
+
+  const enrichedLogs = auditRows.map((l) => ({
+    id:          l.id,
+    user_id:     l.user_id,
+    user_email:  l.user_id ? (emailMap.get(l.user_id) ?? "unknown") : "system",
+    action:      l.action,
+    resource:    l.resource,
+    resource_id: l.resource_id,
+    metadata:    l.metadata,
+    ip_address:  l.ip_address,
+    created_at:  l.created_at,
+  }));
+
+  req.log.info({ count: enrichedLogs.length }, "admin audit logs fetched");
+  res.json({ logs: enrichedLogs });
 });
 
 export default router;

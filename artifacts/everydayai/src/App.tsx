@@ -19,6 +19,7 @@ import AdminAgents from "@/pages/AdminAgents";
 import AdminAutomations from "@/pages/AdminAutomations";
 import AdminRevenue from "@/pages/AdminRevenue";
 import AdminBlog from "@/pages/AdminBlog";
+import AdminAuditLog from "@/pages/AdminAuditLog";
 import Pricing from "@/pages/Pricing";
 import Billing from "@/pages/Billing";
 
@@ -64,6 +65,9 @@ function Router() {
       </Route>
       <Route path="/admin/revenue">
         {() => <AdminRoute component={AdminRevenue} />}
+      </Route>
+      <Route path="/admin/audit">
+        {() => <AdminRoute component={AdminAuditLog} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

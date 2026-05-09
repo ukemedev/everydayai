@@ -3,6 +3,7 @@ import type { Request, Response, RequestHandler } from "express";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { validateUpload, sanitizeFilename } from "../lib/fileValidation.js";
+import { logAudit } from "../lib/auditLog.js";
 
 const router = Router();
 
@@ -114,6 +115,16 @@ router.post(
       { userId, agentId: agentId.trim(), storagePath, fileName: sanitizedName, size: req.file.size },
       "document uploaded successfully"
     );
+
+    void logAudit({
+      user_id:     userId,
+      action:      "document_uploaded",
+      resource:    "document",
+      resource_id: (docRecord as { id: string }).id,
+      metadata:    { fileName: sanitizedName, agentId: agentId.trim(), size: req.file.size },
+      req,
+    });
+
     res.status(201).json({ document: docRecord });
   }
 );

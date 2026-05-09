@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { logAudit } from "../lib/auditLog.js";
 
 const router = Router();
 
@@ -169,6 +170,14 @@ router.post("/payments/paystack/webhook", async (req: Request, res: Response) =>
     });
 
     req.log.info({ userId: resolvedUserId, plan, reference }, "Plan upgraded via Paystack webhook");
+
+    void logAudit({
+      user_id:     resolvedUserId,
+      action:      "payment_received",
+      resource:    "payment",
+      metadata:    { plan, amount: amount / 100, reference },
+      req,
+    });
   } catch (err) {
     req.log.error({ err, reference }, "Paystack webhook processing error");
   }

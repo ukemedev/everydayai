@@ -7,6 +7,7 @@ import {
   Zap,
   Newspaper,
   BarChart2,
+  Shield,
   ArrowLeft,
   X,
   Menu,
@@ -19,6 +20,7 @@ const navItems = [
   { id: "automations", icon: Zap,        label: "Automations", path: "/admin/automations" },
   { id: "blog",        icon: Newspaper,  label: "Blog",        path: "/admin/blog" },
   { id: "revenue",     icon: BarChart2,  label: "Revenue",     path: "/admin/revenue" },
+  { id: "audit",       icon: Shield,     label: "Audit Log",   path: "/admin/audit" },
 ];
 
 interface AdminLayoutProps {

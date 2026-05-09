@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { getUserPlan, PLAN_LIMITS } from "../lib/planLimits.js";
+import { logAudit } from "../lib/auditLog.js";
 
 const router = Router();
 
@@ -91,6 +92,15 @@ router.post("/agents", async (req: Request, res: Response) => {
   }
 
   req.log.info({ agentId: data.id, userId, plan }, "agent created");
+
+  void logAudit({
+    user_id:     userId,
+    action:      "agent_created",
+    resource:    "agent",
+    resource_id: (data as { id: string }).id,
+    req,
+  });
+
   res.status(201).json({ agent: data });
 });
 

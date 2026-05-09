@@ -12,6 +12,7 @@ import { sanitizeText, validateMessageLength, detectPromptInjection } from "../l
 import { appendToSheet } from "../lib/googleSheets.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendEmail } from "../lib/gmail.js";
+import { logAudit } from "../lib/auditLog.js";
 
 function extractSpreadsheetId(url: string): string {
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -647,6 +648,14 @@ router.post("/chat", async (req: Request, res: Response) => {
           // Non-fatal — chat already succeeded
         }
       }
+
+      void logAudit({
+        user_id:     userId.trim(),
+        action:      "message_sent",
+        resource:    "agent",
+        resource_id: agentId?.trim() || undefined,
+        req,
+      });
     }
 
     res.json({ reply, toolCalls: toolCallResults.length > 0 ? toolCallResults : null });
