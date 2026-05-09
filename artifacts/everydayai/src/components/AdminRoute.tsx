@@ -26,13 +26,28 @@ export default function AdminRoute({ component: Component }: AdminRouteProps) {
           },
         });
 
+        let body: unknown = null;
+        try {
+          body = await res.clone().json();
+        } catch {
+          body = await res.clone().text();
+        }
+
+        console.log("[AdminRoute] verify response", {
+          status: res.status,
+          ok: res.ok,
+          body,
+          userId: session.user?.id,
+        });
+
         if (res.ok) {
           setStatus("allowed");
         } else {
           setStatus("denied");
           navigate("/dashboard");
         }
-      } catch {
+      } catch (err) {
+        console.error("[AdminRoute] verify fetch error", err);
         setStatus("denied");
         navigate("/dashboard");
       }
