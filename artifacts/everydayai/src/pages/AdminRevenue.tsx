@@ -66,23 +66,24 @@ interface PlanCardProps {
 function PlanCard({ label, price, count, accentColor, bgColor, borderColor }: PlanCardProps) {
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl p-5"
+      className="flex flex-col gap-3 rounded-xl p-4 overflow-hidden"
       style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold" style={{ color: accentColor }}>
+      {/* Label and badge stack vertically so the badge never overflows */}
+      <div className="flex flex-col gap-1.5 min-w-0">
+        <span className="text-sm font-semibold leading-tight" style={{ color: accentColor }}>
           {label}
         </span>
         {price && (
           <span
-            className="text-xs px-2 py-0.5 rounded-full font-medium"
+            className="self-start text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
             style={{ backgroundColor: borderColor, color: accentColor }}
           >
             {price}/mo
           </span>
         )}
       </div>
-      <p className="text-3xl font-bold text-white">{count.toLocaleString()}</p>
+      <p className="text-3xl font-bold text-white leading-none">{count.toLocaleString()}</p>
       <p className="text-xs" style={{ color: "rgba(255,255,255,0.40)" }}>
         {count === 1 ? "user" : "users"}
       </p>
@@ -95,7 +96,7 @@ function PlanCard({ label, price, count, accentColor, bgColor, borderColor }: Pl
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div
-      className="flex flex-col gap-1.5 rounded-xl p-5 flex-1"
+      className="flex flex-col gap-1.5 rounded-xl p-5 flex-1 overflow-hidden min-w-0"
       style={{
         backgroundColor: "rgba(59,91,252,0.07)",
         border: "1px solid rgba(59,91,252,0.18)",
@@ -104,7 +105,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
       <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.40)" }}>
         {label}
       </p>
-      <p className="text-3xl font-bold" style={{ color: "#3b5bfc" }}>{value}</p>
+      <p className="text-2xl sm:text-3xl font-bold break-words min-w-0" style={{ color: "#3b5bfc" }}>{value}</p>
       {sub && <p className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>{sub}</p>}
     </div>
   );
@@ -159,7 +160,7 @@ export default function AdminRevenue() {
           <div className="mt-8 flex flex-col gap-6">
 
             {/* ── Plan user counts ──────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <PlanCard
                 label="Free"
                 price={null}
@@ -196,7 +197,7 @@ export default function AdminRevenue() {
 
             {/* ── MRR summary ───────────────────────────────────────────── */}
             <div
-              className="rounded-xl p-6 flex flex-col gap-2"
+              className="rounded-xl p-6 flex flex-col gap-2 overflow-hidden min-w-0"
               style={{
                 border: "1px solid rgba(16,185,129,0.20)",
                 backgroundColor: "rgba(16,185,129,0.05)",
@@ -206,7 +207,10 @@ export default function AdminRevenue() {
                 style={{ color: "rgba(255,255,255,0.40)" }}>
                 Monthly Recurring Revenue (estimated)
               </p>
-              <p className="text-4xl font-bold" style={{ color: "#10b981" }}>
+              <p
+                className="text-3xl sm:text-4xl font-bold break-words min-w-0"
+                style={{ color: "#10b981" }}
+              >
                 {formatNaira(data.monthlyRevenue)}
               </p>
               <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
