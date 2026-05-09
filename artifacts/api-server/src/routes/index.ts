@@ -12,6 +12,7 @@ import paystackRouter from "./paystack";
 import keysRouter from "./keys";
 import billingRouter from "./billing";
 import documentsRouter from "./documents";
+import devbotRouter from "./devbot";
 import {
   generalLimiter,
   chatLimiter,
@@ -72,5 +73,6 @@ router.use(paystackRouter);
 router.use(keysRouter);
 router.use(billingRouter);
 router.use(documentsRouter);
+router.use(devbotRouter);
 
 export default router;
