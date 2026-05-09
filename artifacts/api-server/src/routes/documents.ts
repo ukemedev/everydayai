@@ -46,9 +46,9 @@ router.post(
       return;
     }
 
-    const { agentId } = req.body as { agentId?: string };
+    const { agent_id: agentId } = req.body as { agent_id?: string };
     if (!agentId?.trim()) {
-      res.status(400).json({ error: "agentId is required" });
+      res.status(400).json({ error: "agent_id is required" });
       return;
     }
 

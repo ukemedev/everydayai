@@ -1874,65 +1874,52 @@ export default function Studio() {
     setUploading(true);
     setUploadError("");
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       setUploadError("Not authenticated.");
       setUploading(false);
       return;
     }
 
-    const MAX_SIZE = 5 * 1024 * 1024;
-    if (stagedFile.size > MAX_SIZE) {
-      setUploadError("File is too large. Maximum size is 5 MB.");
+    const formData = new FormData();
+    formData.append("file", stagedFile);
+    formData.append("agent_id", agent.id);
+
+    let res: Response;
+    try {
+      res = await fetch("/api/documents/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      });
+    } catch {
+      setUploadError("Upload failed. Please try again.");
       setUploading(false);
       return;
     }
 
-    const ext = stagedFile.name.split(".").pop()?.toLowerCase();
-    const allowedExts = ["pdf", "txt", "docx"];
-    if (!ext || !allowedExts.includes(ext)) {
-      setUploadError("Only PDF, TXT, and DOCX files are allowed.");
+    if (!res.ok) {
+      let errorCode = "";
+      try {
+        const body = await res.json() as { error?: string };
+        errorCode = body.error ?? "";
+      } catch { /* ignore parse errors */ }
+
+      if (res.status === 413 || errorCode === "FILE_TOO_LARGE") {
+        setUploadError("File is too large. Maximum size is 10MB.");
+      } else if (errorCode === "FILE_TYPE_NOT_ALLOWED") {
+        setUploadError("File type not allowed. Only PDF, TXT and DOCX files are accepted.");
+      } else if (errorCode === "FILE_CONTENT_MISMATCH") {
+        setUploadError("File content does not match its extension. Please upload a valid file.");
+      } else {
+        setUploadError("Upload failed. Please try again.");
+      }
       setUploading(false);
       return;
     }
 
-    const cleanBase = stagedFile.name
-      .replace(/\.\.[/\\]/g, "")
-      .replace(/[^a-zA-Z0-9._-]/g, "_");
-    const safeName = `${Date.now()}_${cleanBase}`;
-    const storagePath = `${user.id}/${agent.id}/${safeName}`;
-
-    const { error: storageError } = await supabase.storage
-      .from("documents")
-      .upload(storagePath, stagedFile, { upsert: false });
-
-    if (storageError) {
-      setUploadError("Upload failed: " + storageError.message);
-      setUploading(false);
-      return;
-    }
-
-    const { data: docRecord, error: dbError } = await supabase
-      .from("documents")
-      .insert({
-        agent_id: agent.id,
-        user_id: user.id,
-        file_name: stagedFile.name,
-        file_size: stagedFile.size,
-        file_type: ext ?? null,
-        storage_path: storagePath,
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      await supabase.storage.from("documents").remove([storagePath]);
-      setUploadError("Failed to save record: " + dbError.message);
-      setUploading(false);
-      return;
-    }
-
-    setDocuments((prev) => [docRecord as Document, ...prev]);
+    const { document: docRecord } = await res.json() as { document: Document };
+    setDocuments((prev) => [docRecord, ...prev]);
     setStagedFile(null);
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
