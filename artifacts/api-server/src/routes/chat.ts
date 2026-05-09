@@ -394,12 +394,32 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
-  // Resolve API key. If none provided (public/shared chat), auto-fetch owner's key via service role.
-  let resolvedApiKey    = apiKey?.trim() ?? "";
+  // Resolve API key — never trust a key sent from the frontend (it may be an encrypted blob).
+  // Always look it up server-side so we can decrypt it properly.
+  let resolvedApiKey    = "";          // always start empty — ignore any apiKey from the client
   let resolvedModel     = model?.trim()    || "gpt-4o-mini";
   let resolvedProvider  = provider?.trim() || "openai";
   let baseInstructions  = instructions?.trim() || "You are a helpful assistant.";
 
+  // 1. Studio session — look up the current user's own key (decrypted) using the userId they sent.
+  if (!resolvedApiKey && userId?.trim()) {
+    const sb = getServiceClient();
+    if (sb) {
+      const { data: keyRow } = await sb
+        .from("api_keys")
+        .select("api_key")
+        .eq("user_id", userId.trim())
+        .eq("provider", resolvedProvider)
+        .maybeSingle();
+      if (keyRow?.api_key) {
+        const { decrypt, isEncrypted } = await import("../lib/encryption.js");
+        const raw = keyRow.api_key as string;
+        resolvedApiKey = isEncrypted(raw) ? decrypt(raw) : raw;
+      }
+    }
+  }
+
+  // 2. Public / shared chat — agent must be live; use the agent owner's key.
   if (!resolvedApiKey && agentId?.trim()) {
     const sb = getServiceClient();
     if (sb) {
@@ -428,7 +448,10 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
-  if (!resolvedApiKey) { res.status(400).json({ error: "apiKey is required" }); return; }
+  if (!resolvedApiKey) {
+    res.status(400).json({ error: "NO_API_KEY", provider: resolvedProvider });
+    return;
+  }
 
   const history: ConversationMessage[] = Array.isArray(conversationHistory) ? conversationHistory : [];
 

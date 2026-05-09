@@ -266,28 +266,15 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
 
     const provider = getProviderForModel(model);
 
-    // Fetch the user's API key for this provider from Supabase
-    const { data: keyData } = await supabase
-      .from("api_keys")
-      .select("api_key")
-      .eq("provider", provider)
-      .maybeSingle();
-
-    if (!keyData?.api_key) {
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "agent", type: "no-key", provider, text: "" },
-      ]);
-      setIsTyping(false);
-      return;
-    }
-
     // Build conversation history in OpenAI format (all previous messages)
     const conversationHistory = messages.map((m) => ({
       role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
       content: m.text,
     }));
 
+    // Do NOT fetch or send the API key from the frontend — the backend looks it up
+    // server-side and decrypts it. Sending the key from here would transmit an
+    // encrypted blob that Groq/OpenAI etc. would reject.
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -297,7 +284,6 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
           instructions: instructions.trim() || "You are a helpful assistant.",
           model,
           provider,
-          apiKey: keyData.api_key,
           conversationHistory,
           agentId,
           userId,
@@ -313,6 +299,14 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
       };
 
       if (!res.ok) {
+        if (data.error === "NO_API_KEY") {
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "agent", type: "no-key", provider, text: "" },
+          ]);
+          setIsTyping(false);
+          return;
+        }
         if (data.error === "MESSAGE_LIMIT_REACHED") {
           setMessages((prev) => [
             ...prev,
