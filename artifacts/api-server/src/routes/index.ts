@@ -11,6 +11,7 @@ import agentsRouter from "./agents";
 import paystackRouter from "./paystack";
 import keysRouter from "./keys";
 import billingRouter from "./billing";
+import documentsRouter from "./documents";
 import {
   generalLimiter,
   chatLimiter,
@@ -54,6 +55,9 @@ router.use("/keys", requireAuth as RequestHandler);
 // Billing route
 router.use("/billing", requireAuth as RequestHandler);
 
+// Documents upload route
+router.use("/documents", requireAuth as RequestHandler);
+
 // ── Routers ───────────────────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(chatRouter);
@@ -67,5 +71,6 @@ router.use(agentsRouter);
 router.use(paystackRouter);
 router.use(keysRouter);
 router.use(billingRouter);
+router.use(documentsRouter);
 
 export default router;
