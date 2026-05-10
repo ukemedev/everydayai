@@ -16,6 +16,8 @@ import { runHealthCheck, getLastHealthResult } from "../lib/errorMonitor.js";
 import { generateWeeklyReport, sendWeeklyReportTelegram } from "../lib/weeklyReport.js";
 import { saveMessage, searchMemory, getLessons } from "../lib/devbotMemory.js";
 import { buildContext } from "../lib/devbotSession.js";
+import { runTest } from "../lib/devbotTester.js";
+import { getEndpointForFile } from "../lib/devbotEndpointMap.js";
 
 const router = Router();
 
@@ -150,6 +152,7 @@ interface WriteBody {
   content?: string;
   message?: string;
   branch?: string;
+  sessionId?: string;
 }
 
 interface DeployBody {
@@ -314,7 +317,7 @@ router.post("/devbot/write", async (req: Request, res: Response) => {
     return;
   }
 
-  const { path, content, message, branch } = req.body as WriteBody;
+  const { path, content, message, branch, sessionId: writeSessionId } = req.body as WriteBody;
 
   if (!path?.trim()) {
     res.status(400).json({ error: "path is required" });
@@ -349,7 +352,27 @@ router.post("/devbot/write", async (req: Request, res: Response) => {
     );
 
     req.log.info({ path: path.trim(), branch: targetBranch, sha }, "devbot file written");
-    res.json({ success: true, commitUrl, branch: targetBranch, sha });
+
+    // ── Auto-test the affected endpoint ───────────────────────────────────────
+    let testSummary = "";
+    const testTarget = getEndpointForFile(path.trim());
+    if (testTarget) {
+      const result = await runTest(
+        writeSessionId ?? `write_${Date.now()}`,
+        path.trim(),
+        testTarget.endpoint,
+        testTarget.method,
+      );
+      testSummary = result.passed
+        ? `✅ Auto-test passed: ${testTarget.endpoint} returned ${result.status}`
+        : `❌ Auto-test FAILED: ${testTarget.endpoint} returned ${result.status}\nPreview: ${result.preview}`;
+      req.log.info(
+        { passed: result.passed, endpoint: testTarget.endpoint, status: result.status },
+        "devbot auto-test completed",
+      );
+    }
+
+    res.json({ success: true, commitUrl, branch: targetBranch, sha, testSummary });
   } catch (err) {
     req.log.error({ err, path }, "devbot write failed");
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to write file" });
@@ -489,6 +512,33 @@ router.get("/devbot/lessons", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot lessons fetch failed");
     res.status(500).json({ error: "Failed to fetch lessons" });
+  }
+});
+
+// ── GET /api/devbot/tests ─────────────────────────────────────────────────────
+// Returns last 20 auto-test results ordered by tested_at desc.
+
+router.get("/devbot/tests", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const sb = getServiceClient();
+    if (!sb) {
+      res.status(503).json({ error: "Service unavailable" });
+      return;
+    }
+    const { data, error } = await sb
+      .from("devbot_test_results")
+      .select("id, session_id, file_changed, endpoint_tested, http_status, passed, response_preview, tested_at")
+      .order("tested_at", { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    req.log.info({ count: (data ?? []).length }, "devbot tests fetched");
+    res.json({ rows: data ?? [] });
+  } catch (err) {
+    req.log.error({ err }, "devbot tests fetch failed");
+    res.status(500).json({ error: "Failed to fetch test results" });
   }
 });
 

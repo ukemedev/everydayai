@@ -3,7 +3,7 @@ import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
   AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
-  Database,
+  Database, FlaskConical,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -68,6 +68,17 @@ interface LessonRow {
   lesson: string;
   applied_count: number;
   created_at: string;
+}
+
+interface TestResultRow {
+  id: string;
+  session_id: string;
+  file_changed: string;
+  endpoint_tested: string;
+  http_status: number;
+  passed: boolean;
+  response_preview: string;
+  tested_at: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1022,6 +1033,11 @@ export default function AdminDevBot() {
   const [memoryRows, setMemoryRows]           = useState<MemoryRow[]>([]);
   const [lessonRows, setLessonRows]           = useState<LessonRow[]>([]);
 
+  // Tests panel state
+  const [showTests, setShowTests]             = useState(false);
+  const [testsLoading, setTestsLoading]       = useState(false);
+  const [testRows, setTestRows]               = useState<TestResultRow[]>([]);
+
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1083,17 +1099,20 @@ export default function AdminDevBot() {
       const res = await fetch("/api/devbot/write", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ path: filePath, content, message: commitMessage, branch: currentBranch }),
+        body: JSON.stringify({ path: filePath, content, message: commitMessage, branch: currentBranch, sessionId }),
       });
       if (!res.ok) {
         const err = await res.json() as { error?: string };
         throw new Error(err.error ?? `HTTP ${res.status}`);
       }
-      const data = await res.json() as { success: boolean; commitUrl: string; branch: string };
+      const data = await res.json() as { success: boolean; commitUrl: string; branch: string; testSummary?: string };
       setCurrentBranch(data.branch);
       setSessionChanges((prev) => [...prev, { path: filePath, commitUrl: data.commitUrl }]);
       setApplyModal(null);
       setDeployStatus("idle");
+      if (data.testSummary) {
+        setMessages((prev) => [...prev, { role: "assistant", content: data.testSummary as string }]);
+      }
     } catch (err) {
       setApplyError(err instanceof Error ? err.message : "Failed to commit change");
     } finally {
@@ -1187,6 +1206,23 @@ export default function AdminDevBot() {
       setReportSending(false);
     }
   }
+
+  // ── Fetch tests panel data ─────────────────────────────────────────────────
+  const fetchTests = useCallback(async () => {
+    setTestsLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/tests", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { rows: TestResultRow[] };
+        setTestRows(d.rows ?? []);
+      }
+    } catch { /* silent */ } finally {
+      setTestsLoading(false);
+    }
+  }, []);
 
   // ── Fetch memory panel data ────────────────────────────────────────────────
   const fetchMemory = useCallback(async () => {
@@ -1324,6 +1360,25 @@ export default function AdminDevBot() {
                 </div>
               )}
             </div>
+
+            {/* Tests button */}
+            <button
+              onClick={() => {
+                setShowTests((v) => !v);
+                if (!showTests) void fetchTests();
+              }}
+              title="Auto-test results"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+              style={{
+                backgroundColor: showTests ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {testsLoading
+                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
+                : <FlaskConical size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
+              }
+            </button>
 
             {/* Memory button */}
             <button
@@ -1742,6 +1797,128 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── Tests side panel ── */}
+      {showTests && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.50)" }}
+          onClick={() => setShowTests(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(300px, 42vw, 520px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Panel header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <FlaskConical size={14} style={{ color: "#10b981" }} />
+                <span className="text-sm font-semibold text-white">Auto-Test Results</span>
+                {testRows.length > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-medium"
+                    style={{ backgroundColor: "rgba(16,185,129,0.15)", color: "#10b981" }}
+                  >
+                    {testRows.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchTests()}
+                  disabled={testsLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={testsLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowTests(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Panel content */}
+            <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6">
+              {testsLoading && testRows.length === 0 && (
+                <div className="flex items-center gap-2 py-6" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs">Loading test results…</span>
+                </div>
+              )}
+
+              {!testsLoading && testRows.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <FlaskConical size={28} style={{ color: "rgba(255,255,255,0.15)" }} />
+                  <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>No tests run yet</p>
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.22)" }}>
+                    Tests run automatically after every file write via Apply Change.
+                  </p>
+                </div>
+              )}
+
+              {testRows.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {testRows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex flex-col gap-1.5 px-3.5 py-3 rounded-xl"
+                      style={{
+                        backgroundColor: row.passed ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
+                        border: row.passed ? "1px solid rgba(16,185,129,0.18)" : "1px solid rgba(239,68,68,0.18)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        {row.passed
+                          ? <CheckCircle2 size={13} style={{ color: "#10b981", flexShrink: 0 }} />
+                          : <AlertCircle   size={13} style={{ color: "#ef4444", flexShrink: 0 }} />
+                        }
+                        <span
+                          className="text-xs font-semibold"
+                          style={{ color: row.passed ? "#10b981" : "#ef4444" }}
+                        >
+                          {row.passed ? "PASSED" : "FAILED"}
+                        </span>
+                        <span
+                          className="ml-auto text-xs font-mono px-1.5 py-0.5 rounded"
+                          style={{
+                            backgroundColor: row.passed ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+                            color: row.passed ? "#10b981" : "#ef4444",
+                          }}
+                        >
+                          {row.http_status || "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-mono truncate" style={{ color: "rgba(255,255,255,0.65)" }} title={row.endpoint_tested}>
+                          {row.endpoint_tested}
+                        </span>
+                      </div>
+                      <div className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }} title={row.file_changed}>
+                        📄 {row.file_changed.length > 40 ? "…" + row.file_changed.slice(-40) : row.file_changed}
+                      </div>
+                      <div className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
+                        {new Date(row.tested_at).toLocaleString("en-GB", {
+                          day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Memory side panel ── */}
