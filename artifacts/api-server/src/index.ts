@@ -4,11 +4,11 @@ import { migrateUnencryptedKeys } from "./routes/keys";
 import { startMonitor } from "./lib/errorMonitor";
 import { startWeeklyReportScheduler } from "./lib/weeklyReport";
 
-const rawPort = process.env["PORT"];
+const rawPort = process.env["API_PORT"] ?? process.env["PORT"];
 
 if (!rawPort) {
   throw new Error(
-    "PORT environment variable is required but was not provided.",
+    "API_PORT (or PORT) environment variable is required but was not provided.",
   );
 }
 
