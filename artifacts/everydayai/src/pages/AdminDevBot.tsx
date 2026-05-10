@@ -3,7 +3,7 @@ import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
   AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
-  Database, FlaskConical, Clock, RotateCcw, Terminal, ChevronDown, ChevronUp,
+  Database, FlaskConical, Clock, RotateCcw, Terminal, ChevronDown, ChevronUp, LayoutGrid,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -1063,6 +1063,10 @@ export default function AdminDevBot() {
   const [historyLoading, setHistoryLoading]   = useState(false);
   const [historyRows, setHistoryRows]         = useState<RollbackRow[]>([]);
 
+  // Tools dropdown
+  const [showToolsMenu, setShowToolsMenu]     = useState(false);
+  const toolsMenuRef                          = useRef<HTMLDivElement>(null);
+
   // Terminal panel state
   const [showTerminal, setShowTerminal]       = useState(false);
   const [terminalLoading, setTerminalLoading] = useState(false);
@@ -1095,6 +1099,17 @@ export default function AdminDevBot() {
     }
     void loadFiles();
   }, []);
+
+  // ── Close Tools dropdown on outside click ─────────────────────────────────
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (toolsMenuRef.current && !toolsMenuRef.current.contains(e.target as Node)) {
+        setShowToolsMenu(false);
+      }
+    }
+    if (showToolsMenu) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showToolsMenu]);
 
   // ── Auto-scroll ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1478,81 +1493,85 @@ export default function AdminDevBot() {
               )}
             </div>
 
-            {/* Terminal button */}
-            <button
-              onClick={() => {
-                setShowTerminal((v) => !v);
-                if (!showTerminal) void fetchTerminalLogs();
-              }}
-              title="Terminal logs"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
-              style={{
-                backgroundColor: showTerminal ? "rgba(255,255,255,0.06)" : "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {terminalLoading
-                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
-                : <Terminal size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
-              }
-            </button>
+            {/* Tools dropdown */}
+            <div className="relative" ref={toolsMenuRef}>
+              <button
+                onClick={() => setShowToolsMenu((v) => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+                style={{
+                  backgroundColor: showToolsMenu ? "rgba(255,255,255,0.08)" : "transparent",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "rgba(255,255,255,0.55)",
+                }}
+              >
+                <LayoutGrid size={12} />
+                <span>Tools</span>
+                <ChevronDown size={10} className={`transition-transform ${showToolsMenu ? "rotate-180" : ""}`} />
+              </button>
 
-            {/* History (rollback) button */}
-            <button
-              onClick={() => {
-                setShowHistory((v) => !v);
-                if (!showHistory) void fetchRollbacks();
-              }}
-              title="Rollback history"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
-              style={{
-                backgroundColor: showHistory ? "rgba(255,255,255,0.06)" : "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {historyLoading
-                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
-                : <Clock size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
-              }
-            </button>
-
-            {/* Tests button */}
-            <button
-              onClick={() => {
-                setShowTests((v) => !v);
-                if (!showTests) void fetchTests();
-              }}
-              title="Auto-test results"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
-              style={{
-                backgroundColor: showTests ? "rgba(255,255,255,0.06)" : "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {testsLoading
-                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
-                : <FlaskConical size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
-              }
-            </button>
-
-            {/* Memory button */}
-            <button
-              onClick={() => {
-                setShowMemory((v) => !v);
-                if (!showMemory) void fetchMemory();
-              }}
-              title="Memory viewer"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
-              style={{
-                backgroundColor: showMemory ? "rgba(255,255,255,0.06)" : "transparent",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {memoryLoading
-                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
-                : <Database size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
-              }
-            </button>
+              {showToolsMenu && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 z-50 flex flex-col overflow-hidden"
+                  style={{
+                    backgroundColor: "#0a0f1e",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    borderRadius: "10px",
+                    minWidth: "148px",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+                  }}
+                >
+                  {[
+                    {
+                      label: "Memory",
+                      emoji: "🧠",
+                      loading: memoryLoading,
+                      active: showMemory,
+                      action: () => { setShowMemory((v) => !v); if (!showMemory) void fetchMemory(); },
+                    },
+                    {
+                      label: "Tests",
+                      emoji: "🧪",
+                      loading: testsLoading,
+                      active: showTests,
+                      action: () => { setShowTests((v) => !v); if (!showTests) void fetchTests(); },
+                    },
+                    {
+                      label: "History",
+                      emoji: "🕐",
+                      loading: historyLoading,
+                      active: showHistory,
+                      action: () => { setShowHistory((v) => !v); if (!showHistory) void fetchRollbacks(); },
+                    },
+                    {
+                      label: "Terminal",
+                      emoji: ">_",
+                      loading: terminalLoading,
+                      active: showTerminal,
+                      action: () => { setShowTerminal((v) => !v); if (!showTerminal) void fetchTerminalLogs(); },
+                    },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      onClick={() => { item.action(); setShowToolsMenu(false); }}
+                      className="flex items-center gap-2.5 px-3.5 py-2.5 text-left text-xs transition-colors"
+                      style={{
+                        color: item.active ? "#fff" : "rgba(255,255,255,0.65)",
+                        backgroundColor: item.active ? "rgba(255,255,255,0.06)" : "transparent",
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = "rgba(255,255,255,0.07)"; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = item.active ? "rgba(255,255,255,0.06)" : "transparent"; }}
+                    >
+                      {item.loading
+                        ? <Loader2 size={11} className="animate-spin" style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0 }} />
+                        : <span style={{ fontSize: "12px", lineHeight: 1, flexShrink: 0 }}>{item.emoji}</span>
+                      }
+                      <span>{item.label}</span>
+                      {item.active && <span className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: "#3b5bfc" }} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Reports button */}
             <button
