@@ -25,6 +25,7 @@ import {
   getAllSnapshots,
 } from "../lib/devbotRollback.js";
 import { runCommand, getTerminalLogs } from "../lib/devbotTerminal.js";
+import { captureError, getErrors, markResolved } from "../lib/devbotErrorCapture.js";
 
 const router = Router();
 
@@ -698,6 +699,82 @@ router.get("/devbot/tests", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot tests fetch failed");
     res.status(500).json({ error: "Failed to fetch test results" });
+  }
+});
+
+// ── POST /api/devbot/capture-error ───────────────────────────────────────────
+// Public — no auth. Called by the frontend error boundary and global listeners.
+
+router.post("/devbot/capture-error", async (req: Request, res: Response) => {
+  const { userId, userEmail, pageUrl, errorMessage, errorStack, component, severity } =
+    req.body as {
+      userId?: string; userEmail?: string; pageUrl?: string;
+      errorMessage?: string; errorStack?: string;
+      component?: string; severity?: string;
+    };
+
+  if (!pageUrl?.trim() || !errorMessage?.trim()) {
+    res.status(400).json({ error: "pageUrl and errorMessage are required" });
+    return;
+  }
+
+  try {
+    const id = await captureError({
+      userId, userEmail,
+      pageUrl: pageUrl.trim(),
+      errorMessage: errorMessage.trim(),
+      errorStack, component, severity,
+    });
+    req.log.info({ id, pageUrl, component }, "devbot error captured via API");
+    res.json({ success: true, id });
+  } catch (err) {
+    req.log.error({ err }, "devbot capture-error failed");
+    res.status(500).json({ error: "Failed to capture error" });
+  }
+});
+
+// ── GET /api/devbot/errors ────────────────────────────────────────────────────
+// Returns captured user errors. Optional ?resolved=true|false filter.
+
+router.get("/devbot/errors", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const resolvedParam = req.query["resolved"] as string | undefined;
+  const resolvedFilter =
+    resolvedParam === "true"  ? true  :
+    resolvedParam === "false" ? false : undefined;
+
+  try {
+    const rows = await getErrors(resolvedFilter);
+    req.log.info({ count: rows.length }, "devbot errors fetched");
+    res.json({ rows });
+  } catch (err) {
+    req.log.error({ err }, "devbot errors fetch failed");
+    res.status(500).json({ error: "Failed to fetch errors" });
+  }
+});
+
+// ── PATCH /api/devbot/errors/:id/resolve ─────────────────────────────────────
+// Marks a single error as resolved.
+
+router.patch("/devbot/errors/:id/resolve", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const { id } = req.params;
+  if (!id) {
+    res.status(400).json({ error: "id is required" });
+    return;
+  }
+
+  try {
+    await markResolved(id);
+    req.log.info({ id }, "devbot error marked resolved");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "devbot error resolve failed");
+    res.status(500).json({ error: "Failed to resolve error" });
   }
 });
 

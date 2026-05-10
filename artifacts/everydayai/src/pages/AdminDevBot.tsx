@@ -101,6 +101,19 @@ interface TerminalLog {
   created_at: string;
 }
 
+interface ErrorRow {
+  id: string;
+  user_id: string | null;
+  user_email: string | null;
+  page_url: string;
+  error_message: string;
+  error_stack: string | null;
+  component: string | null;
+  severity: string;
+  resolved: boolean;
+  created_at: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getToken(): Promise<string> {
@@ -1063,6 +1076,12 @@ export default function AdminDevBot() {
   const [historyLoading, setHistoryLoading]   = useState(false);
   const [historyRows, setHistoryRows]         = useState<RollbackRow[]>([]);
 
+  // Errors panel state
+  const [showErrors, setShowErrors]           = useState(false);
+  const [errorsLoading, setErrorsLoading]     = useState(false);
+  const [errorRows, setErrorRows]             = useState<ErrorRow[]>([]);
+  const [resolvingId, setResolvingId]         = useState<string | null>(null);
+
   // Tools dropdown
   const [showToolsMenu, setShowToolsMenu]     = useState(false);
   const toolsMenuRef                          = useRef<HTMLDivElement>(null);
@@ -1254,6 +1273,41 @@ export default function AdminDevBot() {
       setReportSending(false);
     }
   }
+
+  // ── Fetch user errors ─────────────────────────────────────────────────────
+  const fetchErrors = useCallback(async () => {
+    setErrorsLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/errors", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { rows: ErrorRow[] };
+        const rows = d.rows ?? [];
+        rows.sort((a, b) => Number(a.resolved) - Number(b.resolved));
+        setErrorRows(rows);
+      }
+    } catch { /* silent */ } finally {
+      setErrorsLoading(false);
+    }
+  }, []);
+
+  const resolveError = useCallback(async (id: string) => {
+    setResolvingId(id);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/devbot/errors/${id}/resolve`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setErrorRows((prev) => prev.map((r) => r.id === id ? { ...r, resolved: true } : r));
+      }
+    } catch { /* silent */ } finally {
+      setResolvingId(null);
+    }
+  }, []);
 
   // ── Fetch terminal logs ────────────────────────────────────────────────────
   const fetchTerminalLogs = useCallback(async () => {
@@ -1548,6 +1602,13 @@ export default function AdminDevBot() {
                       loading: terminalLoading,
                       active: showTerminal,
                       action: () => { setShowTerminal((v) => !v); if (!showTerminal) void fetchTerminalLogs(); },
+                    },
+                    {
+                      label: "Errors",
+                      emoji: "🚨",
+                      loading: errorsLoading,
+                      active: showErrors,
+                      action: () => { setShowErrors((v) => !v); if (!showErrors) void fetchErrors(); },
                     },
                   ].map((item) => (
                     <button
@@ -1971,6 +2032,158 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── Errors side panel ── */}
+      {showErrors && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+          onClick={() => setShowErrors(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(320px, 48vw, 620px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "14px" }}>🚨</span>
+                <span className="text-sm font-semibold text-white">User Errors</span>
+                {errorRows.filter((r) => !r.resolved).length > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-medium"
+                    style={{ backgroundColor: "rgba(239,68,68,0.15)", color: "#ef4444" }}
+                  >
+                    {errorRows.filter((r) => !r.resolved).length} open
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchErrors()}
+                  disabled={errorsLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={errorsLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowErrors(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6">
+              {errorsLoading && errorRows.length === 0 && (
+                <div className="flex items-center gap-2 py-6" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs">Loading errors…</span>
+                </div>
+              )}
+
+              {!errorsLoading && errorRows.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <CheckCircle2 size={28} style={{ color: "rgba(16,185,129,0.30)" }} />
+                  <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>No errors captured yet</p>
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.22)" }}>
+                    Errors from real users will appear here automatically.
+                  </p>
+                </div>
+              )}
+
+              {errorRows.length > 0 && (
+                <div className="flex flex-col gap-2.5">
+                  {errorRows.map((row) => {
+                    const shortUrl = row.page_url.length > 50 ? "…" + row.page_url.slice(-50) : row.page_url;
+                    const shortMsg = row.error_message.length > 80 ? row.error_message.slice(0, 80) + "…" : row.error_message;
+                    return (
+                      <div
+                        key={row.id}
+                        className="flex flex-col gap-2 px-3.5 py-3 rounded-xl"
+                        style={{
+                          backgroundColor: row.resolved ? "rgba(255,255,255,0.02)" : "rgba(239,68,68,0.04)",
+                          border: row.resolved
+                            ? "1px solid rgba(255,255,255,0.07)"
+                            : "1px solid rgba(239,68,68,0.18)",
+                          opacity: row.resolved ? 0.60 : 1,
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            {row.resolved
+                              ? <CheckCircle2 size={13} style={{ color: "#10b981" }} />
+                              : <AlertCircle   size={13} style={{ color: "#ef4444" }} />
+                            }
+                            <span
+                              className="text-xs font-semibold"
+                              style={{ color: row.resolved ? "#10b981" : "#ef4444" }}
+                            >
+                              {row.resolved ? "Resolved" : row.severity.toUpperCase()}
+                            </span>
+                          </div>
+                          {!row.resolved && (
+                            <button
+                              onClick={() => void resolveError(row.id)}
+                              disabled={resolvingId === row.id}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+                              style={{
+                                backgroundColor: "rgba(16,185,129,0.10)",
+                                border: "1px solid rgba(16,185,129,0.22)",
+                                color: "#10b981",
+                              }}
+                            >
+                              {resolvingId === row.id
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <CheckCircle2 size={10} />
+                              }
+                              Mark Resolved
+                            </button>
+                          )}
+                        </div>
+
+                        <p className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.75)" }} title={row.error_message}>
+                          {shortMsg}
+                        </p>
+
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-xs truncate" style={{ color: "rgba(255,255,255,0.35)" }} title={row.page_url}>
+                            📄 {shortUrl}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.28)" }}>
+                              👤 {row.user_email ?? "Anonymous"}
+                            </span>
+                            {row.component && (
+                              <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.22)" }}>
+                                {row.component}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs" style={{ color: "rgba(255,255,255,0.20)" }}>
+                            {new Date(row.created_at).toLocaleString("en-GB", {
+                              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Terminal side panel ── */}
