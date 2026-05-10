@@ -14,11 +14,15 @@ const __dirname = dirname(__filename);
 // ── Allowed origins ───────────────────────────────────────────────────────────
 const extraOrigins = process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? [];
 
+// Derive Replit dev domain origins dynamically from REPLIT_DOMAINS
+const replitDomains = process.env.REPLIT_DOMAINS?.split(",").map((d) => d.trim()).filter(Boolean) ?? [];
+const replitOrigins = replitDomains.map((d) => `https://${d}`);
+
 const allowedOrigins = [
-  "https://4fa7be1b-cbce-487a-907c-e6aaf0210a27-00-3de2kjsfw3qjw.riker.replit.dev",
-  "https://080378d7-f381-442f-87d6-24d3acbeadf8-00-2mb0r31jkzlml.riker.replit.dev",
-  "http://localhost:5173",
+  "http://localhost:5000",
   "http://localhost:3000",
+  "http://localhost:5173",
+  ...replitOrigins,
   ...extraOrigins,
 ];
 
