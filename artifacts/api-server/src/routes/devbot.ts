@@ -3,7 +3,15 @@ import type { Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@supabase/supabase-js";
 import { MASTER_CONTEXT } from "../lib/masterContext.js";
-import { getRepoFiles, getFileContent, detectFilePaths } from "../lib/github.js";
+import {
+  getRepoFiles,
+  getFileContent,
+  detectFilePaths,
+  createBranch,
+  createOrUpdateFile,
+  createPullRequest,
+  mergePullRequest,
+} from "../lib/github.js";
 
 const router = Router();
 
@@ -81,7 +89,7 @@ async function getCachedFiles() {
 const MAX_FILES_IN_CONTEXT = 6;
 const MAX_CONTENT_CHARS = 8000;
 
-function truncateContent(content: string, filePath: string): string {
+function truncateContent(content: string): string {
   if (content.length <= MAX_CONTENT_CHARS) return content;
   return (
     content.slice(0, MAX_CONTENT_CHARS) +
@@ -99,7 +107,7 @@ async function buildFileContext(filePaths: string[]): Promise<string> {
       try {
         const content = await getFileContent(path);
         if (!content) return null;
-        const truncated = truncateContent(content, path);
+        const truncated = truncateContent(content);
         const ext = path.split(".").pop() ?? "";
         return `\`\`\`${ext}\n// File: ${path}\n${truncated}\n\`\`\``;
       } catch {
@@ -130,6 +138,18 @@ interface DevBotBody {
   message?: string;
   history?: HistoryMessage[];
   loadedFiles?: string[];
+}
+
+interface WriteBody {
+  path?: string;
+  content?: string;
+  message?: string;
+  branch?: string;
+}
+
+interface DeployBody {
+  branch?: string;
+  title?: string;
 }
 
 // ── GET /api/devbot/files ─────────────────────────────────────────────────────
@@ -207,7 +227,6 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
   const conversationHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
   const clientLoadedFiles: string[] = Array.isArray(loadedFiles) ? loadedFiles : [];
 
-  // ── Build file context ─────────────────────────────────────────────────────
   let fileContext = "";
   let autoDetectedFiles: string[] = [];
 
@@ -216,10 +235,8 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
       const allFiles = await getCachedFiles();
       const knownPaths = allFiles.map((f) => f.path);
 
-      // Auto-detect file paths mentioned in the current message
       autoDetectedFiles = detectFilePaths(message.trim(), knownPaths);
 
-      // Merge: client-loaded files first (explicit), then auto-detected
       const filesToLoad = [
         ...clientLoadedFiles,
         ...autoDetectedFiles.filter((f) => !clientLoadedFiles.includes(f)),
@@ -237,7 +254,6 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
     }
   }
 
-  // ── Call Claude ───────────────────────────────────────────────────────────
   const systemPrompt = MASTER_CONTEXT + fileContext;
 
   try {
@@ -265,6 +281,96 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot chat failed");
     res.status(500).json({ error: "DevBot request failed. Check server logs." });
+  }
+});
+
+// ── POST /api/devbot/write ────────────────────────────────────────────────────
+// Writes a file to a devbot branch (creating the branch if needed).
+
+router.post("/devbot/write", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  if (!githubConfigured()) {
+    res.status(503).json({ error: "GitHub not configured" });
+    return;
+  }
+
+  const { path, content, message, branch } = req.body as WriteBody;
+
+  if (!path?.trim()) {
+    res.status(400).json({ error: "path is required" });
+    return;
+  }
+  if (content === undefined || content === null) {
+    res.status(400).json({ error: "content is required" });
+    return;
+  }
+  if (!message?.trim()) {
+    res.status(400).json({ error: "message is required" });
+    return;
+  }
+
+  try {
+    // Generate a new branch name if not provided
+    const now = new Date();
+    const ts = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
+    const targetBranch = branch?.trim() || `devbot/${ts}`;
+
+    // Create the branch if it's new (silently succeeds if already exists)
+    if (!branch?.trim()) {
+      await createBranch(targetBranch);
+      req.log.info({ branch: targetBranch }, "devbot branch created");
+    }
+
+    const { commitUrl, sha } = await createOrUpdateFile(
+      path.trim(),
+      content,
+      message.trim(),
+      targetBranch
+    );
+
+    req.log.info({ path: path.trim(), branch: targetBranch, sha }, "devbot file written");
+    res.json({ success: true, commitUrl, branch: targetBranch, sha });
+  } catch (err) {
+    req.log.error({ err, path }, "devbot write failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to write file" });
+  }
+});
+
+// ── POST /api/devbot/deploy ───────────────────────────────────────────────────
+// Creates a PR from the devbot branch and merges it immediately.
+
+router.post("/devbot/deploy", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  if (!githubConfigured()) {
+    res.status(503).json({ error: "GitHub not configured" });
+    return;
+  }
+
+  const { branch, title } = req.body as DeployBody;
+
+  if (!branch?.trim()) {
+    res.status(400).json({ error: "branch is required" });
+    return;
+  }
+
+  const prTitle = title?.trim() || `DevBot changes from ${branch}`;
+  const prBody = `Automated deployment created by DevBot admin panel.\n\nBranch: \`${branch}\``;
+
+  try {
+    const { prNumber, prUrl } = await createPullRequest(prTitle, prBody, branch.trim());
+    req.log.info({ prNumber, branch }, "devbot PR created");
+
+    await mergePullRequest(prNumber);
+    req.log.info({ prNumber }, "devbot PR merged");
+
+    res.json({ success: true, deployUrl: prUrl, prNumber });
+  } catch (err) {
+    req.log.error({ err, branch }, "devbot deploy failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Deploy failed" });
   }
 });
 

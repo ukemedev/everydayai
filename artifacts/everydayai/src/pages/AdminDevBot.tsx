@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
-  Loader2, GitBranch, Eye,
+  Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
+  AlertCircle, Rocket, Upload,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -18,6 +19,19 @@ interface RepoFile {
   path: string;
   type: string;
   size?: number;
+}
+
+interface SessionChange {
+  path: string;
+  commitUrl: string;
+}
+
+type DeployStatus = "idle" | "creating-pr" | "merging" | "deployed" | "error";
+
+interface ApplyModalState {
+  code: string;
+  lang: string;
+  suggestedPath: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -49,14 +63,50 @@ function extColor(ext: string): string {
   return colors[ext] ?? "rgba(255,255,255,0.35)";
 }
 
-// ── Markdown renderer ─────────────────────────────────────────────────────────
+function detectSuggestedPath(precedingText: string, knownFiles: string[]): string {
+  const backtickMatches = [...precedingText.matchAll(/`([^`]*\.[a-z]+)`/gi)];
+  for (const m of backtickMatches.reverse()) {
+    const candidate = m[1];
+    const known = knownFiles.find((f) => f.endsWith(candidate) || f === candidate);
+    if (known) return known;
+  }
+  const pathPattern = /(?:[\w-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|json|md|yaml|yml|toml|css)/g;
+  const pathMatches = [...precedingText.matchAll(pathPattern)];
+  for (const m of pathMatches.reverse()) {
+    const candidate = m[0];
+    const known = knownFiles.find((f) => f.endsWith(candidate) || f === candidate);
+    if (known) return known;
+  }
+  return "";
+}
 
-function renderMarkdown(text: string): string {
+// ── Message parsing ───────────────────────────────────────────────────────────
+
+interface TextPart { type: "text"; content: string; }
+interface CodePart { type: "code"; lang: string; code: string; }
+type MessagePart = TextPart | CodePart;
+
+function parseMessageParts(text: string): MessagePart[] {
+  const parts: MessagePart[] = [];
+  const regex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIdx = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push({ type: "text", content: text.slice(lastIdx, match.index) });
+    }
+    parts.push({ type: "code", lang: match[1] || "", code: match[2].trim() });
+    lastIdx = regex.lastIndex;
+  }
+  if (lastIdx < text.length) {
+    parts.push({ type: "text", content: text.slice(lastIdx) });
+  }
+  return parts;
+}
+
+function renderTextMarkdown(text: string): string {
   return text
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-      `<pre style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:12px 14px;overflow-x:auto;margin:10px 0;font-size:12.5px;line-height:1.6;font-family:monospace;"><code>${code.trim()}</code></pre>`
-    )
     .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;font-size:0.9em;font-family:monospace;">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
@@ -69,9 +119,112 @@ function renderMarkdown(text: string): string {
     .replace(/\n/g, "<br />");
 }
 
+// ── MessageContent ────────────────────────────────────────────────────────────
+
+interface MessageContentProps {
+  content: string;
+  knownFiles: string[];
+  onApply: (state: ApplyModalState) => void;
+}
+
+function MessageContent({ content, knownFiles, onApply }: MessageContentProps) {
+  const parts = parseMessageParts(content);
+  let precedingText = "";
+
+  return (
+    <div style={{ lineHeight: "1.65" }}>
+      {parts.map((part, i) => {
+        if (part.type === "text") {
+          precedingText += part.content;
+          return (
+            <div
+              key={i}
+              dangerouslySetInnerHTML={{ __html: renderTextMarkdown(part.content) }}
+            />
+          );
+        }
+
+        const suggestedPath = detectSuggestedPath(precedingText, knownFiles);
+        const captured = { code: part.code, lang: part.lang, suggestedPath };
+
+        return (
+          <div key={i} style={{ margin: "10px 0" }}>
+            <div style={{ position: "relative" }}>
+              {part.lang && (
+                <div
+                  style={{
+                    position: "absolute", top: "8px", right: "10px",
+                    fontSize: "10px", color: "rgba(255,255,255,0.30)",
+                    fontFamily: "monospace", textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                  }}
+                >
+                  {part.lang}
+                </div>
+              )}
+              <pre
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: "8px 8px 0 0",
+                  padding: "12px 14px",
+                  paddingRight: "70px",
+                  overflowX: "auto",
+                  margin: 0,
+                  fontSize: "12.5px",
+                  lineHeight: "1.6",
+                  fontFamily: "monospace",
+                }}
+              >
+                <code>{part.code}</code>
+              </pre>
+            </div>
+            <button
+              onClick={() => onApply(captured)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "7px 12px",
+                background: "rgba(59,91,252,0.10)",
+                border: "1px solid rgba(59,91,252,0.25)",
+                borderTop: "none",
+                borderRadius: "0 0 8px 8px",
+                color: "#3b5bfc",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,91,252,0.18)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(59,91,252,0.10)"; }}
+            >
+              <Upload size={11} />
+              Apply Change
+              {suggestedPath && (
+                <span style={{ color: "rgba(59,91,252,0.65)", fontWeight: 400 }}>
+                  → {getFileName(suggestedPath)}
+                </span>
+              )}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ msg }: { msg: Message }) {
+interface MessageBubbleProps {
+  msg: Message;
+  knownFiles: string[];
+  onApply: (state: ApplyModalState) => void;
+}
+
+function MessageBubble({ msg, knownFiles, onApply }: MessageBubbleProps) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`} style={{ marginBottom: "14px" }}>
@@ -98,7 +251,7 @@ function MessageBubble({ msg }: { msg: Message }) {
           {isUser ? (
             <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
           ) : (
-            <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} style={{ lineHeight: "1.65" }} />
+            <MessageContent content={msg.content} knownFiles={knownFiles} onApply={onApply} />
           )}
         </div>
         {!isUser && msg.autoDetectedFiles && msg.autoDetectedFiles.length > 0 && (
@@ -145,6 +298,342 @@ function ThinkingBubble() {
   );
 }
 
+// ── Apply Change Modal ────────────────────────────────────────────────────────
+
+interface ApplyModalProps {
+  state: ApplyModalState;
+  currentBranch: string | null;
+  onClose: () => void;
+  onApply: (filePath: string, content: string, commitMessage: string) => Promise<void>;
+  loading: boolean;
+  error: string;
+}
+
+function ApplyModal({ state, currentBranch, onClose, onApply, loading, error }: ApplyModalProps) {
+  const [filePath, setFilePath] = useState(state.suggestedPath);
+  const [commitMsg, setCommitMsg] = useState(
+    state.suggestedPath ? `DevBot: update ${getFileName(state.suggestedPath)}` : "DevBot: apply code change"
+  );
+
+  async function handleApply() {
+    if (!filePath.trim()) return;
+    await onApply(filePath.trim(), state.code, commitMsg.trim() || `DevBot: update ${getFileName(filePath.trim())}`);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.80)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-2xl flex flex-col rounded-2xl overflow-hidden"
+        style={{ backgroundColor: "#0d1117", border: "1px solid rgba(255,255,255,0.10)", maxHeight: "85vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center gap-3 px-5 py-3.5 border-b flex-shrink-0"
+          style={{ borderColor: "rgba(255,255,255,0.08)" }}
+        >
+          <Upload size={15} style={{ color: "#3b5bfc" }} />
+          <span className="text-sm font-semibold text-white">Apply Code Change</span>
+          <button onClick={onClose} className="ml-auto" style={{ color: "rgba(255,255,255,0.35)" }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+          {/* File path */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.55)" }}>
+              File path
+            </label>
+            <input
+              type="text"
+              value={filePath}
+              onChange={(e) => {
+                setFilePath(e.target.value);
+                setCommitMsg(`DevBot: update ${getFileName(e.target.value)}`);
+              }}
+              placeholder="e.g. artifacts/api-server/src/routes/devbot.ts"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#fff",
+                fontFamily: "monospace",
+              }}
+              onFocus={(e) => { e.currentTarget.style.border = "1px solid rgba(59,91,252,0.50)"; }}
+              onBlur={(e) => { e.currentTarget.style.border = "1px solid rgba(255,255,255,0.12)"; }}
+            />
+          </div>
+
+          {/* Commit message */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.55)" }}>
+              Commit message
+            </label>
+            <input
+              type="text"
+              value={commitMsg}
+              onChange={(e) => setCommitMsg(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "#fff",
+              }}
+              onFocus={(e) => { e.currentTarget.style.border = "1px solid rgba(59,91,252,0.50)"; }}
+              onBlur={(e) => { e.currentTarget.style.border = "1px solid rgba(255,255,255,0.12)"; }}
+            />
+          </div>
+
+          {/* Branch info */}
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
+            style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <GitBranch size={11} style={{ color: "rgba(255,255,255,0.40)", flexShrink: 0 }} />
+            <span style={{ color: "rgba(255,255,255,0.40)" }}>
+              {currentBranch
+                ? <>Will commit to branch <code style={{ color: "rgba(255,255,255,0.70)" }}>{currentBranch}</code></>
+                : "A new branch will be created automatically"}
+            </span>
+          </div>
+
+          {/* Code preview */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "rgba(255,255,255,0.55)" }}>
+              Code preview
+            </label>
+            <pre
+              className="overflow-auto rounded-lg text-xs"
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                padding: "12px",
+                color: "rgba(255,255,255,0.70)",
+                fontFamily: "monospace",
+                maxHeight: "200px",
+                lineHeight: "1.6",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+              }}
+            >
+              {state.code.slice(0, 2000)}{state.code.length > 2000 ? "\n… [truncated]" : ""}
+            </pre>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm"
+              style={{ backgroundColor: "rgba(239,68,68,0.10)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.20)" }}
+            >
+              <AlertCircle size={13} />
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t flex-shrink-0"
+          style={{ borderColor: "rgba(255,255,255,0.08)" }}
+        >
+          <button
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded-lg text-sm transition-opacity hover:opacity-70"
+            style={{ color: "rgba(255,255,255,0.50)" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleApply()}
+            disabled={!filePath.trim() || loading}
+            className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "#3b5bfc", color: "#fff" }}
+          >
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            {loading ? "Committing…" : "Apply & Commit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Deploy Panel ──────────────────────────────────────────────────────────────
+
+interface DeployPanelProps {
+  currentBranch: string | null;
+  sessionChanges: SessionChange[];
+  deployStatus: DeployStatus;
+  deployUrl: string | null;
+  onDeploy: () => void;
+}
+
+const DEPLOY_STEPS: { key: DeployStatus; label: string }[] = [
+  { key: "creating-pr", label: "Creating PR…" },
+  { key: "merging",     label: "Merging…" },
+  { key: "deployed",    label: "Deployed" },
+];
+
+function DeployPanel({ currentBranch, sessionChanges, deployStatus, deployUrl, onDeploy }: DeployPanelProps) {
+  const isDeploying = deployStatus === "creating-pr" || deployStatus === "merging";
+  const isDeployed  = deployStatus === "deployed";
+  const isError     = deployStatus === "error";
+
+  return (
+    <div
+      className="flex-shrink-0 border-t"
+      style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "#0d1117" }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center gap-2 px-4 py-2.5 border-b"
+        style={{ borderColor: "rgba(255,255,255,0.05)" }}
+      >
+        <Rocket size={13} style={{ color: currentBranch ? "#a855f7" : "rgba(255,255,255,0.30)" }} />
+        <span className="text-xs font-semibold" style={{ color: currentBranch ? "#fff" : "rgba(255,255,255,0.40)" }}>
+          Deploy
+        </span>
+        {sessionChanges.length > 0 && (
+          <span
+            className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium"
+            style={{ backgroundColor: "rgba(168,85,247,0.18)", color: "#a855f7" }}
+          >
+            {sessionChanges.length} file{sessionChanges.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      <div className="px-4 py-3 flex flex-col gap-2.5">
+        {!currentBranch ? (
+          <p className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>
+            Apply a code change above to create a branch and enable deployment.
+          </p>
+        ) : (
+          <>
+            {/* Branch */}
+            <div className="flex items-center gap-1.5">
+              <GitBranch size={10} style={{ color: "rgba(255,255,255,0.35)", flexShrink: 0 }} />
+              <span
+                className="text-xs font-mono truncate"
+                style={{ color: "rgba(255,255,255,0.55)" }}
+                title={currentBranch}
+              >
+                {currentBranch}
+              </span>
+            </div>
+
+            {/* Changed files */}
+            {sessionChanges.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {sessionChanges.slice(-3).map((c) => (
+                  <a
+                    key={c.commitUrl}
+                    href={c.commitUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs hover:opacity-80 transition-opacity"
+                    style={{ color: "rgba(255,255,255,0.45)" }}
+                  >
+                    <FileCode size={10} style={{ color: "#3b5bfc", flexShrink: 0 }} />
+                    <span className="truncate">{getFileName(c.path)}</span>
+                  </a>
+                ))}
+                {sessionChanges.length > 3 && (
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
+                    +{sessionChanges.length - 3} more
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Status steps */}
+            {deployStatus !== "idle" && (
+              <div className="flex flex-col gap-1 py-1">
+                {DEPLOY_STEPS.map((step, idx) => {
+                  const stepIdx  = DEPLOY_STEPS.findIndex((s) => s.key === deployStatus);
+                  const doneIdx  = DEPLOY_STEPS.findIndex((s) => s.key === "deployed");
+                  const thisDone = isDeployed || (stepIdx > idx && !isError);
+                  const active   = step.key === deployStatus && !isDeployed && !isError;
+
+                  return (
+                    <div key={step.key} className="flex items-center gap-2">
+                      {thisDone ? (
+                        <CheckCircle2 size={11} style={{ color: "#22c55e", flexShrink: 0 }} />
+                      ) : active ? (
+                        <Loader2 size={11} className="animate-spin flex-shrink-0" style={{ color: "#a855f7" }} />
+                      ) : (
+                        <div
+                          className="w-2.5 h-2.5 rounded-full border flex-shrink-0"
+                          style={{ borderColor: "rgba(255,255,255,0.20)" }}
+                        />
+                      )}
+                      <span
+                        className="text-xs"
+                        style={{
+                          color: thisDone ? "#22c55e" : active ? "#a855f7" : "rgba(255,255,255,0.30)",
+                          fontWeight: active ? 600 : 400,
+                        }}
+                      >
+                        {idx === doneIdx && isDeployed ? "Deployed ✅" : step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {isError && (
+              <div
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg"
+                style={{ backgroundColor: "rgba(239,68,68,0.10)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.20)" }}
+              >
+                <AlertCircle size={11} />
+                Deploy failed — check logs
+              </div>
+            )}
+
+            {/* Deploy URL */}
+            {isDeployed && deployUrl && (
+              <a
+                href={deployUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                style={{ backgroundColor: "rgba(34,197,94,0.10)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)" }}
+              >
+                <GitPullRequest size={11} />
+                View merged PR
+              </a>
+            )}
+
+            {/* Deploy button */}
+            {!isDeployed && (
+              <button
+                onClick={onDeploy}
+                disabled={isDeploying || sessionChanges.length === 0}
+                className="flex items-center justify-center gap-2 w-full py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#a855f7", color: "#fff" }}
+              >
+                {isDeploying ? (
+                  <><Loader2 size={11} className="animate-spin" /> Deploying…</>
+                ) : (
+                  <><Rocket size={11} /> Deploy to main</>
+                )}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── File explorer ─────────────────────────────────────────────────────────────
 
 interface FileExplorerProps {
@@ -164,7 +653,6 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
     ? files.filter((f) => f.path.toLowerCase().includes(search.toLowerCase()))
     : files;
 
-  // Group by top-level directory
   const groups = new Map<string, RepoFile[]>();
   for (const file of filtered) {
     const parts = file.path.split("/");
@@ -183,27 +671,7 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
   }
 
   return (
-    <div
-      className="hidden lg:flex flex-col w-72 flex-shrink-0 border-l h-full"
-      style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.06)" }}
-    >
-      {/* Header */}
-      <div
-        className="px-4 py-3 border-b flex items-center gap-2 flex-shrink-0"
-        style={{ borderColor: "rgba(255,255,255,0.06)" }}
-      >
-        <GitBranch size={14} style={{ color: "rgba(255,255,255,0.40)" }} />
-        <span className="text-xs font-semibold text-white">File Explorer</span>
-        {loadedFiles.length > 0 && (
-          <span
-            className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium"
-            style={{ backgroundColor: "rgba(59,91,252,0.20)", color: "#3b5bfc" }}
-          >
-            {loadedFiles.length} loaded
-          </span>
-        )}
-      </div>
-
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Search */}
       <div className="px-3 py-2.5 border-b flex-shrink-0" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
         <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -224,7 +692,6 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
         </div>
       </div>
 
-      {/* Not configured notice */}
       {!githubConfigured && !loading && (
         <div className="flex flex-col items-center justify-center flex-1 gap-2 px-4 text-center">
           <GitBranch size={20} style={{ color: "rgba(255,255,255,0.20)" }} />
@@ -235,7 +702,6 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center flex-1 gap-2" style={{ color: "rgba(255,255,255,0.30)" }}>
           <Loader2 size={14} className="animate-spin" />
@@ -243,7 +709,6 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
         </div>
       )}
 
-      {/* File tree */}
       {!loading && githubConfigured && (
         <div className="flex-1 overflow-y-auto py-1">
           {[...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([dir, dirFiles]) => {
@@ -290,10 +755,7 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
                       >
                         {ext.toUpperCase().slice(0, 3)}
                       </span>
-                      <div
-                        className="flex-1 min-w-0"
-                        onClick={() => onToggleFile(file.path)}
-                      >
+                      <div className="flex-1 min-w-0" onClick={() => onToggleFile(file.path)}>
                         <p
                           className="text-xs truncate"
                           style={{ color: isLoaded ? "#fff" : "rgba(255,255,255,0.65)" }}
@@ -340,7 +802,6 @@ function FileExplorer({ files, loadedFiles, loading, githubConfigured, onToggleF
         </div>
       )}
 
-      {/* Loaded files count */}
       {loadedFiles.length > 0 && (
         <div
           className="px-3 py-2.5 border-t flex-shrink-0 flex items-center gap-2"
@@ -431,6 +892,53 @@ function FilePreview({ path, content, loading, onClose, onLoad, isLoaded }: File
   );
 }
 
+// ── Right sidebar ─────────────────────────────────────────────────────────────
+
+interface RightSidebarProps extends FileExplorerProps, DeployPanelProps {}
+
+function RightSidebar(props: RightSidebarProps) {
+  return (
+    <div
+      className="hidden lg:flex flex-col w-72 flex-shrink-0 border-l h-full"
+      style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.06)" }}
+    >
+      {/* Explorer header */}
+      <div
+        className="px-4 py-3 border-b flex items-center gap-2 flex-shrink-0"
+        style={{ borderColor: "rgba(255,255,255,0.06)" }}
+      >
+        <GitBranch size={14} style={{ color: "rgba(255,255,255,0.40)" }} />
+        <span className="text-xs font-semibold text-white">File Explorer</span>
+        {props.loadedFiles.length > 0 && (
+          <span
+            className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-medium"
+            style={{ backgroundColor: "rgba(59,91,252,0.20)", color: "#3b5bfc" }}
+          >
+            {props.loadedFiles.length} loaded
+          </span>
+        )}
+      </div>
+
+      <FileExplorer
+        files={props.files}
+        loadedFiles={props.loadedFiles}
+        loading={props.loading}
+        githubConfigured={props.githubConfigured}
+        onToggleFile={props.onToggleFile}
+        onPreviewFile={props.onPreviewFile}
+      />
+
+      <DeployPanel
+        currentBranch={props.currentBranch}
+        sessionChanges={props.sessionChanges}
+        deployStatus={props.deployStatus}
+        deployUrl={props.deployUrl}
+        onDeploy={props.onDeploy}
+      />
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminDevBot() {
@@ -447,6 +955,17 @@ export default function AdminDevBot() {
 
   // Preview modal state
   const [preview, setPreview]           = useState<{ path: string; content: string | null; loading: boolean } | null>(null);
+
+  // Deploy / write state
+  const [currentBranch, setCurrentBranch]     = useState<string | null>(null);
+  const [sessionChanges, setSessionChanges]   = useState<SessionChange[]>([]);
+  const [deployStatus, setDeployStatus]       = useState<DeployStatus>("idle");
+  const [deployUrl, setDeployUrl]             = useState<string | null>(null);
+
+  // Apply modal state
+  const [applyModal, setApplyModal]           = useState<ApplyModalState | null>(null);
+  const [applyLoading, setApplyLoading]       = useState(false);
+  const [applyError, setApplyError]           = useState("");
 
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -465,7 +984,7 @@ export default function AdminDevBot() {
         setRepoFiles(data.files);
         setGithubReady(data.githubConfigured);
       } catch {
-        // silently fail — file explorer just won't show
+        // silently fail
       } finally {
         setFilesLoading(false);
       }
@@ -497,6 +1016,68 @@ export default function AdminDevBot() {
       setPreview({ path, content: data.content ?? null, loading: false });
     } catch {
       setPreview((prev) => prev ? { ...prev, loading: false } : null);
+    }
+  }
+
+  // ── Apply code change ──────────────────────────────────────────────────────
+  async function applyChange(filePath: string, content: string, commitMessage: string) {
+    setApplyLoading(true);
+    setApplyError("");
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ path: filePath, content, message: commitMessage, branch: currentBranch }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { success: boolean; commitUrl: string; branch: string };
+      setCurrentBranch(data.branch);
+      setSessionChanges((prev) => [...prev, { path: filePath, commitUrl: data.commitUrl }]);
+      setApplyModal(null);
+      setDeployStatus("idle");
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : "Failed to commit change");
+    } finally {
+      setApplyLoading(false);
+    }
+  }
+
+  // ── Deploy branch ──────────────────────────────────────────────────────────
+  async function deployBranch() {
+    if (!currentBranch || sessionChanges.length === 0) return;
+    setDeployStatus("creating-pr");
+    setDeployUrl(null);
+
+    // Simulate progress steps for UX
+    const mergeTimer = setTimeout(() => {
+      setDeployStatus("merging");
+    }, 1800);
+
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          branch: currentBranch,
+          title: `DevBot: ${sessionChanges.length} change${sessionChanges.length !== 1 ? "s" : ""} via admin panel`,
+        }),
+      });
+      clearTimeout(mergeTimer);
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { success: boolean; deployUrl: string };
+      setDeployUrl(data.deployUrl);
+      setDeployStatus("deployed");
+    } catch {
+      clearTimeout(mergeTimer);
+      setDeployStatus("error");
     }
   }
 
@@ -561,6 +1142,8 @@ export default function AdminDevBot() {
     setLoadedFiles([]);
   }
 
+  const knownFilePaths = repoFiles.map((f) => f.path);
+
   return (
     <AdminLayout activeItemId="devbot">
       <style>{`
@@ -600,6 +1183,15 @@ export default function AdminDevBot() {
                   {loadedFiles.length} file{loadedFiles.length > 1 ? "s" : ""} in context
                 </div>
               )}
+              {currentBranch && (
+                <div
+                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ml-1"
+                  style={{ backgroundColor: "rgba(168,85,247,0.12)", color: "#a855f7", border: "1px solid rgba(168,85,247,0.25)" }}
+                >
+                  <GitBranch size={11} />
+                  {sessionChanges.length} commit{sessionChanges.length !== 1 ? "s" : ""}
+                </div>
+              )}
             </div>
 
             {messages.length > 0 && (
@@ -628,7 +1220,7 @@ export default function AdminDevBot() {
                   <div>
                     <p className="text-white font-semibold text-base">DevBot is ready</p>
                     <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.38)" }}>
-                      Ask anything about the EverydayAI codebase. Load files from the explorer to give DevBot direct access to current code.
+                      Ask anything about the codebase. Load files from the explorer for direct access, then Apply Changes to commit them to GitHub.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 justify-center mt-1">
@@ -651,7 +1243,14 @@ export default function AdminDevBot() {
                 </div>
               )}
 
-              {messages.map((msg, i) => <MessageBubble key={i} msg={msg} />)}
+              {messages.map((msg, i) => (
+                <MessageBubble
+                  key={i}
+                  msg={msg}
+                  knownFiles={knownFilePaths}
+                  onApply={(state) => { setApplyModal(state); setApplyError(""); }}
+                />
+              ))}
               {loading && <ThinkingBubble />}
               <div ref={bottomRef} />
             </div>
@@ -725,14 +1324,19 @@ export default function AdminDevBot() {
           </div>
         </div>
 
-        {/* ── File explorer panel (desktop) ── */}
-        <FileExplorer
+        {/* ── Right sidebar (file explorer + deploy panel) ── */}
+        <RightSidebar
           files={repoFiles}
           loadedFiles={loadedFiles}
           loading={filesLoading}
           githubConfigured={githubReady}
           onToggleFile={toggleFile}
           onPreviewFile={openPreview}
+          currentBranch={currentBranch}
+          sessionChanges={sessionChanges}
+          deployStatus={deployStatus}
+          deployUrl={deployUrl}
+          onDeploy={() => void deployBranch()}
         />
       </div>
 
@@ -748,6 +1352,18 @@ export default function AdminDevBot() {
             toggleFile(preview.path);
             setPreview(null);
           }}
+        />
+      )}
+
+      {/* ── Apply Change modal ── */}
+      {applyModal && (
+        <ApplyModal
+          state={applyModal}
+          currentBranch={currentBranch}
+          onClose={() => { setApplyModal(null); setApplyError(""); }}
+          onApply={applyChange}
+          loading={applyLoading}
+          error={applyError}
         />
       )}
     </AdminLayout>

@@ -25,6 +25,17 @@ function getRepo(): string {
   return repo;
 }
 
+// ── getDefaultBranch ──────────────────────────────────────────────────────────
+
+async function getDefaultBranch(): Promise<string> {
+  const repo = getRepo();
+  const headers = getGithubHeaders();
+  const res = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+  if (!res.ok) throw new Error(`GitHub API error fetching repo info: ${res.status}`);
+  const data = await res.json() as { default_branch: string };
+  return data.default_branch ?? "main";
+}
+
 // ── getRepoFiles ──────────────────────────────────────────────────────────────
 // Returns the full recursive file tree of the repository.
 // Skips binary/large files and common non-source directories.
@@ -52,14 +63,8 @@ function isSourceFile(path: string): boolean {
 export async function getRepoFiles(): Promise<RepoFile[]> {
   const repo = getRepo();
   const headers = getGithubHeaders();
+  const branch = await getDefaultBranch();
 
-  // Get default branch first
-  const repoRes = await fetch(`https://api.github.com/repos/${repo}`, { headers });
-  if (!repoRes.ok) throw new Error(`GitHub API error fetching repo: ${repoRes.status}`);
-  const repoData = await repoRes.json() as { default_branch: string };
-  const branch = repoData.default_branch ?? "main";
-
-  // Get full recursive tree
   const treeRes = await fetch(
     `https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`,
     { headers }
@@ -128,20 +133,16 @@ export async function getFileContent(path: string): Promise<string | null> {
 
 // ── searchFiles ───────────────────────────────────────────────────────────────
 // Searches file paths for a query string (fast path-based search).
-// For up to 10 path matches, also searches file content for the query.
+// For up to 12 path matches, also searches file content for the query.
 
 export async function searchFiles(query: string, files?: RepoFile[]): Promise<SearchResult[]> {
   const allFiles = files ?? await getRepoFiles();
   const q = query.toLowerCase();
 
-  // First: path-based matches
   const pathMatches = allFiles.filter((f) => f.path.toLowerCase().includes(q));
-
   if (pathMatches.length === 0) return [];
 
   const results: SearchResult[] = [];
-
-  // For a limited set, also check content
   const toSearch = pathMatches.slice(0, 12);
 
   await Promise.all(
@@ -153,7 +154,6 @@ export async function searchFiles(query: string, files?: RepoFile[]): Promise<Se
         const lines = content.split("\n");
         for (let i = 0; i < lines.length; i++) {
           if (lines[i].toLowerCase().includes(q)) {
-            // Capture line with a little context
             const start = Math.max(0, i - 1);
             const end = Math.min(lines.length - 1, i + 1);
             const snippet = lines.slice(start, end + 1).join("\n").trim();
@@ -180,7 +180,6 @@ export async function searchFiles(query: string, files?: RepoFile[]): Promise<Se
 export function detectFilePaths(message: string, knownFiles: string[]): string[] {
   const found = new Set<string>();
 
-  // Exact matches against known file list (case-insensitive)
   const msgLower = message.toLowerCase();
   for (const f of knownFiles) {
     const name = f.split("/").pop()?.toLowerCase() ?? "";
@@ -189,7 +188,6 @@ export function detectFilePaths(message: string, knownFiles: string[]): string[]
     }
   }
 
-  // Explicit path patterns like src/routes/devbot.ts or artifacts/api-server/...
   const pathPattern = /(?:[\w-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|json|md|yaml|yml|toml|css)/g;
   const explicitPaths = message.match(pathPattern) ?? [];
   for (const p of explicitPaths) {
@@ -198,4 +196,132 @@ export function detectFilePaths(message: string, knownFiles: string[]): string[]
   }
 
   return [...found].slice(0, 8);
+}
+
+// ── createBranch ──────────────────────────────────────────────────────────────
+// Creates a new branch from the default branch (main).
+// Silently succeeds if the branch already exists.
+
+export async function createBranch(branchName: string): Promise<void> {
+  const repo = getRepo();
+  const headers = getGithubHeaders();
+
+  const defaultBranch = await getDefaultBranch();
+  const refRes = await fetch(
+    `https://api.github.com/repos/${repo}/git/ref/heads/${defaultBranch}`,
+    { headers }
+  );
+  if (!refRes.ok) throw new Error(`GitHub API error getting ref: ${refRes.status}`);
+  const refData = await refRes.json() as { object: { sha: string } };
+  const sha = refData.object.sha;
+
+  const createRes = await fetch(`https://api.github.com/repos/${repo}/git/refs`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha }),
+  });
+
+  if (!createRes.ok) {
+    const errData = await createRes.json().catch(() => ({})) as { message?: string };
+    // 422 = branch already exists — that's fine
+    if (createRes.status === 422 && errData.message?.includes("already exists")) return;
+    throw new Error(`GitHub API error creating branch: ${createRes.status} — ${errData.message ?? ""}`);
+  }
+}
+
+// ── createOrUpdateFile ────────────────────────────────────────────────────────
+// Creates or updates a file on the specified branch via the GitHub contents API.
+
+export async function createOrUpdateFile(
+  path: string,
+  content: string,
+  message: string,
+  branch: string
+): Promise<{ commitUrl: string; sha: string }> {
+  const repo = getRepo();
+  const headers = getGithubHeaders();
+
+  // Get existing file SHA for updates (PUT requires it)
+  let existingSha: string | undefined;
+  const existingRes = await fetch(
+    `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`,
+    { headers }
+  );
+  if (existingRes.ok) {
+    const existingData = await existingRes.json() as { sha?: string };
+    existingSha = existingData.sha;
+  }
+
+  const body: Record<string, string> = {
+    message,
+    content: Buffer.from(content, "utf-8").toString("base64"),
+    branch,
+  };
+  if (existingSha) body["sha"] = existingSha;
+
+  const putRes = await fetch(
+    `https://api.github.com/repos/${repo}/contents/${encodeURIComponent(path)}`,
+    {
+      method: "PUT",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+
+  if (!putRes.ok) {
+    const errData = await putRes.json().catch(() => ({})) as { message?: string };
+    throw new Error(`GitHub API error writing file: ${putRes.status} — ${errData.message ?? ""}`);
+  }
+
+  const putData = await putRes.json() as { commit: { html_url: string; sha: string } };
+  return { commitUrl: putData.commit.html_url, sha: putData.commit.sha };
+}
+
+// ── createPullRequest ─────────────────────────────────────────────────────────
+// Creates a pull request from the specified branch to the default branch.
+
+export async function createPullRequest(
+  title: string,
+  body: string,
+  branch: string
+): Promise<{ prNumber: number; prUrl: string }> {
+  const repo = getRepo();
+  const headers = getGithubHeaders();
+  const defaultBranch = await getDefaultBranch();
+
+  const res = await fetch(`https://api.github.com/repos/${repo}/pulls`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body, head: branch, base: defaultBranch }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(`GitHub API error creating PR: ${res.status} — ${errData.message ?? ""}`);
+  }
+
+  const data = await res.json() as { number: number; html_url: string };
+  return { prNumber: data.number, prUrl: data.html_url };
+}
+
+// ── mergePullRequest ──────────────────────────────────────────────────────────
+// Merges a pull request by PR number using squash merge.
+
+export async function mergePullRequest(prNumber: number): Promise<{ mergeCommitSha: string }> {
+  const repo = getRepo();
+  const headers = getGithubHeaders();
+
+  const res = await fetch(`https://api.github.com/repos/${repo}/pulls/${prNumber}/merge`, {
+    method: "PUT",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ merge_method: "squash" }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(`GitHub API error merging PR: ${res.status} — ${errData.message ?? ""}`);
+  }
+
+  const data = await res.json() as { sha: string };
+  return { mergeCommitSha: data.sha };
 }
