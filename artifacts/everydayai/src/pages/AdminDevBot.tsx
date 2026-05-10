@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
-  AlertCircle, Rocket, Upload, Activity, RefreshCw,
+  AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -40,6 +40,17 @@ interface HealthResult {
   errors: Array<{ action: string; count: number }>;
   warnings: string[];
   lastChecked: string;
+}
+
+interface WeeklyReport {
+  newUsers:      number;
+  newAgents:     number;
+  totalMessages: number;
+  revenueNaira:  number;
+  bugsDetected:  number;
+  weekStart:     string;
+  weekEnd:       string;
+  generatedAt:   string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -980,6 +991,13 @@ export default function AdminDevBot() {
   const [healthLoading, setHealthLoading]     = useState(false);
   const [showHealth, setShowHealth]           = useState(false);
 
+  // Weekly report state
+  const [report, setReport]                   = useState<WeeklyReport | null>(null);
+  const [reportLoading, setReportLoading]     = useState(false);
+  const [reportSending, setReportSending]     = useState(false);
+  const [reportSent, setReportSent]           = useState(false);
+  const [showReport, setShowReport]           = useState(false);
+
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1117,6 +1135,35 @@ export default function AdminDevBot() {
     return () => clearInterval(iv);
   }, [fetchHealth]);
 
+  // ── Fetch weekly report ────────────────────────────────────────────────────
+  const fetchReport = useCallback(async () => {
+    setReportLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/report", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setReport(await res.json() as WeeklyReport);
+    } catch { /* silent */ } finally {
+      setReportLoading(false);
+    }
+  }, []);
+
+  async function sendReportToTelegram() {
+    setReportSending(true);
+    setReportSent(false);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/report", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setReportSent(true);
+    } catch { /* silent */ } finally {
+      setReportSending(false);
+    }
+  }
+
   // ── Send message ───────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim();
@@ -1230,6 +1277,25 @@ export default function AdminDevBot() {
               )}
             </div>
 
+            {/* Reports button */}
+            <button
+              onClick={() => {
+                setShowReport((v) => !v);
+                if (!report) void fetchReport();
+              }}
+              title="Weekly report"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+              style={{
+                backgroundColor: showReport ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {reportLoading
+                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
+                : <BarChart2 size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
+              }
+            </button>
+
             {/* Health indicator */}
             <button
               onClick={() => setShowHealth((v) => !v)}
@@ -1273,6 +1339,90 @@ export default function AdminDevBot() {
               </button>
             )}
           </div>
+
+          {/* Reports panel */}
+          {showReport && (
+            <div
+              className="flex-shrink-0 border-b px-5 py-3"
+              style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.06)" }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BarChart2 size={13} style={{ color: "#a855f7" }} />
+                  <span className="text-xs font-semibold text-white">This Week's Report</span>
+                  {report && (
+                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>
+                      {new Date(report.weekStart).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                      {" – "}
+                      {new Date(report.weekEnd).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => void fetchReport()}
+                    disabled={reportLoading}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                  >
+                    <RefreshCw size={10} className={reportLoading ? "animate-spin" : ""} />
+                    Refresh
+                  </button>
+                  <button onClick={() => setShowReport(false)} style={{ color: "rgba(255,255,255,0.30)" }}>
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {reportLoading && !report && (
+                <div className="flex items-center gap-2 py-2" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs">Generating report…</span>
+                </div>
+              )}
+
+              {report && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
+                    {[
+                      { label: "New users",    value: report.newUsers,                     color: "#3b5bfc", icon: "👥" },
+                      { label: "New agents",   value: report.newAgents,                    color: "#06b6d4", icon: "🤖" },
+                      { label: "Messages",     value: report.totalMessages,                color: "#10b981", icon: "💬" },
+                      { label: "Revenue",      value: `₦${report.revenueNaira.toLocaleString("en-NG", { minimumFractionDigits: 0 })}`, color: "#f59e0b", icon: "💰" },
+                      { label: "Bugs detected", value: report.bugsDetected,               color: report.bugsDetected > 0 ? "#ef4444" : "#22c55e", icon: "🐛" },
+                    ].map((stat) => (
+                      <div
+                        key={stat.label}
+                        className="flex flex-col gap-0.5 px-3 py-2 rounded-lg"
+                        style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+                      >
+                        <span className="text-xs" style={{ color: "rgba(255,255,255,0.40)" }}>{stat.icon} {stat.label}</span>
+                        <span className="text-sm font-bold" style={{ color: stat.color }}>{stat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => void sendReportToTelegram()}
+                    disabled={reportSending || reportSent}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: reportSent ? "rgba(34,197,94,0.12)" : "rgba(168,85,247,0.15)",
+                      color: reportSent ? "#22c55e" : "#a855f7",
+                      border: reportSent ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(168,85,247,0.30)",
+                    }}
+                  >
+                    {reportSending
+                      ? <><Loader2 size={11} className="animate-spin" /> Sending…</>
+                      : reportSent
+                        ? <><CheckCircle2 size={11} /> Sent to Telegram</>
+                        : <>📨 Send Report to Telegram</>
+                    }
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Health panel */}
           {showHealth && (

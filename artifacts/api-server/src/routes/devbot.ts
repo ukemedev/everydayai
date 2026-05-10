@@ -13,6 +13,7 @@ import {
   mergePullRequest,
 } from "../lib/github.js";
 import { runHealthCheck, getLastHealthResult } from "../lib/errorMonitor.js";
+import { generateWeeklyReport, sendWeeklyReportTelegram } from "../lib/weeklyReport.js";
 
 const router = Router();
 
@@ -372,6 +373,40 @@ router.post("/devbot/deploy", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err, branch }, "devbot deploy failed");
     res.status(500).json({ error: err instanceof Error ? err.message : "Deploy failed" });
+  }
+});
+
+// ── GET /api/devbot/report ────────────────────────────────────────────────────
+// Generates and returns this week's stats as JSON.
+
+router.get("/devbot/report", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const stats = await generateWeeklyReport();
+    req.log.info({ newUsers: stats.newUsers, revenueNaira: stats.revenueNaira }, "devbot report fetched");
+    res.json(stats);
+  } catch (err) {
+    req.log.error({ err }, "devbot report generation failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Report generation failed" });
+  }
+});
+
+// ── POST /api/devbot/report ───────────────────────────────────────────────────
+// Generates the report AND sends it to Telegram immediately.
+
+router.post("/devbot/report", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const stats = await sendWeeklyReportTelegram();
+    req.log.info({ newUsers: stats.newUsers }, "devbot report sent to Telegram");
+    res.json({ success: true, stats });
+  } catch (err) {
+    req.log.error({ err }, "devbot report send failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Report send failed" });
   }
 });
 

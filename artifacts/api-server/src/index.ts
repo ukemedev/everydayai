@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { migrateUnencryptedKeys } from "./routes/keys";
 import { startMonitor } from "./lib/errorMonitor";
+import { startWeeklyReportScheduler } from "./lib/weeklyReport";
 
 const rawPort = process.env["PORT"];
 
@@ -30,4 +31,5 @@ app.listen(port, (err) => {
   );
 
   startMonitor();
+  startWeeklyReportScheduler();
 });
