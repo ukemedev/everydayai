@@ -18,6 +18,12 @@ import { saveMessage, searchMemory, getLessons } from "../lib/devbotMemory.js";
 import { buildContext } from "../lib/devbotSession.js";
 import { runTest } from "../lib/devbotTester.js";
 import { getEndpointForFile } from "../lib/devbotEndpointMap.js";
+import {
+  saveSnapshot,
+  getSnapshots,
+  getSnapshotById,
+  getAllSnapshots,
+} from "../lib/devbotRollback.js";
 
 const router = Router();
 
@@ -230,6 +236,53 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
   const conversationHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
   const clientLoadedFiles: string[] = Array.isArray(loadedFiles) ? loadedFiles : [];
 
+  // ── Rollback command handler ──────────────────────────────────────────────
+  const rollbackMatch = message.trim().match(/rollback\s+([^\s]+?)(?:\s+version\s+(\S+))?$/i);
+  if (rollbackMatch && githubConfigured()) {
+    const targetFile = rollbackMatch[1];
+    const versionId  = rollbackMatch[2];
+
+    let snapshot = null;
+    try {
+      if (versionId) {
+        snapshot = await getSnapshotById(versionId);
+      } else {
+        const snapshots = await getSnapshots(targetFile);
+        snapshot = snapshots[0] ?? null;
+      }
+    } catch (snapErr) {
+      req.log.warn({ err: snapErr }, "devbot rollback: snapshot lookup failed");
+    }
+
+    if (!snapshot) {
+      res.json({ reply: `No rollback snapshot found for \`${targetFile}\`. Try applying a change first so a snapshot is saved.`, sessionId });
+      return;
+    }
+
+    try {
+      // Write the old content back to a rollback branch
+      const rts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+      const rollbackBranch = `devbot/rollback_${rts}`;
+      await createBranch(rollbackBranch);
+      const { commitUrl } = await createOrUpdateFile(
+        snapshot.file_path,
+        snapshot.old_content,
+        `rollback: restore ${snapshot.file_path}`,
+        rollbackBranch,
+      );
+      const restoredAt = new Date(snapshot.created_at).toLocaleString("en-GB", {
+        day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+      });
+      const reply = `✅ Rolled back \`${snapshot.file_path}\` to version from ${restoredAt}.\n\nThe old content has been written to branch \`${rollbackBranch}\`. [View commit](${commitUrl})`;
+      req.log.info({ file: snapshot.file_path, branch: rollbackBranch }, "devbot rollback completed");
+      res.json({ reply, sessionId });
+    } catch (rollbackErr) {
+      req.log.error({ err: rollbackErr }, "devbot rollback write failed");
+      res.status(500).json({ error: rollbackErr instanceof Error ? rollbackErr.message : "Rollback failed" });
+    }
+    return;
+  }
+
   // Persist user message
   await saveMessage(sessionId, "user", message.trim());
 
@@ -337,6 +390,22 @@ router.post("/devbot/write", async (req: Request, res: Response) => {
     const now = new Date();
     const ts = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
     const targetBranch = branch?.trim() || `devbot/${ts}`;
+
+    // ── Snapshot old content before overwriting ────────────────────────────
+    try {
+      const oldContent = await getFileContent(path.trim());
+      if (oldContent !== null) {
+        await saveSnapshot(
+          writeSessionId ?? `write_${Date.now()}`,
+          path.trim(),
+          oldContent,
+          message.trim(),
+        );
+        req.log.info({ path: path.trim() }, "devbot snapshot saved before write");
+      }
+    } catch (snapErr) {
+      req.log.warn({ err: snapErr }, "devbot snapshot failed — continuing with write");
+    }
 
     // Create the branch if it's new (silently succeeds if already exists)
     if (!branch?.trim()) {
@@ -512,6 +581,23 @@ router.get("/devbot/lessons", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot lessons fetch failed");
     res.status(500).json({ error: "Failed to fetch lessons" });
+  }
+});
+
+// ── GET /api/devbot/rollbacks ─────────────────────────────────────────────────
+// Returns last 20 rollback snapshots ordered by created_at desc.
+
+router.get("/devbot/rollbacks", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const rows = await getAllSnapshots();
+    req.log.info({ count: rows.length }, "devbot rollbacks fetched");
+    res.json({ rows });
+  } catch (err) {
+    req.log.error({ err }, "devbot rollbacks fetch failed");
+    res.status(500).json({ error: "Failed to fetch rollback history" });
   }
 });
 

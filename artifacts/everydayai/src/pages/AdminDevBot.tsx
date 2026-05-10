@@ -3,7 +3,7 @@ import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
   AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
-  Database, FlaskConical,
+  Database, FlaskConical, Clock, RotateCcw,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -79,6 +79,15 @@ interface TestResultRow {
   passed: boolean;
   response_preview: string;
   tested_at: string;
+}
+
+interface RollbackRow {
+  id: string;
+  session_id: string;
+  file_path: string;
+  old_content: string;
+  commit_message: string | null;
+  created_at: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1038,6 +1047,11 @@ export default function AdminDevBot() {
   const [testsLoading, setTestsLoading]       = useState(false);
   const [testRows, setTestRows]               = useState<TestResultRow[]>([]);
 
+  // Rollback / history panel state
+  const [showHistory, setShowHistory]         = useState(false);
+  const [historyLoading, setHistoryLoading]   = useState(false);
+  const [historyRows, setHistoryRows]         = useState<RollbackRow[]>([]);
+
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1207,6 +1221,54 @@ export default function AdminDevBot() {
     }
   }
 
+  // ── Fetch rollback history data ────────────────────────────────────────────
+  const fetchRollbacks = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/rollbacks", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { rows: RollbackRow[] };
+        setHistoryRows(d.rows ?? []);
+      }
+    } catch { /* silent */ } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  // ── Dispatch a chat command directly (used by Restore button) ──────────────
+  const dispatchCommand = useCallback(async (cmd: string) => {
+    if (loading) return;
+    setShowHistory(false);
+    const userMsg: Message = { role: "user", content: cmd };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setLoading(true);
+    setError("");
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: cmd, history: messages, loadedFiles, sessionId }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const data = await res.json() as { reply: string; sessionId?: string };
+      if (data.sessionId) setSessionId(data.sessionId);
+      setMessages([...newMessages, { role: "assistant", content: data.reply }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Command failed");
+      setMessages(newMessages);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, messages, loadedFiles, sessionId]);
+
   // ── Fetch tests panel data ─────────────────────────────────────────────────
   const fetchTests = useCallback(async () => {
     setTestsLoading(true);
@@ -1360,6 +1422,25 @@ export default function AdminDevBot() {
                 </div>
               )}
             </div>
+
+            {/* History (rollback) button */}
+            <button
+              onClick={() => {
+                setShowHistory((v) => !v);
+                if (!showHistory) void fetchRollbacks();
+              }}
+              title="Rollback history"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+              style={{
+                backgroundColor: showHistory ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {historyLoading
+                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
+                : <Clock size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
+              }
+            </button>
 
             {/* Tests button */}
             <button
@@ -1797,6 +1878,137 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── History / Rollback side panel ── */}
+      {showHistory && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.50)" }}
+          onClick={() => setShowHistory(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(300px, 44vw, 540px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Panel header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <Clock size={14} style={{ color: "#a78bfa" }} />
+                <span className="text-sm font-semibold text-white">Rollback History</span>
+                {historyRows.length > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-medium"
+                    style={{ backgroundColor: "rgba(167,139,250,0.15)", color: "#a78bfa" }}
+                  >
+                    {historyRows.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchRollbacks()}
+                  disabled={historyLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={historyLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowHistory(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Panel content */}
+            <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6">
+              {historyLoading && historyRows.length === 0 && (
+                <div className="flex items-center gap-2 py-6" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs">Loading rollback history…</span>
+                </div>
+              )}
+
+              {!historyLoading && historyRows.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <Clock size={28} style={{ color: "rgba(255,255,255,0.15)" }} />
+                  <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>No rollback history yet</p>
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.22)" }}>
+                    Snapshots are saved automatically before every file write via Apply Change.
+                  </p>
+                </div>
+              )}
+
+              {historyRows.length > 0 && (
+                <div className="flex flex-col gap-2.5">
+                  {historyRows.map((row) => {
+                    const shortPath = row.file_path.length > 40
+                      ? "…" + row.file_path.slice(-40)
+                      : row.file_path;
+                    return (
+                      <div
+                        key={row.id}
+                        className="flex flex-col gap-2 px-3.5 py-3 rounded-xl"
+                        style={{
+                          backgroundColor: "rgba(167,139,250,0.04)",
+                          border: "1px solid rgba(167,139,250,0.14)",
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span
+                              className="text-xs font-mono font-medium truncate"
+                              style={{ color: "rgba(255,255,255,0.75)" }}
+                              title={row.file_path}
+                            >
+                              {shortPath}
+                            </span>
+                            {row.commit_message && (
+                              <span
+                                className="text-xs truncate"
+                                style={{ color: "rgba(255,255,255,0.38)" }}
+                                title={row.commit_message}
+                              >
+                                {row.commit_message.length > 50 ? row.commit_message.slice(0, 50) + "…" : row.commit_message}
+                              </span>
+                            )}
+                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
+                              {new Date(row.created_at).toLocaleString("en-GB", {
+                                day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => void dispatchCommand(`rollback ${row.file_path} version ${row.id}`)}
+                            disabled={loading}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+                            style={{
+                              backgroundColor: "rgba(167,139,250,0.12)",
+                              border: "1px solid rgba(167,139,250,0.25)",
+                              color: "#a78bfa",
+                            }}
+                          >
+                            <RotateCcw size={10} />
+                            Restore
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Tests side panel ── */}
