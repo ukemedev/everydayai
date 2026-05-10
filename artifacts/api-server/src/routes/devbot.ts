@@ -24,6 +24,7 @@ import {
   getSnapshotById,
   getAllSnapshots,
 } from "../lib/devbotRollback.js";
+import { runCommand, getTerminalLogs } from "../lib/devbotTerminal.js";
 
 const router = Router();
 
@@ -235,6 +236,37 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
 
   const conversationHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
   const clientLoadedFiles: string[] = Array.isArray(loadedFiles) ? loadedFiles : [];
+
+  // ── Terminal command handler ──────────────────────────────────────────────
+  const terminalMatch = message.trim().match(/^(run|exec|install|npm install|npm run)\s+(.+)$/i);
+  if (terminalMatch) {
+    const action = terminalMatch[1].toLowerCase();
+    let command = terminalMatch[2].trim();
+
+    if (action === "install") {
+      command = `npm install ${command}`;
+    } else if (action === "exec") {
+      command = command;
+    }
+
+    const result = await runCommand(command, sessionId);
+
+    let reply = `💻 Terminal output:\n\`\`\`\n`;
+    if (result.stdout) reply += result.stdout;
+    if (result.stderr) reply += result.stderr;
+    reply += `\`\`\`\nExit code: ${result.exitCode} | Duration: ${result.duration}ms`;
+
+    if (result.exitCode !== 0) {
+      reply += `\n\n❌ Command failed. Check stderr above.`;
+    } else {
+      reply += `\n\n✅ Command completed successfully.`;
+    }
+
+    req.log.info({ command, exitCode: result.exitCode, duration: result.duration }, "devbot terminal command via chat");
+    await saveMessage(sessionId, "assistant", reply);
+    res.json({ reply, sessionId });
+    return;
+  }
 
   // ── Rollback command handler ──────────────────────────────────────────────
   const rollbackMatch = message.trim().match(/rollback\s+([^\s]+?)(?:\s+version\s+(\S+))?$/i);
@@ -581,6 +613,47 @@ router.get("/devbot/lessons", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot lessons fetch failed");
     res.status(500).json({ error: "Failed to fetch lessons" });
+  }
+});
+
+// ── POST /api/devbot/execute ──────────────────────────────────────────────────
+// Runs a shell command directly and returns the output.
+
+router.post("/devbot/execute", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const { command, sessionId: execSessionId } = req.body as { command?: string; sessionId?: string };
+
+  if (!command?.trim()) {
+    res.status(400).json({ error: "command is required" });
+    return;
+  }
+
+  try {
+    const result = await runCommand(command.trim(), execSessionId ?? `exec_${Date.now()}`);
+    req.log.info({ command: command.trim(), exitCode: result.exitCode }, "devbot execute route");
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "devbot execute failed");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Execution failed" });
+  }
+});
+
+// ── GET /api/devbot/terminal-logs ─────────────────────────────────────────────
+// Returns last 20 terminal command logs ordered by created_at desc.
+
+router.get("/devbot/terminal-logs", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const rows = await getTerminalLogs();
+    req.log.info({ count: rows.length }, "devbot terminal-logs fetched");
+    res.json({ rows });
+  } catch (err) {
+    req.log.error({ err }, "devbot terminal-logs fetch failed");
+    res.status(500).json({ error: "Failed to fetch terminal logs" });
   }
 });
 

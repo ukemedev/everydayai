@@ -3,7 +3,7 @@ import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
   AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
-  Database, FlaskConical, Clock, RotateCcw,
+  Database, FlaskConical, Clock, RotateCcw, Terminal, ChevronDown, ChevronUp,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -87,6 +87,17 @@ interface RollbackRow {
   file_path: string;
   old_content: string;
   commit_message: string | null;
+  created_at: string;
+}
+
+interface TerminalLog {
+  id: string;
+  session_id: string;
+  command: string;
+  stdout: string | null;
+  stderr: string | null;
+  exit_code: number | null;
+  duration_ms: number | null;
   created_at: string;
 }
 
@@ -1052,6 +1063,14 @@ export default function AdminDevBot() {
   const [historyLoading, setHistoryLoading]   = useState(false);
   const [historyRows, setHistoryRows]         = useState<RollbackRow[]>([]);
 
+  // Terminal panel state
+  const [showTerminal, setShowTerminal]       = useState(false);
+  const [terminalLoading, setTerminalLoading] = useState(false);
+  const [terminalLogs, setTerminalLogs]       = useState<TerminalLog[]>([]);
+  const [terminalInput, setTerminalInput]     = useState("");
+  const [terminalRunning, setTerminalRunning] = useState(false);
+  const [expandedLogs, setExpandedLogs]       = useState<Set<string>>(new Set());
+
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1220,6 +1239,42 @@ export default function AdminDevBot() {
       setReportSending(false);
     }
   }
+
+  // ── Fetch terminal logs ────────────────────────────────────────────────────
+  const fetchTerminalLogs = useCallback(async () => {
+    setTerminalLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/terminal-logs", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { rows: TerminalLog[] };
+        setTerminalLogs(d.rows ?? []);
+      }
+    } catch { /* silent */ } finally {
+      setTerminalLoading(false);
+    }
+  }, []);
+
+  // ── Run a command from the terminal panel's quick-input bar ───────────────
+  const runTerminalCommand = useCallback(async () => {
+    const cmd = terminalInput.trim();
+    if (!cmd || terminalRunning) return;
+    setTerminalRunning(true);
+    setTerminalInput("");
+    try {
+      const token = await getToken();
+      await fetch("/api/devbot/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ command: cmd, sessionId }),
+      });
+      await fetchTerminalLogs();
+    } catch { /* silent */ } finally {
+      setTerminalRunning(false);
+    }
+  }, [terminalInput, terminalRunning, sessionId, fetchTerminalLogs]);
 
   // ── Fetch rollback history data ────────────────────────────────────────────
   const fetchRollbacks = useCallback(async () => {
@@ -1422,6 +1477,25 @@ export default function AdminDevBot() {
                 </div>
               )}
             </div>
+
+            {/* Terminal button */}
+            <button
+              onClick={() => {
+                setShowTerminal((v) => !v);
+                if (!showTerminal) void fetchTerminalLogs();
+              }}
+              title="Terminal logs"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+              style={{
+                backgroundColor: showTerminal ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {terminalLoading
+                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
+                : <Terminal size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
+              }
+            </button>
 
             {/* History (rollback) button */}
             <button
@@ -1878,6 +1952,196 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── Terminal side panel ── */}
+      {showTerminal && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.60)" }}
+          onClick={() => setShowTerminal(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(320px, 52vw, 700px)",
+              backgroundColor: "#0a0d0f",
+              borderLeft: "1px solid rgba(0,255,100,0.12)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Panel header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(0,255,100,0.10)", backgroundColor: "#0d1410" }}
+            >
+              <div className="flex items-center gap-2">
+                <Terminal size={14} style={{ color: "#22c55e" }} />
+                <span className="text-sm font-semibold font-mono" style={{ color: "#22c55e" }}>Terminal</span>
+                {terminalLogs.length > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-mono font-medium"
+                    style={{ backgroundColor: "rgba(34,197,94,0.12)", color: "#22c55e" }}
+                  >
+                    {terminalLogs.length}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchTerminalLogs()}
+                  disabled={terminalLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-mono transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(34,197,94,0.60)", border: "1px solid rgba(34,197,94,0.15)" }}
+                >
+                  <RefreshCw size={10} className={terminalLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowTerminal(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Log list */}
+            <div className="flex-1 overflow-y-auto px-4 pt-3 pb-2">
+              {terminalLoading && terminalLogs.length === 0 && (
+                <div className="flex items-center gap-2 py-6" style={{ color: "rgba(34,197,94,0.50)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs font-mono">Loading terminal logs…</span>
+                </div>
+              )}
+
+              {!terminalLoading && terminalLogs.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <Terminal size={28} style={{ color: "rgba(34,197,94,0.18)" }} />
+                  <p className="text-sm font-mono font-medium" style={{ color: "rgba(34,197,94,0.35)" }}>No commands run yet</p>
+                  <p className="text-xs font-mono" style={{ color: "rgba(34,197,94,0.22)" }}>
+                    Type "run echo hello" in chat or use the input below.
+                  </p>
+                </div>
+              )}
+
+              {terminalLogs.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {terminalLogs.map((log) => {
+                    const isExpanded = expandedLogs.has(log.id);
+                    const hasOutput = !!(log.stdout || log.stderr);
+                    const passed = (log.exit_code ?? 1) === 0;
+                    return (
+                      <div
+                        key={log.id}
+                        className="rounded-lg overflow-hidden"
+                        style={{
+                          backgroundColor: "#0d1117",
+                          border: passed
+                            ? "1px solid rgba(34,197,94,0.18)"
+                            : "1px solid rgba(239,68,68,0.20)",
+                        }}
+                      >
+                        {/* Command row */}
+                        <div
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
+                          onClick={() => hasOutput && setExpandedLogs((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(log.id)) next.delete(log.id);
+                            else next.add(log.id);
+                            return next;
+                          })}
+                        >
+                          <span style={{ color: "rgba(34,197,94,0.50)", fontFamily: "monospace", fontSize: "11px" }}>$</span>
+                          <span className="flex-1 text-xs font-mono truncate" style={{ color: "#e2e8f0" }} title={log.command}>
+                            {log.command}
+                          </span>
+                          <span
+                            className="text-xs font-mono px-1.5 py-0.5 rounded flex-shrink-0"
+                            style={{
+                              backgroundColor: passed ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                              color: passed ? "#22c55e" : "#ef4444",
+                            }}
+                          >
+                            {log.exit_code ?? "?"}
+                          </span>
+                          {log.duration_ms != null && (
+                            <span className="text-xs font-mono flex-shrink-0" style={{ color: "rgba(255,255,255,0.25)" }}>
+                              {log.duration_ms}ms
+                            </span>
+                          )}
+                          <span className="text-xs flex-shrink-0" style={{ color: "rgba(255,255,255,0.20)" }}>
+                            {new Date(log.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                          {hasOutput && (
+                            isExpanded
+                              ? <ChevronUp size={12} style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+                              : <ChevronDown size={12} style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0 }} />
+                          )}
+                        </div>
+
+                        {/* Expanded output */}
+                        {isExpanded && hasOutput && (
+                          <div
+                            className="px-3 pb-3 pt-1"
+                            style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+                          >
+                            <pre
+                              className="text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words"
+                              style={{
+                                color: (log.exit_code ?? 1) === 0 ? "#86efac" : "#fca5a5",
+                                maxHeight: "240px",
+                                overflowY: "auto",
+                              }}
+                            >
+                              {[log.stdout, log.stderr].filter(Boolean).join("\n").trim() || "(no output)"}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Quick-input bar */}
+            <div
+              className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
+              style={{ borderTop: "1px solid rgba(0,255,100,0.10)", backgroundColor: "#0d1410" }}
+            >
+              <span className="text-xs font-mono flex-shrink-0" style={{ color: "rgba(34,197,94,0.60)" }}>$</span>
+              <input
+                type="text"
+                value={terminalInput}
+                onChange={(e) => setTerminalInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !terminalRunning) void runTerminalCommand();
+                }}
+                placeholder="echo hello world"
+                className="flex-1 bg-transparent text-xs font-mono outline-none"
+                style={{
+                  color: "#e2e8f0",
+                  caretColor: "#22c55e",
+                }}
+                spellCheck={false}
+              />
+              <button
+                onClick={() => void runTerminalCommand()}
+                disabled={!terminalInput.trim() || terminalRunning}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{
+                  backgroundColor: "rgba(34,197,94,0.15)",
+                  border: "1px solid rgba(34,197,94,0.25)",
+                  color: "#22c55e",
+                }}
+              >
+                {terminalRunning
+                  ? <Loader2 size={11} className="animate-spin" />
+                  : <Terminal size={11} />
+                }
+                Run
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── History / Rollback side panel ── */}
