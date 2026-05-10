@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
-  AlertCircle, Rocket, Upload,
+  AlertCircle, Rocket, Upload, Activity, RefreshCw,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -32,6 +32,14 @@ interface ApplyModalState {
   code: string;
   lang: string;
   suggestedPath: string;
+}
+
+interface HealthResult {
+  status: "ok" | "warning" | "critical";
+  errorCount: number;
+  errors: Array<{ action: string; count: number }>;
+  warnings: string[];
+  lastChecked: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -967,6 +975,11 @@ export default function AdminDevBot() {
   const [applyLoading, setApplyLoading]       = useState(false);
   const [applyError, setApplyError]           = useState("");
 
+  // Health indicator state
+  const [healthResult, setHealthResult]       = useState<HealthResult | null>(null);
+  const [healthLoading, setHealthLoading]     = useState(false);
+  const [showHealth, setShowHealth]           = useState(false);
+
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1081,6 +1094,29 @@ export default function AdminDevBot() {
     }
   }
 
+  // ── Fetch health ───────────────────────────────────────────────────────────
+  const fetchHealth = useCallback(async () => {
+    setHealthLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/health", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as HealthResult;
+        setHealthResult(data);
+      }
+    } catch { /* silent */ } finally {
+      setHealthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchHealth();
+    const iv = setInterval(() => void fetchHealth(), 5 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, [fetchHealth]);
+
   // ── Send message ───────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim();
@@ -1194,6 +1230,38 @@ export default function AdminDevBot() {
               )}
             </div>
 
+            {/* Health indicator */}
+            <button
+              onClick={() => setShowHealth((v) => !v)}
+              title="System health"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+              style={{
+                backgroundColor: showHealth ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {healthLoading ? (
+                <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
+              ) : (
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{
+                    backgroundColor:
+                      healthResult?.status === "critical" ? "#ef4444" :
+                      healthResult?.status === "warning"  ? "#f59e0b" :
+                      healthResult?.status === "ok"       ? "#22c55e" :
+                      "rgba(255,255,255,0.25)",
+                    boxShadow:
+                      healthResult?.status === "critical" ? "0 0 6px #ef4444" :
+                      healthResult?.status === "warning"  ? "0 0 6px #f59e0b" :
+                      healthResult?.status === "ok"       ? "0 0 6px #22c55e" :
+                      "none",
+                  }}
+                />
+              )}
+              <Activity size={11} style={{ color: "rgba(255,255,255,0.40)" }} />
+            </button>
+
             {messages.length > 0 && (
               <button
                 onClick={clearChat}
@@ -1205,6 +1273,98 @@ export default function AdminDevBot() {
               </button>
             )}
           </div>
+
+          {/* Health panel */}
+          {showHealth && (
+            <div
+              className="flex-shrink-0 border-b px-5 py-3"
+              style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.06)" }}
+            >
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{
+                      backgroundColor:
+                        healthResult?.status === "critical" ? "#ef4444" :
+                        healthResult?.status === "warning"  ? "#f59e0b" :
+                        healthResult?.status === "ok"       ? "#22c55e" :
+                        "rgba(255,255,255,0.25)",
+                    }}
+                  />
+                  <span className="text-xs font-semibold text-white">
+                    {healthResult?.status === "critical" ? "Critical errors detected" :
+                     healthResult?.status === "warning"  ? "Warnings detected" :
+                     healthResult?.status === "ok"       ? "All systems healthy" :
+                     "Health unknown"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {healthResult && (
+                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>
+                      {new Date(healthResult.lastChecked).toLocaleTimeString()}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => void fetchHealth()}
+                    disabled={healthLoading}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                  >
+                    <RefreshCw size={10} className={healthLoading ? "animate-spin" : ""} />
+                    Refresh
+                  </button>
+                  <button onClick={() => setShowHealth(false)} style={{ color: "rgba(255,255,255,0.30)" }}>
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {healthResult && (
+                <div className="flex flex-wrap gap-2">
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs"
+                    style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+                  >
+                    <AlertCircle size={10} style={{ color: "rgba(255,255,255,0.40)" }} />
+                    <span style={{ color: "rgba(255,255,255,0.55)" }}>
+                      {healthResult.errorCount} error event{healthResult.errorCount !== 1 ? "s" : ""} in last 30 min
+                    </span>
+                  </div>
+                  {healthResult.errors.slice(0, 4).map((e) => (
+                    <div
+                      key={e.action}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs"
+                      style={{
+                        backgroundColor: healthResult.status === "critical"
+                          ? "rgba(239,68,68,0.10)" : "rgba(245,158,11,0.10)",
+                        border: healthResult.status === "critical"
+                          ? "1px solid rgba(239,68,68,0.20)" : "1px solid rgba(245,158,11,0.20)",
+                        color: healthResult.status === "critical" ? "#ef4444" : "#f59e0b",
+                      }}
+                    >
+                      {e.action} <span style={{ opacity: 0.7 }}>×{e.count}</span>
+                    </div>
+                  ))}
+                  {healthResult.warnings.map((w, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs"
+                      style={{ backgroundColor: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      {w}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!healthResult && !healthLoading && (
+                <p className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>
+                  No health data yet — refreshing…
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-5 md:px-6">

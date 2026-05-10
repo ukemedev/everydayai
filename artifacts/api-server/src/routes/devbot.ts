@@ -12,6 +12,7 @@ import {
   createPullRequest,
   mergePullRequest,
 } from "../lib/github.js";
+import { runHealthCheck, getLastHealthResult } from "../lib/errorMonitor.js";
 
 const router = Router();
 
@@ -371,6 +372,30 @@ router.post("/devbot/deploy", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err, branch }, "devbot deploy failed");
     res.status(500).json({ error: err instanceof Error ? err.message : "Deploy failed" });
+  }
+});
+
+// ── GET /api/devbot/health ────────────────────────────────────────────────────
+// Manually triggers a health check and returns the result.
+// Also returns the cached result from the last automatic check if available.
+
+router.get("/devbot/health", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    // Use cached result if it's less than 60 seconds old — avoid hammering the DB
+    const cached = getLastHealthResult();
+    const AGE_THRESHOLD_MS = 60_000;
+    const isFresh = cached && (Date.now() - new Date(cached.lastChecked).getTime()) < AGE_THRESHOLD_MS;
+
+    const result = isFresh ? cached : await runHealthCheck();
+
+    req.log.info({ status: result.status, errorCount: result.errorCount }, "devbot health check");
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "devbot health check failed");
+    res.status(500).json({ error: "Health check failed" });
   }
 });
 

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { migrateUnencryptedKeys } from "./routes/keys";
+import { startMonitor } from "./lib/errorMonitor";
 
 const rawPort = process.env["PORT"];
 
@@ -27,4 +28,6 @@ app.listen(port, (err) => {
   migrateUnencryptedKeys().catch((e) =>
     logger.error({ e }, "Key migration failed")
   );
+
+  startMonitor();
 });
