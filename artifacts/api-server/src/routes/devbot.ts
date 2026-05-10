@@ -14,6 +14,8 @@ import {
 } from "../lib/github.js";
 import { runHealthCheck, getLastHealthResult } from "../lib/errorMonitor.js";
 import { generateWeeklyReport, sendWeeklyReportTelegram } from "../lib/weeklyReport.js";
+import { saveMessage, searchMemory, getLessons } from "../lib/devbotMemory.js";
+import { buildContext } from "../lib/devbotSession.js";
 
 const router = Router();
 
@@ -140,6 +142,7 @@ interface DevBotBody {
   message?: string;
   history?: HistoryMessage[];
   loadedFiles?: string[];
+  sessionId?: string;
 }
 
 interface WriteBody {
@@ -212,22 +215,23 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
   const authorized = await requireAdmin(req, res);
   if (!authorized) return;
 
-  const { message, history, loadedFiles } = req.body as DevBotBody;
+  const { message, history, loadedFiles, sessionId: incomingSessionId } = req.body as DevBotBody;
 
   if (!message?.trim()) {
     res.status(400).json({ error: "message is required" });
     return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    req.log.error("ANTHROPIC_API_KEY is not set");
-    res.status(503).json({ error: "DevBot is not configured. Set ANTHROPIC_API_KEY." });
-    return;
-  }
+  const sessionId = incomingSessionId?.trim() || `session_${Date.now()}`;
 
   const conversationHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
   const clientLoadedFiles: string[] = Array.isArray(loadedFiles) ? loadedFiles : [];
+
+  // Persist user message
+  await saveMessage(sessionId, "user", message.trim());
+
+  // Build memory context
+  const memoryContext = await buildContext(sessionId, message.trim());
 
   let fileContext = "";
   let autoDetectedFiles: string[] = [];
@@ -256,34 +260,46 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
     }
   }
 
-  const systemPrompt = MASTER_CONTEXT + fileContext;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  try {
-    const client = new Anthropic({ apiKey });
+  let reply: string;
 
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [
-        ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: message.trim() },
-      ],
-    });
+  if (!apiKey) {
+    reply = `DevBot brain offline — Claude API key pending.\n\nMemory: ${memoryContext ? "Loaded ✓" : "Empty"}\nSession: ${sessionId}`;
+  } else {
+    const systemPrompt = MASTER_CONTEXT + (memoryContext ? `\n\n${memoryContext}` : "") + fileContext;
 
-    const block = response.content[0];
-    const reply = block.type === "text" ? block.text : "No response from model.";
+    try {
+      const client = new Anthropic({ apiKey });
 
-    req.log.info(
-      { inputLength: message.length, outputLength: reply.length, fileContextLength: fileContext.length },
-      "devbot chat completed"
-    );
+      const response = await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [
+          ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
+          { role: "user", content: message.trim() },
+        ],
+      });
 
-    res.json({ reply, autoDetectedFiles });
-  } catch (err) {
-    req.log.error({ err }, "devbot chat failed");
-    res.status(500).json({ error: "DevBot request failed. Check server logs." });
+      const block = response.content[0];
+      reply = block.type === "text" ? block.text : "No response from model.";
+
+      req.log.info(
+        { inputLength: message.length, outputLength: reply.length, fileContextLength: fileContext.length },
+        "devbot chat completed"
+      );
+    } catch (err) {
+      req.log.error({ err }, "devbot chat failed");
+      res.status(500).json({ error: "DevBot request failed. Check server logs." });
+      return;
+    }
   }
+
+  // Persist assistant reply
+  await saveMessage(sessionId, "assistant", reply);
+
+  res.json({ reply, autoDetectedFiles, sessionId });
 });
 
 // ── POST /api/devbot/write ────────────────────────────────────────────────────
@@ -431,6 +447,48 @@ router.get("/devbot/health", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot health check failed");
     res.status(500).json({ error: "Health check failed" });
+  }
+});
+
+// ── GET /api/devbot/memory ────────────────────────────────────────────────────
+// Returns last 20 memory rows ordered by created_at desc.
+
+router.get("/devbot/memory", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const sb = getServiceClient();
+    if (!sb) {
+      res.status(503).json({ error: "Service unavailable" });
+      return;
+    }
+    const { data, error } = await sb
+      .from("devbot_memory")
+      .select("id, session_id, role, content, created_at")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    res.json({ rows: data ?? [] });
+  } catch (err) {
+    req.log.error({ err }, "devbot memory fetch failed");
+    res.status(500).json({ error: "Failed to fetch memory" });
+  }
+});
+
+// ── GET /api/devbot/lessons ───────────────────────────────────────────────────
+// Returns all lessons ordered by applied_count desc.
+
+router.get("/devbot/lessons", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const rows = await getLessons();
+    res.json({ rows });
+  } catch (err) {
+    req.log.error({ err }, "devbot lessons fetch failed");
+    res.status(500).json({ error: "Failed to fetch lessons" });
   }
 });
 

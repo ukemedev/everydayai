@@ -3,6 +3,7 @@ import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
   AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
+  Database,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -51,6 +52,22 @@ interface WeeklyReport {
   weekStart:     string;
   weekEnd:       string;
   generatedAt:   string;
+}
+
+interface MemoryRow {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+interface LessonRow {
+  id: string;
+  trigger: string;
+  lesson: string;
+  applied_count: number;
+  created_at: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -998,6 +1015,13 @@ export default function AdminDevBot() {
   const [reportSent, setReportSent]           = useState(false);
   const [showReport, setShowReport]           = useState(false);
 
+  // Session & memory state
+  const [sessionId, setSessionId]             = useState<string>(() => `session_${Date.now()}`);
+  const [showMemory, setShowMemory]           = useState(false);
+  const [memoryLoading, setMemoryLoading]     = useState(false);
+  const [memoryRows, setMemoryRows]           = useState<MemoryRow[]>([]);
+  const [lessonRows, setLessonRows]           = useState<LessonRow[]>([]);
+
   const bottomRef   = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1164,6 +1188,28 @@ export default function AdminDevBot() {
     }
   }
 
+  // ── Fetch memory panel data ────────────────────────────────────────────────
+  const fetchMemory = useCallback(async () => {
+    setMemoryLoading(true);
+    try {
+      const token = await getToken();
+      const [memRes, lesRes] = await Promise.all([
+        fetch("/api/devbot/memory", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/devbot/lessons", { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (memRes.ok) {
+        const d = await memRes.json() as { rows: MemoryRow[] };
+        setMemoryRows(d.rows ?? []);
+      }
+      if (lesRes.ok) {
+        const d = await lesRes.json() as { rows: LessonRow[] };
+        setLessonRows(d.rows ?? []);
+      }
+    } catch { /* silent */ } finally {
+      setMemoryLoading(false);
+    }
+  }, []);
+
   // ── Send message ───────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim();
@@ -1183,7 +1229,7 @@ export default function AdminDevBot() {
       const res = await fetch("/api/devbot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: trimmed, history: messages, loadedFiles }),
+        body: JSON.stringify({ message: trimmed, history: messages, loadedFiles, sessionId }),
       });
 
       if (!res.ok) {
@@ -1191,7 +1237,8 @@ export default function AdminDevBot() {
         throw new Error(err.error ?? `HTTP ${res.status}`);
       }
 
-      const data = await res.json() as { reply: string; autoDetectedFiles?: string[] };
+      const data = await res.json() as { reply: string; autoDetectedFiles?: string[]; sessionId?: string };
+      if (data.sessionId) setSessionId(data.sessionId);
       setMessages([...newMessages, {
         role: "assistant",
         content: data.reply,
@@ -1203,7 +1250,7 @@ export default function AdminDevBot() {
     } finally {
       setLoading(false);
     }
-  }, [input, messages, loading, loadedFiles]);
+  }, [input, messages, loading, loadedFiles, sessionId]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1223,6 +1270,7 @@ export default function AdminDevBot() {
     setMessages([]);
     setError("");
     setLoadedFiles([]);
+    setSessionId(`session_${Date.now()}`);
   }
 
   const knownFilePaths = repoFiles.map((f) => f.path);
@@ -1276,6 +1324,25 @@ export default function AdminDevBot() {
                 </div>
               )}
             </div>
+
+            {/* Memory button */}
+            <button
+              onClick={() => {
+                setShowMemory((v) => !v);
+                if (!showMemory) void fetchMemory();
+              }}
+              title="Memory viewer"
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs transition-opacity hover:opacity-80"
+              style={{
+                backgroundColor: showMemory ? "rgba(255,255,255,0.06)" : "transparent",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {memoryLoading
+                ? <Loader2 size={12} className="animate-spin" style={{ color: "rgba(255,255,255,0.40)" }} />
+                : <Database size={12} style={{ color: "rgba(255,255,255,0.40)" }} />
+              }
+            </button>
 
             {/* Reports button */}
             <button
@@ -1675,6 +1742,124 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── Memory side panel ── */}
+      {showMemory && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.50)" }}
+          onClick={() => setShowMemory(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(300px, 38vw, 480px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Panel header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <Database size={14} style={{ color: "#3b5bfc" }} />
+                <span className="text-sm font-semibold text-white">Memory Viewer</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchMemory()}
+                  disabled={memoryLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={memoryLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowMemory(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Panel content */}
+            <div className="flex-1 overflow-y-auto">
+              {memoryLoading && memoryRows.length === 0 && (
+                <div className="flex items-center gap-2 px-5 py-6" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs">Loading memory…</span>
+                </div>
+              )}
+
+              {/* Past Messages */}
+              <div className="px-5 pt-4 pb-2">
+                <p className="text-xs font-semibold mb-3" style={{ color: "rgba(255,255,255,0.40)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  Past Messages
+                </p>
+                {!memoryLoading && memoryRows.length === 0 && (
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>No messages stored yet.</p>
+                )}
+                <div className="flex flex-col gap-2">
+                  {memoryRows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex flex-col gap-1 px-3 py-2.5 rounded-lg"
+                      style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="px-1.5 py-0.5 rounded text-xs font-semibold"
+                          style={{
+                            backgroundColor: row.role === "user" ? "rgba(59,91,252,0.18)" : "rgba(168,85,247,0.18)",
+                            color: row.role === "user" ? "#3b5bfc" : "#a855f7",
+                          }}
+                        >
+                          {row.role}
+                        </span>
+                        <span className="text-xs ml-auto" style={{ color: "rgba(255,255,255,0.25)" }}>
+                          {new Date(row.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                      <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.60)" }}>
+                        {row.content.length > 80 ? row.content.slice(0, 80) + "…" : row.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lessons */}
+              <div className="px-5 pt-4 pb-6">
+                <p className="text-xs font-semibold mb-3" style={{ color: "rgba(255,255,255,0.40)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  Lessons Learned
+                </p>
+                {lessonRows.length === 0 ? (
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.30)" }}>No lessons yet.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {lessonRows.map((lesson) => (
+                      <div
+                        key={lesson.id}
+                        className="px-3 py-2.5 rounded-lg"
+                        style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+                      >
+                        <p className="text-xs font-medium mb-0.5" style={{ color: "rgba(255,255,255,0.45)" }}>
+                          Trigger: {lesson.trigger}
+                        </p>
+                        <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.70)" }}>
+                          {lesson.lesson}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
