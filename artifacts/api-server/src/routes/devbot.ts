@@ -155,6 +155,8 @@ interface DevBotBody {
   history?: HistoryMessage[];
   loadedFiles?: string[];
   sessionId?: string;
+  imageData?: string;
+  imageMediaType?: string;
 }
 
 interface WriteBody {
@@ -228,10 +230,10 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
   const authorized = await requireAdmin(req, res);
   if (!authorized) return;
 
-  const { message, history, loadedFiles, sessionId: incomingSessionId } = req.body as DevBotBody;
+  const { message, history, loadedFiles, sessionId: incomingSessionId, imageData, imageMediaType } = req.body as DevBotBody;
 
-  if (!message?.trim()) {
-    res.status(400).json({ error: "message is required" });
+  if (!message?.trim() && !imageData) {
+    res.status(400).json({ error: "message or imageData is required" });
     return;
   }
 
@@ -240,8 +242,44 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
   const conversationHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
   const clientLoadedFiles: string[] = Array.isArray(loadedFiles) ? loadedFiles : [];
 
+  // ── Image / screenshot handler ────────────────────────────────────────────
+  if (imageData) {
+    const sizeKb = Math.round(imageData.length * 0.75 / 1024);
+    const userText = message?.trim() || "Analyze this screenshot and identify any bugs or issues you can see.";
+
+    const reply =
+      `📸 Screenshot received!\n\n` +
+      `Vision analysis offline — Claude API key pending.\n\n` +
+      `Image size: ${sizeKb}KB\n` +
+      `When API is funded, DevBot will:\n` +
+      `• Identify the broken component\n` +
+      `• Find the exact file in codebase\n` +
+      `• Generate a fix automatically`;
+
+    // Save user message + assistant reply to memory
+    await saveMessage(sessionId, "user", userText);
+    await saveMessage(sessionId, "assistant", reply);
+
+    // Persist to devbot_screenshots (fire-and-forget, non-blocking)
+    const sb = getServiceClient();
+    if (sb) {
+      sb.from("devbot_screenshots").insert({
+        session_id:    sessionId,
+        image_size_kb: sizeKb,
+        message:       userText,
+        analysis:      reply,
+      }).then(({ error }) => {
+        if (error) req.log.warn({ err: error }, "devbot screenshot insert failed");
+      });
+    }
+
+    req.log.info({ sessionId, sizeKb }, "devbot screenshot received");
+    res.json({ reply, sessionId });
+    return;
+  }
+
   // ── Terminal command handler ──────────────────────────────────────────────
-  const terminalMatch = message.trim().match(/^(run|exec|install|npm install|npm run)\s+(.+)$/i);
+  const terminalMatch = message!.trim().match(/^(run|exec|install|npm install|npm run)\s+(.+)$/i);
   if (terminalMatch) {
     const action = terminalMatch[1].toLowerCase();
     let command = terminalMatch[2].trim();

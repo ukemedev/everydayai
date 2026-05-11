@@ -3,7 +3,7 @@ import {
   Bot, Send, Trash2, FileCode, Search, X, ChevronRight,
   Loader2, GitBranch, Eye, GitPullRequest, CheckCircle2,
   AlertCircle, Rocket, Upload, Activity, RefreshCw, BarChart2,
-  Database, FlaskConical, Clock, RotateCcw, Terminal, ChevronDown, ChevronUp, LayoutGrid,
+  Database, FlaskConical, Clock, RotateCcw, Terminal, ChevronDown, ChevronUp, LayoutGrid, Paperclip,
 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
@@ -14,6 +14,8 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   autoDetectedFiles?: string[];
+  imageData?: string;
+  imageMediaType?: string;
 }
 
 interface RepoFile {
@@ -340,6 +342,21 @@ function MessageBubble({ msg, knownFiles, onApply }: MessageBubbleProps) {
         {isUser ? "A" : <Bot size={13} />}
       </div>
       <div style={{ maxWidth: "82%" }}>
+        {isUser && msg.imageData && (
+          <div className="mb-1.5 flex justify-end">
+            <img
+              src={`data:${msg.imageMediaType ?? "image/jpeg"};base64,${msg.imageData}`}
+              alt="Attached screenshot"
+              style={{
+                maxWidth: "220px",
+                maxHeight: "160px",
+                borderRadius: "12px",
+                border: "2px solid rgba(59,91,252,0.40)",
+                objectFit: "cover",
+              }}
+            />
+          </div>
+        )}
         <div
           className="px-3.5 py-2.5 text-sm leading-relaxed"
           style={{
@@ -347,6 +364,7 @@ function MessageBubble({ msg, knownFiles, onApply }: MessageBubbleProps) {
             color: isUser ? "#fff" : "rgba(255,255,255,0.85)",
             border: isUser ? "none" : "1px solid rgba(255,255,255,0.08)",
             borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+            display: (isUser && !msg.content) ? "none" : undefined,
           }}
         >
           {isUser ? (
@@ -1048,6 +1066,11 @@ export default function AdminDevBot() {
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
 
+  // Image attachment state
+  const [attachedImage, setAttachedImage]       = useState<string | null>(null);
+  const [attachedImageName, setAttachedImageName] = useState("");
+  const [attachedImageType, setAttachedImageType] = useState("image/jpeg");
+
   // File explorer state
   const [repoFiles, setRepoFiles]       = useState<RepoFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -1134,7 +1157,8 @@ export default function AdminDevBot() {
   const [expandedLogs, setExpandedLogs]       = useState<Set<string>>(new Set());
 
   const bottomRef   = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Load file tree on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -1570,12 +1594,19 @@ export default function AdminDevBot() {
   // ── Send message ───────────────────────────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const trimmed = input.trim();
-    if (!trimmed || loading) return;
+    if ((!trimmed && !attachedImage) || loading) return;
 
-    const userMsg: Message = { role: "user", content: trimmed };
+    const userMsg: Message = {
+      role: "user",
+      content: trimmed,
+      imageData: attachedImage ?? undefined,
+      imageMediaType: attachedImage ? attachedImageType : undefined,
+    };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
+    setAttachedImage(null);
+    setAttachedImageName("");
     setLoading(true);
     setError("");
 
@@ -1586,7 +1617,14 @@ export default function AdminDevBot() {
       const res = await fetch("/api/devbot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: trimmed, history: messages, loadedFiles, sessionId }),
+        body: JSON.stringify({
+          message: trimmed,
+          history: messages,
+          loadedFiles,
+          sessionId,
+          imageData: attachedImage ?? undefined,
+          imageMediaType: attachedImage ? attachedImageType : undefined,
+        }),
       });
 
       if (!res.ok) {
@@ -1607,7 +1645,7 @@ export default function AdminDevBot() {
     } finally {
       setLoading(false);
     }
-  }, [input, messages, loading, loadedFiles, sessionId]);
+  }, [input, attachedImage, attachedImageType, messages, loading, loadedFiles, sessionId]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1628,6 +1666,25 @@ export default function AdminDevBot() {
     setError("");
     setLoadedFiles([]);
     setSessionId(`session_${Date.now()}`);
+    setAttachedImage(null);
+    setAttachedImageName("");
+  }
+
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Strip the data URL prefix — send raw base64 only
+      const base64 = result.split(",")[1] ?? result;
+      setAttachedImage(base64);
+      setAttachedImageName(file.name);
+      setAttachedImageType(file.type || "image/jpeg");
+    };
+    reader.readAsDataURL(file);
+    // Reset so same file can be re-selected
+    e.target.value = "";
   }
 
   const knownFilePaths = repoFiles.map((f) => f.path);
@@ -2104,35 +2161,89 @@ export default function AdminDevBot() {
             className="px-4 pb-3.5 pt-2.5 md:px-6 flex-shrink-0 border-t"
             style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "#0d1117" }}
           >
-            <div className="max-w-2xl mx-auto flex gap-2.5 items-end">
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleInput}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask DevBot anything about the codebase…"
-                rows={1}
-                className="flex-1 resize-none rounded-xl px-3.5 py-2.5 text-sm outline-none"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  color: "#fff",
-                  minHeight: "42px",
-                  maxHeight: "160px",
-                  lineHeight: "1.5",
-                }}
-                onFocus={(e) => { e.currentTarget.style.border = "1px solid rgba(59,91,252,0.50)"; }}
-                onBlur={(e) => { e.currentTarget.style.border = "1px solid rgba(255,255,255,0.10)"; }}
-              />
-              <button
-                onClick={() => void sendMessage()}
-                disabled={!input.trim() || loading}
-                className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ backgroundColor: "#3b5bfc" }}
-                aria-label="Send"
-              >
-                {loading ? <Loader2 size={14} className="animate-spin" style={{ color: "#fff" }} /> : <Send size={14} style={{ color: "#fff" }} />}
-              </button>
+            <div className="max-w-2xl mx-auto">
+              {/* Image preview bar */}
+              {attachedImage && (
+                <div className="flex items-center gap-2.5 mb-2 px-1">
+                  <img
+                    src={`data:${attachedImageType};base64,${attachedImage}`}
+                    alt="Preview"
+                    style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "8px", border: "1px solid rgba(59,91,252,0.40)", flexShrink: 0 }}
+                  />
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.70)" }}>
+                      {attachedImageName}
+                    </span>
+                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                      ~{Math.round(attachedImage.length * 0.75 / 1024)}KB
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => { setAttachedImage(null); setAttachedImageName(""); }}
+                    className="ml-auto flex-shrink-0 p-1 rounded-full transition-opacity hover:opacity-70"
+                    style={{ color: "rgba(255,255,255,0.40)" }}
+                    aria-label="Remove image"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Input row */}
+              <div className="flex gap-2.5 items-end">
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  style={{ display: "none" }}
+                />
+
+                {/* Attach image button */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach screenshot"
+                  className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:opacity-80"
+                  style={{
+                    backgroundColor: attachedImage ? "rgba(59,91,252,0.18)" : "rgba(255,255,255,0.05)",
+                    border: attachedImage ? "1px solid rgba(59,91,252,0.40)" : "1px solid rgba(255,255,255,0.10)",
+                    color: attachedImage ? "#7c9dfc" : "rgba(255,255,255,0.40)",
+                  }}
+                  aria-label="Attach image"
+                >
+                  <Paperclip size={15} />
+                </button>
+
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={handleInput}
+                  onKeyDown={handleKeyDown}
+                  placeholder={attachedImage ? "Describe what you see or just send…" : "Ask DevBot anything about the codebase…"}
+                  rows={1}
+                  className="flex-1 resize-none rounded-xl px-3.5 py-2.5 text-sm outline-none"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    color: "#fff",
+                    minHeight: "42px",
+                    maxHeight: "160px",
+                    lineHeight: "1.5",
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.border = "1px solid rgba(59,91,252,0.50)"; }}
+                  onBlur={(e) => { e.currentTarget.style.border = "1px solid rgba(255,255,255,0.10)"; }}
+                />
+                <button
+                  onClick={() => void sendMessage()}
+                  disabled={(!input.trim() && !attachedImage) || loading}
+                  className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: "#3b5bfc" }}
+                  aria-label="Send"
+                >
+                  {loading ? <Loader2 size={14} className="animate-spin" style={{ color: "#fff" }} /> : <Send size={14} style={{ color: "#fff" }} />}
+                </button>
+              </div>
             </div>
             <p className="text-center text-xs mt-1.5" style={{ color: "rgba(255,255,255,0.18)" }}>
               Enter to send · Shift+Enter for new line
