@@ -124,6 +124,17 @@ interface ScanResult {
   scan_date: string;
 }
 
+interface ColumnInfo {
+  columnName: string;
+  dataType: string;
+  isNullable: string;
+}
+
+interface TableStat {
+  tableName: string;
+  rowCount: number;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getToken(): Promise<string> {
@@ -1086,6 +1097,17 @@ export default function AdminDevBot() {
   const [historyLoading, setHistoryLoading]   = useState(false);
   const [historyRows, setHistoryRows]         = useState<RollbackRow[]>([]);
 
+  // Database panel state
+  const [showDatabase, setShowDatabase]       = useState(false);
+  const [dbLoading, setDbLoading]             = useState(false);
+  const [dbStats, setDbStats]                 = useState<TableStat[]>([]);
+  const [dbSchema, setDbSchema]               = useState<Record<string, ColumnInfo[]>>({});
+  const [dbSelectedTable, setDbSelectedTable] = useState<string>("");
+  const [dbQuery, setDbQuery]                 = useState("");
+  const [dbQueryResult, setDbQueryResult]     = useState<{ rows: Record<string, unknown>[]; rowCount: number; executionTime: number } | null>(null);
+  const [dbQueryRunning, setDbQueryRunning]   = useState(false);
+  const [dbQueryError, setDbQueryError]       = useState<string | null>(null);
+
   // Scan panel state
   const [showScan, setShowScan]               = useState(false);
   const [scanLoading, setScanLoading]         = useState(false);
@@ -1290,6 +1312,55 @@ export default function AdminDevBot() {
       setReportSending(false);
     }
   }
+
+  // ── Database functions ────────────────────────────────────────────────────
+  const fetchDbData = useCallback(async () => {
+    setDbLoading(true);
+    try {
+      const token = await getToken();
+      const [statsRes, schemaRes] = await Promise.all([
+        fetch("/api/devbot/table-stats", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/devbot/schema",      { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (statsRes.ok) {
+        const d = await statsRes.json() as { stats: TableStat[] };
+        setDbStats(d.stats ?? []);
+      }
+      if (schemaRes.ok) {
+        const d = await schemaRes.json() as { schema: Record<string, ColumnInfo[]> };
+        setDbSchema(d.schema ?? {});
+        const tables = Object.keys(d.schema ?? {});
+        if (tables.length > 0 && !dbSelectedTable) setDbSelectedTable(tables[0]!);
+      }
+    } catch { /* silent */ } finally {
+      setDbLoading(false);
+    }
+  }, [dbSelectedTable]);
+
+  const execDbQuery = useCallback(async () => {
+    if (!dbQuery.trim()) return;
+    setDbQueryRunning(true);
+    setDbQueryError(null);
+    setDbQueryResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/query", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: dbQuery.trim() }),
+      });
+      const d = await res.json() as { rows?: Record<string, unknown>[]; rowCount?: number; executionTime?: number; error?: string };
+      if (!res.ok) {
+        setDbQueryError(d.error ?? "Query failed");
+      } else {
+        setDbQueryResult({ rows: d.rows ?? [], rowCount: d.rowCount ?? 0, executionTime: d.executionTime ?? 0 });
+      }
+    } catch (e) {
+      setDbQueryError(e instanceof Error ? e.message : "Query failed");
+    } finally {
+      setDbQueryRunning(false);
+    }
+  }, [dbQuery]);
 
   // ── Scan functions ────────────────────────────────────────────────────────
   const fetchScanResults = useCallback(async () => {
@@ -1680,6 +1751,13 @@ export default function AdminDevBot() {
                       loading: scanLoading,
                       active: showScan,
                       action: () => { setShowScan((v) => !v); if (!showScan) void fetchScanResults(); },
+                    },
+                    {
+                      label: "Database",
+                      emoji: "🗄️",
+                      loading: dbLoading,
+                      active: showDatabase,
+                      action: () => { setShowDatabase((v) => !v); if (!showDatabase) void fetchDbData(); },
                     },
                   ].map((item) => (
                     <button
@@ -2103,6 +2181,244 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── Database side panel ── */}
+      {showDatabase && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+          onClick={() => setShowDatabase(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(360px, 54vw, 720px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "14px" }}>🗄️</span>
+                <span className="text-sm font-semibold text-white">Database</span>
+                {dbStats.length > 0 && (
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    {dbStats.length} tables
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchDbData()}
+                  disabled={dbLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={dbLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowDatabase(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto">
+
+              {/* ── Table Stats ── */}
+              <div className="px-5 pt-4 pb-3">
+                <p className="text-xs font-semibold mb-3" style={{ color: "rgba(255,255,255,0.40)", letterSpacing: "0.06em" }}>
+                  TABLE STATS
+                </p>
+                {dbLoading && dbStats.length === 0 && (
+                  <div className="flex items-center gap-2 py-4" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    <Loader2 size={12} className="animate-spin" />
+                    <span className="text-xs">Loading…</span>
+                  </div>
+                )}
+                {!dbLoading && dbStats.length === 0 && (
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.28)" }}>
+                    No core tables found. Tables are checked against a predefined list.
+                  </p>
+                )}
+                {dbStats.length > 0 && (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {dbStats.map((s) => (
+                      <div
+                        key={s.tableName}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg"
+                        style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+                      >
+                        <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.65)" }}>
+                          {s.tableName}
+                        </span>
+                        <span
+                          className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#7c9dfc" }}
+                        >
+                          {s.rowCount.toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="mx-5" style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.07)" }} />
+
+              {/* ── Schema Browser ── */}
+              <div className="px-5 pt-4 pb-3">
+                <p className="text-xs font-semibold mb-3" style={{ color: "rgba(255,255,255,0.40)", letterSpacing: "0.06em" }}>
+                  SCHEMA BROWSER
+                </p>
+                {Object.keys(dbSchema).length === 0 && !dbLoading && (
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.28)" }}>No schema loaded.</p>
+                )}
+                {Object.keys(dbSchema).length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    <select
+                      value={dbSelectedTable}
+                      onChange={(e) => setDbSelectedTable(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-xs font-mono"
+                      style={{
+                        backgroundColor: "#0a0f1e",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        color: "rgba(255,255,255,0.80)",
+                        outline: "none",
+                      }}
+                    >
+                      {Object.keys(dbSchema).sort().map((tbl) => (
+                        <option key={tbl} value={tbl}>{tbl}</option>
+                      ))}
+                    </select>
+                    {dbSelectedTable && dbSchema[dbSelectedTable] && (
+                      <div
+                        className="rounded-lg overflow-hidden"
+                        style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+                              <th className="text-left px-3 py-2 font-semibold" style={{ color: "rgba(255,255,255,0.40)" }}>Column</th>
+                              <th className="text-left px-3 py-2 font-semibold" style={{ color: "rgba(255,255,255,0.40)" }}>Type</th>
+                              <th className="text-left px-3 py-2 font-semibold" style={{ color: "rgba(255,255,255,0.40)" }}>Nullable</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dbSchema[dbSelectedTable]!.map((col, i) => (
+                              <tr
+                                key={col.columnName}
+                                style={{ backgroundColor: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}
+                              >
+                                <td className="px-3 py-1.5 font-mono" style={{ color: "rgba(255,255,255,0.75)" }}>{col.columnName}</td>
+                                <td className="px-3 py-1.5 font-mono" style={{ color: "#7c9dfc" }}>{col.dataType}</td>
+                                <td className="px-3 py-1.5" style={{ color: col.isNullable === "NO" ? "#ef4444" : "rgba(255,255,255,0.30)" }}>
+                                  {col.isNullable === "NO" ? "required" : "nullable"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="mx-5" style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.07)" }} />
+
+              {/* ── Query Runner ── */}
+              <div className="px-5 pt-4 pb-6">
+                <p className="text-xs font-semibold mb-3" style={{ color: "rgba(255,255,255,0.40)", letterSpacing: "0.06em" }}>
+                  QUERY RUNNER
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={dbQuery}
+                    onChange={(e) => setDbQuery(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !dbQueryRunning) void execDbQuery(); }}
+                    placeholder="SELECT * FROM users LIMIT 5"
+                    className="flex-1 px-3 py-2 rounded-lg text-xs font-mono"
+                    style={{
+                      backgroundColor: "#0a0f1e",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      color: "rgba(255,255,255,0.80)",
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={() => void execDbQuery()}
+                    disabled={dbQueryRunning || !dbQuery.trim()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+                    style={{
+                      backgroundColor: "rgba(59,91,252,0.18)",
+                      border: "1px solid rgba(59,91,252,0.35)",
+                      color: "#7c9dfc",
+                    }}
+                  >
+                    {dbQueryRunning ? <Loader2 size={11} className="animate-spin" /> : null}
+                    {dbQueryRunning ? "Running…" : "Run"}
+                  </button>
+                </div>
+
+                {dbQueryError && (
+                  <div className="mt-3 px-3 py-2.5 rounded-lg text-xs font-mono" style={{ backgroundColor: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.18)", color: "#ef4444" }}>
+                    {dbQueryError}
+                  </div>
+                )}
+
+                {dbQueryResult && (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                        {dbQueryResult.rowCount} row{dbQueryResult.rowCount !== 1 ? "s" : ""} · {dbQueryResult.executionTime}ms
+                      </span>
+                    </div>
+                    <div
+                      className="overflow-x-auto rounded-lg"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)", maxHeight: "260px", overflow: "auto" }}
+                    >
+                      {dbQueryResult.rows.length === 0 ? (
+                        <p className="text-xs px-3 py-3" style={{ color: "rgba(255,255,255,0.30)" }}>No rows returned.</p>
+                      ) : (
+                        <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                          <thead style={{ position: "sticky", top: 0, backgroundColor: "#0d1117" }}>
+                            <tr style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+                              {Object.keys(dbQueryResult.rows[0]!).map((col) => (
+                                <th key={col} className="text-left px-3 py-2 font-semibold whitespace-nowrap" style={{ color: "rgba(255,255,255,0.40)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                                  {col}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dbQueryResult.rows.map((row, i) => (
+                              <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)" }}>
+                                {Object.values(row).map((val, j) => (
+                                  <td key={j} className="px-3 py-1.5 font-mono whitespace-nowrap" style={{ color: "rgba(255,255,255,0.70)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                    {val === null ? <span style={{ color: "rgba(255,255,255,0.20)" }}>null</span> : String(val)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Scan side panel ── */}

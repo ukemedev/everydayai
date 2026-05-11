@@ -27,6 +27,7 @@ import {
 import { runCommand, getTerminalLogs } from "../lib/devbotTerminal.js";
 import { captureError, getErrors, markResolved } from "../lib/devbotErrorCapture.js";
 import { runFullScan } from "../lib/devbotScanner.js";
+import { getSchema, runQuery, getTableStats } from "../lib/devbotDatabase.js";
 
 const router = Router();
 
@@ -335,6 +336,89 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
     } catch (scanErr) {
       req.log.error({ err: scanErr }, "devbot scan command failed");
       res.status(500).json({ error: "Scan failed" });
+    }
+    return;
+  }
+
+  // ── Database: show schema / list tables ──────────────────────────────────
+  if (
+    message.toLowerCase().includes("show schema") ||
+    message.toLowerCase().includes("list tables")
+  ) {
+    try {
+      const schema = await getSchema();
+      const tableList = Object.keys(schema).join(", ");
+      const reply = `📊 Database Schema\n\nTables found: ${Object.keys(schema).length}\n\n${tableList}\n\nType "describe [tablename]" to see columns.`;
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
+    } catch (dbErr) {
+      req.log.error({ err: dbErr }, "devbot show schema failed");
+      res.status(500).json({ error: "Failed to fetch schema" });
+    }
+    return;
+  }
+
+  // ── Database: describe table ──────────────────────────────────────────────
+  const describeMatch = message.match(/describe\s+(\w+)/i);
+  if (describeMatch) {
+    try {
+      const schema    = await getSchema();
+      const tableName = describeMatch[1]!;
+      const columns   = schema[tableName];
+      let reply: string;
+      if (!columns) {
+        reply = `Table "${tableName}" not found. Type "list tables" to see all tables.`;
+      } else {
+        const colList = columns
+          .map((c) => `  ${c.columnName} (${c.dataType}${c.isNullable === "NO" ? ", required" : ""})`)
+          .join("\n");
+        reply = `📋 Table: ${tableName}\n\nColumns:\n${colList}`;
+      }
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
+    } catch (dbErr) {
+      req.log.error({ err: dbErr }, "devbot describe table failed");
+      res.status(500).json({ error: "Failed to describe table" });
+    }
+    return;
+  }
+
+  // ── Database: table stats / db stats ─────────────────────────────────────
+  if (
+    message.toLowerCase().includes("table stats") ||
+    message.toLowerCase().includes("database stats") ||
+    message.toLowerCase().includes("db stats")
+  ) {
+    try {
+      const stats = await getTableStats();
+      const statList = stats.map((s) => `  ${s.tableName}: ${s.rowCount} rows`).join("\n");
+      const reply = `📈 Database Stats\n\n${statList}`;
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
+    } catch (dbErr) {
+      req.log.error({ err: dbErr }, "devbot table stats failed");
+      res.status(500).json({ error: "Failed to fetch table stats" });
+    }
+    return;
+  }
+
+  // ── Database: run query ───────────────────────────────────────────────────
+  const queryMatch = message.match(/^query:\s*(.+)$/is);
+  if (queryMatch) {
+    const sql = queryMatch[1]!.trim();
+    try {
+      const result  = await runQuery(sql);
+      const preview = JSON.stringify(result.rows.slice(0, 5), null, 2);
+      const reply   =
+        `🗄️ Query Result\n\nRows returned: ${result.rowCount}\nTime: ${result.executionTime}ms\n\n\`\`\`json\n${preview}\n\`\`\``;
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
+    } catch (dbErr) {
+      const msg = dbErr instanceof Error ? dbErr.message : "Query failed";
+      req.log.error({ err: dbErr, sql }, "devbot run query failed");
+      const reply = `❌ Query error: ${msg}`;
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
     }
     return;
   }
@@ -873,6 +957,64 @@ router.patch("/devbot/errors/:id/resolve", async (req: Request, res: Response) =
   } catch (err) {
     req.log.error({ err }, "devbot error resolve failed");
     res.status(500).json({ error: "Failed to resolve error" });
+  }
+});
+
+// ── GET /api/devbot/schema ────────────────────────────────────────────────────
+// Returns the public schema grouped by table. Admin-protected.
+
+router.get("/devbot/schema", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const schema = await getSchema();
+    req.log.info({ tables: Object.keys(schema).length }, "devbot schema fetched");
+    res.json({ schema });
+  } catch (err) {
+    req.log.error({ err }, "devbot schema fetch failed");
+    res.status(500).json({ error: "Failed to fetch schema" });
+  }
+});
+
+// ── POST /api/devbot/query ────────────────────────────────────────────────────
+// Runs a SELECT query. Admin-protected.
+
+router.post("/devbot/query", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const { sql } = req.body as { sql?: string };
+  if (!sql?.trim()) {
+    res.status(400).json({ error: "sql is required" });
+    return;
+  }
+
+  try {
+    const result = await runQuery(sql.trim());
+    req.log.info({ rowCount: result.rowCount, executionTime: result.executionTime }, "devbot query executed");
+    res.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Query failed";
+    req.log.warn({ err, sql }, "devbot query rejected or failed");
+    res.status(400).json({ error: msg });
+  }
+});
+
+// ── GET /api/devbot/table-stats ───────────────────────────────────────────────
+// Returns row counts for core tables. Admin-protected.
+
+router.get("/devbot/table-stats", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const stats = await getTableStats();
+    req.log.info({ tables: stats.length }, "devbot table-stats fetched");
+    res.json({ stats });
+  } catch (err) {
+    req.log.error({ err }, "devbot table-stats fetch failed");
+    res.status(500).json({ error: "Failed to fetch table stats" });
   }
 });
 
