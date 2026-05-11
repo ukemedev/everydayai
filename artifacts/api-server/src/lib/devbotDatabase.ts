@@ -32,27 +32,40 @@ function getClient() {
 }
 
 // ── getSchema ─────────────────────────────────────────────────────────────────
+// Uses a security-definer RPC to read information_schema without permission
+// issues. Run this once in the Supabase SQL editor to create the function:
+//
+//   create or replace function get_table_schema()
+//   returns table(table_name text, column_name text,
+//                 data_type text, is_nullable text)
+//   language sql security definer as $$
+//     select table_name::text, column_name::text,
+//            data_type::text, is_nullable::text
+//     from information_schema.columns
+//     where table_schema = 'public'
+//     order by table_name, ordinal_position;
+//   $$;
 
 export async function getSchema(): Promise<SchemaMap> {
   const sb = getClient();
 
-  const { data, error } = await sb
-    .from("information_schema.columns")
-    .select("table_name, column_name, data_type, is_nullable")
-    .eq("table_schema", "public")
-    .order("table_name")
-    .order("ordinal_position");
+  const { data, error } = await sb.rpc("get_table_schema");
 
-  if (error) throw error;
+  if (error) {
+    logger.warn({ err: error }, "devbotDatabase: get_table_schema RPC failed");
+    throw new Error(
+      "Schema fetch failed. Make sure the get_table_schema() function is created in Supabase. " +
+      `Supabase error: ${(error as { message?: string }).message ?? String(error)}`
+    );
+  }
 
   const schema: SchemaMap = {};
-  for (const row of data ?? []) {
-    const tbl = row.table_name as string;
-    if (!schema[tbl]) schema[tbl] = [];
-    schema[tbl]!.push({
-      columnName: row.column_name as string,
-      dataType:   row.data_type   as string,
-      isNullable: row.is_nullable as string,
+  for (const row of (data ?? []) as Array<{ table_name: string; column_name: string; data_type: string; is_nullable: string }>) {
+    if (!schema[row.table_name]) schema[row.table_name] = [];
+    schema[row.table_name]!.push({
+      columnName: row.column_name,
+      dataType:   row.data_type,
+      isNullable: row.is_nullable,
     });
   }
 
