@@ -26,6 +26,7 @@ import {
 } from "../lib/devbotRollback.js";
 import { runCommand, getTerminalLogs } from "../lib/devbotTerminal.js";
 import { captureError, getErrors, markResolved } from "../lib/devbotErrorCapture.js";
+import { runFullScan } from "../lib/devbotScanner.js";
 
 const router = Router();
 
@@ -312,6 +313,28 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
     } catch (rollbackErr) {
       req.log.error({ err: rollbackErr }, "devbot rollback write failed");
       res.status(500).json({ error: rollbackErr instanceof Error ? rollbackErr.message : "Rollback failed" });
+    }
+    return;
+  }
+
+  // ── Scan command handler ───────────────────────────────────────────────────
+  if (
+    message.toLowerCase().includes("run scan") ||
+    message.toLowerCase().includes("scan codebase")
+  ) {
+    try {
+      const results = await runFullScan();
+      const reply =
+        `🔍 Scan complete!\n\n` +
+        `Critical: ${results.critical}\n` +
+        `Warnings: ${results.warnings}\n` +
+        `Files scanned: ${results.totalFiles}\n\n` +
+        `Full report sent to Telegram.`;
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
+    } catch (scanErr) {
+      req.log.error({ err: scanErr }, "devbot scan command failed");
+      res.status(500).json({ error: "Scan failed" });
     }
     return;
   }
@@ -699,6 +722,81 @@ router.get("/devbot/tests", async (req: Request, res: Response) => {
   } catch (err) {
     req.log.error({ err }, "devbot tests fetch failed");
     res.status(500).json({ error: "Failed to fetch test results" });
+  }
+});
+
+// ── POST /api/devbot/scan ─────────────────────────────────────────────────────
+// Triggers an immediate full code scan. Admin-protected.
+
+router.post("/devbot/scan", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  try {
+    const results = await runFullScan();
+    req.log.info({ totalFiles: results.totalFiles, critical: results.critical, warnings: results.warnings }, "devbot manual scan triggered");
+    res.json({
+      findings:     results.findings,
+      totalFiles:   results.totalFiles,
+      criticalCount: results.critical,
+      warningCount:  results.warnings,
+    });
+  } catch (err) {
+    req.log.error({ err }, "devbot scan failed");
+    res.status(500).json({ error: "Scan failed" });
+  }
+});
+
+// ── GET /api/devbot/scan-results ──────────────────────────────────────────────
+// Returns last 50 scan results, unresolved first. Admin-protected.
+
+router.get("/devbot/scan-results", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  try {
+    const { data, error } = await sb
+      .from("devbot_scan_results")
+      .select("id, file_path, line_number, issue, severity, resolved, scan_date")
+      .order("resolved",   { ascending: true })
+      .order("scan_date",  { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    req.log.info({ count: (data ?? []).length }, "devbot scan-results fetched");
+    res.json({ rows: data ?? [] });
+  } catch (err) {
+    req.log.error({ err }, "devbot scan-results fetch failed");
+    res.status(500).json({ error: "Failed to fetch scan results" });
+  }
+});
+
+// ── PATCH /api/devbot/scan-results/:id/resolve ────────────────────────────────
+// Marks a scan finding as resolved. Admin-protected.
+
+router.patch("/devbot/scan-results/:id/resolve", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const { id } = req.params;
+  if (!id) { res.status(400).json({ error: "id is required" }); return; }
+
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  try {
+    const { error } = await sb
+      .from("devbot_scan_results")
+      .update({ resolved: true })
+      .eq("id", id);
+    if (error) throw error;
+    req.log.info({ id }, "devbot scan result resolved");
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "devbot scan result resolve failed");
+    res.status(500).json({ error: "Failed to resolve scan result" });
   }
 });
 

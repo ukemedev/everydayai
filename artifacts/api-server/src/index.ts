@@ -3,6 +3,8 @@ import { logger } from "./lib/logger";
 import { migrateUnencryptedKeys } from "./routes/keys";
 import { startMonitor } from "./lib/errorMonitor";
 import { startWeeklyReportScheduler } from "./lib/weeklyReport";
+import cron from "node-cron";
+import { runFullScan } from "./lib/devbotScanner";
 
 const rawPort = process.env["API_PORT"] ?? process.env["PORT"];
 
@@ -32,4 +34,10 @@ app.listen(port, (err) => {
 
   startMonitor();
   startWeeklyReportScheduler();
+
+  // Nightly code scan at midnight UTC
+  cron.schedule("0 0 * * *", () => {
+    logger.info("Running nightly DevBot code scan...");
+    runFullScan().catch((err) => logger.error({ err }, "Nightly scan failed"));
+  });
 });

@@ -114,6 +114,16 @@ interface ErrorRow {
   created_at: string;
 }
 
+interface ScanResult {
+  id: string;
+  file_path: string;
+  line_number: number | null;
+  issue: string;
+  severity: string;
+  resolved: boolean;
+  scan_date: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getToken(): Promise<string> {
@@ -1076,6 +1086,13 @@ export default function AdminDevBot() {
   const [historyLoading, setHistoryLoading]   = useState(false);
   const [historyRows, setHistoryRows]         = useState<RollbackRow[]>([]);
 
+  // Scan panel state
+  const [showScan, setShowScan]               = useState(false);
+  const [scanLoading, setScanLoading]         = useState(false);
+  const [scanResults, setScanResults]         = useState<ScanResult[]>([]);
+  const [scanRunning, setScanRunning]         = useState(false);
+  const [scanResolvingId, setScanResolvingId] = useState<string | null>(null);
+
   // Errors panel state
   const [showErrors, setShowErrors]           = useState(false);
   const [errorsLoading, setErrorsLoading]     = useState(false);
@@ -1273,6 +1290,53 @@ export default function AdminDevBot() {
       setReportSending(false);
     }
   }
+
+  // ── Scan functions ────────────────────────────────────────────────────────
+  const fetchScanResults = useCallback(async () => {
+    setScanLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/scan-results", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { rows: ScanResult[] };
+        setScanResults(d.rows ?? []);
+      }
+    } catch { /* silent */ } finally {
+      setScanLoading(false);
+    }
+  }, []);
+
+  const runScan = useCallback(async () => {
+    setScanRunning(true);
+    try {
+      const token = await getToken();
+      await fetch("/api/devbot/scan", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchScanResults();
+    } catch { /* silent */ } finally {
+      setScanRunning(false);
+    }
+  }, [fetchScanResults]);
+
+  const resolveScan = useCallback(async (id: string) => {
+    setScanResolvingId(id);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/devbot/scan-results/${id}/resolve`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setScanResults((prev) => prev.map((r) => r.id === id ? { ...r, resolved: true } : r));
+      }
+    } catch { /* silent */ } finally {
+      setScanResolvingId(null);
+    }
+  }, []);
 
   // ── Fetch user errors ─────────────────────────────────────────────────────
   const fetchErrors = useCallback(async () => {
@@ -1609,6 +1673,13 @@ export default function AdminDevBot() {
                       loading: errorsLoading,
                       active: showErrors,
                       action: () => { setShowErrors((v) => !v); if (!showErrors) void fetchErrors(); },
+                    },
+                    {
+                      label: "Scan",
+                      emoji: "🔍",
+                      loading: scanLoading,
+                      active: showScan,
+                      action: () => { setShowScan((v) => !v); if (!showScan) void fetchScanResults(); },
                     },
                   ].map((item) => (
                     <button
@@ -2032,6 +2103,179 @@ export default function AdminDevBot() {
           loading={applyLoading}
           error={applyError}
         />
+      )}
+
+      {/* ── Scan side panel ── */}
+      {showScan && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+          onClick={() => setShowScan(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(340px, 52vw, 680px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "14px" }}>🔍</span>
+                <span className="text-sm font-semibold text-white">Code Scanner</span>
+                {scanResults.filter((r) => !r.resolved).length > 0 && (
+                  <span
+                    className="px-1.5 py-0.5 rounded-full text-xs font-medium"
+                    style={{ backgroundColor: "rgba(251,191,36,0.12)", color: "#fbbf24" }}
+                  >
+                    {scanResults.filter((r) => !r.resolved).length} open
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void runScan()}
+                  disabled={scanRunning}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{
+                    backgroundColor: "rgba(59,91,252,0.18)",
+                    border: "1px solid rgba(59,91,252,0.35)",
+                    color: "#7c9dfc",
+                  }}
+                >
+                  {scanRunning
+                    ? <Loader2 size={11} className="animate-spin" />
+                    : <span style={{ fontSize: "11px" }}>🔍</span>
+                  }
+                  {scanRunning ? "Scanning…" : "Run Scan Now"}
+                </button>
+                <button
+                  onClick={() => void fetchScanResults()}
+                  disabled={scanLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={scanLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowScan(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6">
+              {(scanLoading || scanRunning) && scanResults.length === 0 && (
+                <div className="flex items-center gap-2 py-6" style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <Loader2 size={13} className="animate-spin" />
+                  <span className="text-xs">{scanRunning ? "Running scan…" : "Loading results…"}</span>
+                </div>
+              )}
+
+              {!scanLoading && !scanRunning && scanResults.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <span style={{ fontSize: "28px" }}>🔍</span>
+                  <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.35)" }}>No scans run yet</p>
+                  <p className="text-xs" style={{ color: "rgba(255,255,255,0.22)" }}>
+                    Click "Run Scan Now" to analyse the codebase for security issues and bugs.
+                  </p>
+                </div>
+              )}
+
+              {scanResults.length > 0 && (
+                <div className="flex flex-col gap-2.5">
+                  {scanResults.map((row) => {
+                    const isCritical = row.severity === "critical";
+                    const shortPath  = row.file_path.length > 40
+                      ? "…" + row.file_path.slice(-40)
+                      : row.file_path;
+
+                    return (
+                      <div
+                        key={row.id}
+                        className="flex flex-col gap-2 px-3.5 py-3 rounded-xl"
+                        style={{
+                          backgroundColor: row.resolved
+                            ? "rgba(255,255,255,0.02)"
+                            : isCritical
+                              ? "rgba(239,68,68,0.04)"
+                              : "rgba(251,191,36,0.03)",
+                          border: row.resolved
+                            ? "1px solid rgba(255,255,255,0.07)"
+                            : isCritical
+                              ? "1px solid rgba(239,68,68,0.18)"
+                              : "1px solid rgba(251,191,36,0.18)",
+                          opacity: row.resolved ? 0.55 : 1,
+                        }}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span style={{ fontSize: "12px" }}>
+                              {row.resolved ? "✅" : isCritical ? "🚨" : "⚠️"}
+                            </span>
+                            <span
+                              className="text-xs font-semibold"
+                              style={{
+                                color: row.resolved ? "#10b981" : isCritical ? "#ef4444" : "#fbbf24",
+                              }}
+                            >
+                              {row.resolved ? "Resolved" : row.severity.toUpperCase()}
+                            </span>
+                            {row.line_number != null && (
+                              <span className="text-xs font-mono" style={{ color: "rgba(255,255,255,0.30)" }}>
+                                line {row.line_number}
+                              </span>
+                            )}
+                          </div>
+                          {!row.resolved && (
+                            <button
+                              onClick={() => void resolveScan(row.id)}
+                              disabled={scanResolvingId === row.id}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium flex-shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+                              style={{
+                                backgroundColor: "rgba(16,185,129,0.10)",
+                                border: "1px solid rgba(16,185,129,0.22)",
+                                color: "#10b981",
+                              }}
+                            >
+                              {scanResolvingId === row.id
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <CheckCircle2 size={10} />
+                              }
+                              Resolve
+                            </button>
+                          )}
+                        </div>
+
+                        <p className="text-xs" style={{ color: "rgba(255,255,255,0.80)" }}>
+                          {row.issue}
+                        </p>
+
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-xs font-mono truncate" style={{ color: "rgba(255,255,255,0.35)" }} title={row.file_path}>
+                            📄 {shortPath}
+                          </span>
+                          <span className="text-xs" style={{ color: "rgba(255,255,255,0.20)" }}>
+                            {new Date(row.scan_date).toLocaleString("en-GB", {
+                              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Errors side panel ── */}
