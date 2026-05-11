@@ -137,6 +137,23 @@ interface TableStat {
   rowCount: number;
 }
 
+interface QueueTaskResult {
+  task: string;
+  status: "processing" | "done";
+  result?: string;
+}
+
+interface QueueRow {
+  id: string;
+  session_id: string;
+  tasks: string[];
+  status: "pending" | "processing" | "completed";
+  current_task_index: number;
+  results: QueueTaskResult[];
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function getToken(): Promise<string> {
@@ -1144,6 +1161,13 @@ export default function AdminDevBot() {
   const [errorRows, setErrorRows]             = useState<ErrorRow[]>([]);
   const [resolvingId, setResolvingId]         = useState<string | null>(null);
 
+  // Queue panel state
+  const [showQueue, setShowQueue]             = useState(false);
+  const [queueLoading, setQueueLoading]       = useState(false);
+  const [queueRows, setQueueRows]             = useState<QueueRow[]>([]);
+  const [expandedQueues, setExpandedQueues]   = useState<Set<string>>(new Set());
+  const [quickTaskInput, setQuickTaskInput]   = useState("tasks:\n1. ");
+
   // Tools dropdown
   const [showToolsMenu, setShowToolsMenu]     = useState(false);
   const toolsMenuRef                          = useRef<HTMLDivElement>(null);
@@ -1157,8 +1181,9 @@ export default function AdminDevBot() {
   const [expandedLogs, setExpandedLogs]       = useState<Set<string>>(new Set());
 
   const bottomRef   = useRef<HTMLDivElement>(null);
-  const textareaRef  = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef    = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef   = useRef<HTMLInputElement>(null);
+  const pendingSendRef = useRef(false);
 
   // ── Load file tree on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -1468,6 +1493,23 @@ export default function AdminDevBot() {
     }
   }, []);
 
+  // ── Fetch task queues ──────────────────────────────────────────────────────
+  const fetchQueues = useCallback(async () => {
+    setQueueLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/devbot/queues", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const d = await res.json() as { queues: QueueRow[] };
+        setQueueRows(d.queues ?? []);
+      }
+    } catch { /* silent */ } finally {
+      setQueueLoading(false);
+    }
+  }, []);
+
   // ── Fetch terminal logs ────────────────────────────────────────────────────
   const fetchTerminalLogs = useCallback(async () => {
     setTerminalLoading(true);
@@ -1687,6 +1729,14 @@ export default function AdminDevBot() {
     e.target.value = "";
   }
 
+  // Fire sendMessage after input is set from Queue panel
+  useEffect(() => {
+    if (pendingSendRef.current && input && !loading) {
+      pendingSendRef.current = false;
+      void sendMessage();
+    }
+  }, [input, sendMessage, loading]);
+
   const knownFilePaths = repoFiles.map((f) => f.path);
 
   return (
@@ -1815,6 +1865,13 @@ export default function AdminDevBot() {
                       loading: dbLoading,
                       active: showDatabase,
                       action: () => { setShowDatabase((v) => !v); if (!showDatabase) void fetchDbData(); },
+                    },
+                    {
+                      label: "Queue",
+                      emoji: "📋",
+                      loading: queueLoading,
+                      active: showQueue,
+                      action: () => { setShowQueue((v) => !v); if (!showQueue) void fetchQueues(); },
                     },
                   ].map((item) => (
                     <button
@@ -3295,6 +3352,222 @@ export default function AdminDevBot() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Queue side panel ── */}
+      {showQueue && (
+        <div
+          className="fixed inset-0 z-40 flex justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+          onClick={() => setShowQueue(false)}
+        >
+          <div
+            className="flex flex-col h-full overflow-hidden"
+            style={{
+              width: "clamp(360px, 52vw, 680px)",
+              backgroundColor: "#0d1117",
+              borderLeft: "1px solid rgba(255,255,255,0.10)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span style={{ fontSize: "14px" }}>📋</span>
+                <span className="text-sm font-semibold text-white">Task Queue</span>
+                {queueRows.length > 0 && (
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    {queueRows.length} queue{queueRows.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => void fetchQueues()}
+                  disabled={queueLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ color: "rgba(255,255,255,0.40)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw size={10} className={queueLoading ? "animate-spin" : ""} />
+                  Refresh
+                </button>
+                <button onClick={() => setShowQueue(false)} style={{ color: "rgba(255,255,255,0.35)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto">
+
+              {/* ── Queue list ── */}
+              <div className="px-5 pt-4 pb-3">
+                {queueLoading && queueRows.length === 0 && (
+                  <div className="flex items-center gap-2 py-6" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span className="text-xs">Loading queues…</span>
+                  </div>
+                )}
+                {!queueLoading && queueRows.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-10 gap-2">
+                    <span style={{ fontSize: "28px" }}>📋</span>
+                    <p className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.45)" }}>No task queues yet</p>
+                    <p className="text-xs text-center" style={{ color: "rgba(255,255,255,0.25)", maxWidth: "240px" }}>
+                      Send a message in the format below to create one
+                    </p>
+                  </div>
+                )}
+                {queueRows.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {queueRows.map((q) => {
+                      const isExpanded = expandedQueues.has(q.id);
+                      const statusColor =
+                        q.status === "completed" ? "#10b981" :
+                        q.status === "processing" ? "#3b5bfc" :
+                        "rgba(255,255,255,0.35)";
+                      const statusLabel =
+                        q.status === "completed" ? "✅ completed" :
+                        q.status === "processing" ? "⏳ processing" :
+                        "⌛ pending";
+                      return (
+                        <div
+                          key={q.id}
+                          className="rounded-xl overflow-hidden"
+                          style={{ border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.03)" }}
+                        >
+                          {/* Queue header row */}
+                          <button
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
+                            onClick={() => setExpandedQueues((prev) => {
+                              const next = new Set(prev);
+                              next.has(q.id) ? next.delete(q.id) : next.add(q.id);
+                              return next;
+                            })}
+                          >
+                            {q.status === "processing"
+                              ? <Loader2 size={13} className="animate-spin flex-shrink-0" style={{ color: "#3b5bfc" }} />
+                              : <span className="text-xs flex-shrink-0" style={{ color: statusColor }}>{q.status === "completed" ? "✅" : "⌛"}</span>
+                            }
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                                  style={{
+                                    backgroundColor:
+                                      q.status === "completed" ? "rgba(16,185,129,0.15)" :
+                                      q.status === "processing" ? "rgba(59,91,252,0.18)" :
+                                      "rgba(255,255,255,0.07)",
+                                    color: statusColor,
+                                  }}
+                                >
+                                  {statusLabel}
+                                </span>
+                                <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                                  {q.tasks.length} task{q.tasks.length !== 1 ? "s" : ""}
+                                </span>
+                              </div>
+                              <span className="text-xs font-mono truncate" style={{ color: "rgba(255,255,255,0.25)" }}>
+                                {q.id}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="text-xs" style={{ color: "rgba(255,255,255,0.28)" }}>
+                                {new Date(q.created_at).toLocaleDateString()}
+                              </span>
+                              {isExpanded
+                                ? <ChevronUp size={13} style={{ color: "rgba(255,255,255,0.35)" }} />
+                                : <ChevronDown size={13} style={{ color: "rgba(255,255,255,0.35)" }} />
+                              }
+                            </div>
+                          </button>
+
+                          {/* Expanded task results */}
+                          {isExpanded && (
+                            <div
+                              className="px-4 pb-3 flex flex-col gap-1.5 border-t"
+                              style={{ borderColor: "rgba(255,255,255,0.06)" }}
+                            >
+                              <div className="pt-2.5 flex flex-col gap-1.5">
+                                {q.tasks.map((task, i) => {
+                                  const result = q.results[i];
+                                  const isDone = result?.status === "done";
+                                  const isProc = result?.status === "processing";
+                                  return (
+                                    <div key={i} className="flex flex-col gap-0.5">
+                                      <div className="flex items-start gap-2">
+                                        {isProc
+                                          ? <Loader2 size={11} className="animate-spin mt-0.5 flex-shrink-0" style={{ color: "#3b5bfc" }} />
+                                          : <span className="text-xs flex-shrink-0 mt-0.5" style={{ color: isDone ? "#10b981" : "rgba(255,255,255,0.30)" }}>
+                                              {isDone ? "✅" : "⏳"}
+                                            </span>
+                                        }
+                                        <span className="text-xs" style={{ color: isDone ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.40)" }}>
+                                          {i + 1}. {task}
+                                        </span>
+                                      </div>
+                                      {isDone && result?.result && (
+                                        <p className="text-xs ml-4.5 pl-1" style={{ color: "rgba(255,255,255,0.35)", marginLeft: "19px" }}>
+                                          {result.result}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="mx-5" style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.07)" }} />
+
+              {/* ── Quick task input ── */}
+              <div className="px-5 pt-4 pb-6">
+                <p className="text-xs font-semibold mb-3" style={{ color: "rgba(255,255,255,0.40)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                  Quick Task Input
+                </p>
+                <p className="text-xs mb-2.5" style={{ color: "rgba(255,255,255,0.30)" }}>
+                  Type tasks below and click Send — it will be submitted to the chat as a task queue.
+                </p>
+                <textarea
+                  value={quickTaskInput}
+                  onChange={(e) => setQuickTaskInput(e.target.value)}
+                  rows={5}
+                  className="w-full resize-none rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    color: "rgba(255,255,255,0.75)",
+                    lineHeight: "1.6",
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.border = "1px solid rgba(59,91,252,0.45)"; }}
+                  onBlur={(e) => { e.currentTarget.style.border = "1px solid rgba(255,255,255,0.10)"; }}
+                  placeholder={"tasks:\n1. First task\n2. Second task"}
+                />
+                <button
+                  className="mt-2 w-full py-2 rounded-xl text-xs font-semibold transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: "#3b5bfc", color: "#fff" }}
+                  onClick={() => {
+                    const text = quickTaskInput.trim();
+                    if (!text) return;
+                    setInput(text);
+                    pendingSendRef.current = true;
+                    setShowQueue(false);
+                  }}
+                >
+                  Send to Chat
+                </button>
+              </div>
             </div>
           </div>
         </div>

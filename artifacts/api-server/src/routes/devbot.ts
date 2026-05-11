@@ -28,6 +28,7 @@ import { runCommand, getTerminalLogs } from "../lib/devbotTerminal.js";
 import { captureError, getErrors, markResolved } from "../lib/devbotErrorCapture.js";
 import { runFullScan } from "../lib/devbotScanner.js";
 import { getSchema, runQuery, getTableStats } from "../lib/devbotDatabase.js";
+import { createQueue, getQueue, processQueue } from "../lib/devbotTaskQueue.js";
 
 const router = Router();
 
@@ -274,6 +275,60 @@ router.post("/devbot/chat", async (req: Request, res: Response) => {
     }
 
     req.log.info({ sessionId, sizeKb }, "devbot screenshot received");
+    res.json({ reply, sessionId });
+    return;
+  }
+
+  // ── Task queue create handler ─────────────────────────────────────────────
+  const taskQueueMatch = message!.match(/^tasks?:\s*\n([\s\S]+)/i);
+  if (taskQueueMatch) {
+    const lines = taskQueueMatch[1]
+      .split("\n")
+      .map((l) => l.replace(/^\d+\.\s*/, "").trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) {
+      const reply = "No tasks found. Format:\n```\ntasks:\n1. First task\n2. Second task\n```";
+      res.json({ reply, sessionId });
+      return;
+    }
+
+    const queue = await createQueue(sessionId, lines);
+
+    let reply = `📋 Task Queue Created!\n\n`;
+    reply += `${lines.length} task${lines.length !== 1 ? "s" : ""} queued:\n`;
+    lines.forEach((task, i) => { reply += `${i + 1}. ⏳ ${task}\n`; });
+    reply += `\nQueue ID: \`${queue.id}\`\n`;
+    reply += `Type \`run queue ${queue.id}\` to start processing.`;
+
+    await saveMessage(sessionId, "assistant", reply);
+    res.json({ reply, sessionId });
+    return;
+  }
+
+  // ── Task queue run handler ────────────────────────────────────────────────
+  const runQueueMatch = message!.match(/run queue\s+([a-f0-9-]+)/i);
+  if (runQueueMatch) {
+    const queueId = runQueueMatch[1];
+    const queue = await getQueue(queueId);
+
+    if (!queue) {
+      const reply = `Queue \`${queueId}\` not found.`;
+      await saveMessage(sessionId, "assistant", reply);
+      res.json({ reply, sessionId });
+      return;
+    }
+
+    const results = await processQueue(queueId, sessionId);
+
+    let reply = `✅ Queue Complete!\n\n`;
+    results.forEach((r, i) => {
+      reply += `${i + 1}. ✅ ${r.task}\n`;
+      reply += `   ${r.result ?? ""}\n\n`;
+    });
+    reply = reply.trim();
+
+    await saveMessage(sessionId, "assistant", reply);
     res.json({ reply, sessionId });
     return;
   }
@@ -1037,6 +1092,46 @@ router.post("/devbot/query", async (req: Request, res: Response) => {
     req.log.warn({ err, sql }, "devbot query rejected or failed");
     res.status(400).json({ error: msg });
   }
+});
+
+// ── GET /api/devbot/queues ────────────────────────────────────────────────────
+// Returns last 20 task queues ordered by created_at desc. Admin-protected.
+
+router.get("/devbot/queues", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Supabase not configured" }); return; }
+
+  const { data, error } = await sb
+    .from("devbot_task_queue")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ queues: data ?? [] });
+});
+
+// ── GET /api/devbot/queues/:id ────────────────────────────────────────────────
+// Returns single queue by id. Admin-protected.
+
+router.get("/devbot/queues/:id", async (req: Request, res: Response) => {
+  const authorized = await requireAdmin(req, res);
+  if (!authorized) return;
+
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Supabase not configured" }); return; }
+
+  const { data, error } = await sb
+    .from("devbot_task_queue")
+    .select("*")
+    .eq("id", req.params.id)
+    .single();
+
+  if (error) { res.status(404).json({ error: "Queue not found" }); return; }
+  res.json({ queue: data });
 });
 
 // ── GET /api/devbot/table-stats ───────────────────────────────────────────────
