@@ -188,6 +188,19 @@ const STATIC_TOOLS: StaticTool[] = [
   },
 ];
 
+const USER_PLAN = "free"; // static — swap for real user plan when auth is wired
+const PLAN_ORDER = ["free", "starter", "pro", "business"];
+function toolRequiredPlan(index: number): string | null {
+  if (index < 2) return null;
+  if (index < 4) return "Starter";
+  if (index < 7) return "Pro";
+  return "Business";
+}
+function isPlanSufficient(required: string | null): boolean {
+  if (!required) return true;
+  return PLAN_ORDER.indexOf(USER_PLAN) >= PLAN_ORDER.indexOf(required.toLowerCase());
+}
+
 interface Tool {
   id: string;
   agent_id: string;
@@ -1816,6 +1829,11 @@ export default function Studio() {
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
+  const [fabPos, setFabPos] = useState(() => ({
+    x: window.innerWidth - 156,
+    y: window.innerHeight - 72,
+  }));
+  const fabDragRef = useRef<{ ox: number; oy: number; bx: number; by: number; moved: boolean } | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -2486,9 +2504,8 @@ export default function Studio() {
                   ) : (
                     /* ── Read-only mode ── */
                     <div
-                      className="rounded-xl px-4 py-3 text-sm leading-relaxed border border-white/6 cursor-pointer hover:border-white/12 transition-colors min-h-[5rem]"
+                      className="rounded-xl px-4 py-3 text-sm leading-relaxed border border-white/6 cursor-default transition-colors min-h-[5rem]"
                       style={{ backgroundColor: "#111827", color: instructions.trim() ? "rgba(255,255,255,0.75)" : undefined }}
-                      onClick={() => setEditingInstructions(true)}
                     >
                       {instructions.trim() ? (
                         <span className="whitespace-pre-wrap">{instructions}</span>
@@ -2811,10 +2828,12 @@ export default function Studio() {
                 </div>
 
                 {/* ── Accordion list ── */}
-                {STATIC_TOOLS.map((tool) => {
+                {STATIC_TOOLS.map((tool, toolIdx) => {
                   const isOpen = openToolId === tool.id;
                   const fields = toolFields[tool.id] ?? {};
                   const saved  = toolSaved[tool.id]  ?? false;
+                  const requiredPlan = toolRequiredPlan(toolIdx);
+                  const isLocked = !isPlanSufficient(requiredPlan);
 
                   return (
                     <div
@@ -2851,12 +2870,26 @@ export default function Studio() {
 
                         {/* Active badge + chevron */}
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {saved && (
+                          {saved && !isLocked && (
                             <span
                               className="hidden sm:flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
                               style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
                             >
                               ✓ Active
+                            </span>
+                          )}
+                          {isLocked && requiredPlan && (
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide"
+                              style={
+                                requiredPlan === "Starter"
+                                  ? { backgroundColor: "rgba(34,197,94,0.14)", color: "#4ade80" }
+                                  : requiredPlan === "Pro"
+                                  ? { backgroundColor: "rgba(59,91,252,0.18)", color: "#7b93ff" }
+                                  : { backgroundColor: "rgba(251,188,4,0.14)", color: "#fbbf24" }
+                              }
+                            >
+                              🔒 {requiredPlan}
                             </span>
                           )}
                           <div
@@ -2934,32 +2967,69 @@ export default function Studio() {
                             ))}
                           </div>
 
-                          {/* Action buttons */}
-                          <div className="flex gap-2.5 pt-1">
-                            <button
-                              className="flex-1 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-80 active:scale-95 border"
-                              style={{
-                                color: "rgba(255,255,255,0.55)",
-                                borderColor: "rgba(255,255,255,0.12)",
-                                backgroundColor: "transparent",
-                              }}
+                          {/* Action buttons / Upgrade prompt */}
+                          {isLocked ? (
+                            <div
+                              className="rounded-xl p-4 flex flex-col gap-3 border"
+                              style={{ backgroundColor: "rgba(59,91,252,0.05)", borderColor: "rgba(59,91,252,0.18)" }}
                             >
-                              Test Connection
-                            </button>
-                            <button
-                              onClick={() => setToolSaved((prev) => ({ ...prev, [tool.id]: true }))}
-                              className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
-                              style={{ backgroundColor: "#3b5bfc" }}
-                            >
-                              {saved ? "✓ Activated" : "Save & Activate"}
-                            </button>
-                          </div>
-
-                          {/* Mobile active indicator */}
-                          {saved && (
-                            <p className="sm:hidden text-[11px] font-semibold text-center" style={{ color: "#4ade80" }}>
-                              ✓ This tool is active
-                            </p>
+                              <div className="flex items-start gap-2.5">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5">
+                                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="#7b93ff" strokeWidth="2"/>
+                                  <path d="M7 11V7a5 5 0 0110 0v4" stroke="#7b93ff" strokeWidth="2" strokeLinecap="round"/>
+                                </svg>
+                                <p className="text-xs text-white/55 leading-relaxed">
+                                  Requires the{" "}
+                                  <span
+                                    className="font-semibold"
+                                    style={
+                                      requiredPlan === "Starter"
+                                        ? { color: "#4ade80" }
+                                        : requiredPlan === "Pro"
+                                        ? { color: "#7b93ff" }
+                                        : { color: "#fbbf24" }
+                                    }
+                                  >
+                                    {requiredPlan} plan
+                                  </span>
+                                  {" "}— upgrade to connect this tool to your agent.
+                                </p>
+                              </div>
+                              <a
+                                href="/billing"
+                                className="w-full py-2.5 rounded-lg text-xs font-semibold text-white text-center transition-all hover:opacity-90 active:scale-95 block"
+                                style={{ backgroundColor: "#3b5bfc" }}
+                              >
+                                Upgrade to {requiredPlan} →
+                              </a>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex gap-2.5 pt-1">
+                                <button
+                                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-80 active:scale-95 border"
+                                  style={{
+                                    color: "rgba(255,255,255,0.55)",
+                                    borderColor: "rgba(255,255,255,0.12)",
+                                    backgroundColor: "transparent",
+                                  }}
+                                >
+                                  Test Connection
+                                </button>
+                                <button
+                                  onClick={() => setToolSaved((prev) => ({ ...prev, [tool.id]: true }))}
+                                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                                  style={{ backgroundColor: "#3b5bfc" }}
+                                >
+                                  {saved ? "✓ Activated" : "Save & Activate"}
+                                </button>
+                              </div>
+                              {saved && (
+                                <p className="sm:hidden text-[11px] font-semibold text-center" style={{ color: "#4ade80" }}>
+                                  ✓ This tool is active
+                                </p>
+                              )}
+                            </>
                           )}
                         </div>
                       )}
@@ -2981,11 +3051,29 @@ export default function Studio() {
         </div>
       </div>
 
-      {/* ── Mobile "Test Agent" FAB ── */}
+      {/* ── Mobile "Test Agent" FAB — draggable ── */}
       <button
-        className="md:hidden fixed bottom-6 right-6 z-40 px-5 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-xl flex items-center gap-2 transition-all hover:opacity-90 active:scale-95"
-        style={{ backgroundColor: "#3b5bfc" }}
-        onClick={() => setShowMobileChat(true)}
+        className="md:hidden fixed z-40 px-5 py-3.5 rounded-2xl text-sm font-semibold text-white shadow-xl flex items-center gap-2 select-none"
+        style={{ backgroundColor: "#3b5bfc", left: fabPos.x, top: fabPos.y, touchAction: "none", cursor: "grab" }}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          fabDragRef.current = { ox: e.clientX, oy: e.clientY, bx: fabPos.x, by: fabPos.y, moved: false };
+        }}
+        onPointerMove={(e) => {
+          if (!fabDragRef.current) return;
+          const dx = e.clientX - fabDragRef.current.ox;
+          const dy = e.clientY - fabDragRef.current.oy;
+          if (Math.abs(dx) > 5 || Math.abs(dy) > 5) fabDragRef.current.moved = true;
+          setFabPos({
+            x: Math.max(8, Math.min(window.innerWidth - 148, fabDragRef.current.bx + dx)),
+            y: Math.max(8, Math.min(window.innerHeight - 56, fabDragRef.current.by + dy)),
+          });
+        }}
+        onPointerUp={() => {
+          if (!fabDragRef.current) return;
+          if (!fabDragRef.current.moved) setShowMobileChat(true);
+          fabDragRef.current = null;
+        }}
       >
         🤖 Test Agent
       </button>
