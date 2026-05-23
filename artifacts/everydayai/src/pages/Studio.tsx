@@ -93,6 +93,21 @@ const CONNECTOR_LABELS: Record<string, string> = {
   instagram:     "Instagram",
 };
 
+// ─── Static tools catalogue (UI only — no live connections) ──────────────────
+
+const STATIC_TOOLS = [
+  { id: "paystack",        name: "Paystack",        category: "💰 Payments",        desc: "Accept payments and process transactions across Africa",                initials: "PS", color: "#00C3F7", bg: "rgba(0,195,247,0.12)"   },
+  { id: "google_sheets",   name: "Google Sheets",   category: "📊 Save Data",        desc: "Save collected data directly to your spreadsheets",                    initials: "GS", color: "#0F9D58", bg: "rgba(15,157,88,0.12)"   },
+  { id: "gmail",           name: "Gmail",           category: "📧 Email",            desc: "Send automated emails to your leads and customers",                    initials: "Gm", color: "#EA4335", bg: "rgba(234,67,53,0.12)"   },
+  { id: "google_calendar", name: "Google Calendar", category: "📅 Booking",          desc: "Let customers book appointments in your calendar in real time",         initials: "GC", color: "#4285F4", bg: "rgba(66,133,244,0.12)" },
+  { id: "telegram",        name: "Telegram",        category: "💬 Notify Owner",     desc: "Get instant Telegram alerts whenever a key event happens",              initials: "Tg", color: "#2AABEE", bg: "rgba(42,171,238,0.12)" },
+  { id: "termii",          name: "Termii",          category: "🔔 SMS",              desc: "Send OTPs and SMS messages to any phone number in Africa",              initials: "Tm", color: "#F97316", bg: "rgba(249,115,22,0.12)" },
+  { id: "web_search",      name: "Web Search",      category: "🔍 Intelligence",     desc: "Let your agent search the internet for live, up-to-date information",   initials: "WS", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
+  { id: "vapi",            name: "Vapi.ai",         category: "📞 Voice Calls",      desc: "Make and receive AI-powered phone calls automatically",                 initials: "Vi", color: "#10B981", bg: "rgba(16,185,129,0.12)" },
+  { id: "google_drive",    name: "Google Drive",    category: "📄 Documents",        desc: "Create, read, and manage files and folders in your Drive",              initials: "GD", color: "#FBBC04", bg: "rgba(251,188,4,0.12)"  },
+  { id: "hubspot",         name: "HubSpot",         category: "👤 Customer Memory",  desc: "Store and recall customer information directly from your CRM",          initials: "HS", color: "#FF7A59", bg: "rgba(255,122,89,0.12)" },
+] as const;
+
 interface Tool {
   id: string;
   agent_id: string;
@@ -2505,372 +2520,53 @@ export default function Studio() {
             )}
 
             {activeTab === "Tools" && (
-              <div className="flex flex-col gap-8">
+              <div className="flex flex-col gap-6">
 
-                {/* ── Section 1: AI Tool Builder ── */}
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <h2 className="text-base font-semibold text-white">Build a Tool</h2>
-                    <p className="text-sm text-white/40 mt-1">
-                      Describe what you want your agent to do in plain English
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <textarea
-                      rows={4}
-                      value={toolPrompt}
-                      onChange={(e) => { setToolPrompt(e.target.value); setToolError(""); setToolPreview(null); }}
-                      disabled={toolAnalyzing}
-                      placeholder="e.g. When a customer gives their name and phone number, save it to my Google Sheet automatically"
-                      className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none leading-relaxed disabled:opacity-50"
-                      style={{ backgroundColor: "#111827" }}
-                    />
-                    <div className="flex flex-col gap-2">
+                {/* ── Header ── */}
+                <div>
+                  <h2 className="text-base font-semibold text-white">Integrations</h2>
+                  <p className="text-sm text-white/40 mt-1">
+                    Connect tools to give your agent real capabilities
+                  </p>
+                </div>
+
+                {/* ── Tool cards ── */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {STATIC_TOOLS.map((tool) => (
+                    <div
+                      key={tool.id}
+                      className="rounded-xl border border-white/8 p-4 flex flex-col gap-4 transition-all duration-150"
+                      style={{ backgroundColor: "#0d1117" }}
+                    >
+                      {/* Card top: icon + text */}
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold tracking-wide"
+                          style={{ backgroundColor: tool.bg, color: tool.color }}
+                        >
+                          {tool.initials}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span
+                            className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full leading-tight"
+                            style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.38)" }}
+                          >
+                            {tool.category}
+                          </span>
+                          <p className="text-sm font-semibold text-white mt-1.5 leading-snug">{tool.name}</p>
+                          <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{tool.desc}</p>
+                        </div>
+                      </div>
+
+                      {/* Connect button */}
                       <button
-                        onClick={handleAnalyzeTool}
-                        disabled={!toolPrompt.trim() || toolAnalyzing}
-                        className="self-start px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        className="w-full py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
                         style={{ backgroundColor: "#3b5bfc" }}
                       >
-                        {toolAnalyzing ? (
-                          <>
-                            <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                            Analyzing…
-                          </>
-                        ) : "Build Tool with AI"}
+                        Connect
                       </button>
-                      <p className="text-xs text-white/30">
-                        AI will analyze your request and set up the right integration
-                      </p>
                     </div>
-
-                    {/* Error state */}
-                    {toolError && (
-                      <div
-                        className="rounded-xl px-4 py-3 text-sm border"
-                        style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)", color: "#f87171" }}
-                      >
-                        {toolError}
-                      </div>
-                    )}
-
-                    {/* ── Tool preview card ── */}
-                    {toolPreview && (
-                      <div
-                        className="rounded-xl border border-white/10 overflow-hidden"
-                        style={{ backgroundColor: "#111827" }}
-                      >
-                        {/* Card header */}
-                        <div
-                          className="px-5 py-4 border-b border-white/5 flex items-start gap-3"
-                          style={{ backgroundColor: "rgba(59,91,252,0.06)" }}
-                        >
-                          <span className="text-2xl flex-shrink-0 mt-0.5">
-                            {CONNECTOR_ICONS[toolPreview.connector] ?? "🔧"}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-white">{toolPreview.tool_name}</p>
-                            <p className="text-xs text-white/50 mt-0.5 leading-relaxed">{toolPreview.tool_description}</p>
-                            <div className="flex items-center gap-1.5 mt-2">
-                              <span
-                                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                                style={{ backgroundColor: "rgba(59,91,252,0.2)", color: "#7b93ff" }}
-                              >
-                                {CONNECTOR_LABELS[toolPreview.connector] ?? toolPreview.connector}
-                              </span>
-                              <span
-                                className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                                style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.45)" }}
-                              >
-                                {toolPreview.action}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Required inputs */}
-                        {toolPreview.required_inputs.length > 0 && (
-                          <div className="px-5 py-4 border-b border-white/5">
-                            <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-3">
-                              Data to collect
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {toolPreview.required_inputs.map((input) => (
-                                <div key={input.name} className="flex items-start gap-2">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#3b5bfc] flex-shrink-0 mt-1.5" />
-                                  <div>
-                                    <span className="text-xs font-medium text-white">{input.label}</span>
-                                    <span className="text-xs text-white/35 ml-1.5">{input.description}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Auth requirement */}
-                        <div className="px-5 py-3.5 border-b border-white/5 flex items-center gap-2">
-                          <span className="text-sm">🔐</span>
-                          <p className="text-xs text-white/45">{toolPreview.required_auth.description}</p>
-                        </div>
-
-                        {/* Google Sheet URL — only for google_sheets connector */}
-                        {toolPreview.connector === "google_sheets" && (
-                          <div className="px-5 py-4 border-b border-white/5 flex flex-col gap-2">
-                            <label className="text-xs font-semibold text-white/40 uppercase tracking-wider">
-                              Google Sheet URL <span className="text-red-400">*</span>
-                            </label>
-                            <input
-                              type="url"
-                              value={spreadsheetUrl}
-                              onChange={(e) => { setSpreadsheetUrl(e.target.value); setToolError(""); }}
-                              placeholder="https://docs.google.com/spreadsheets/d/..."
-                              className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors"
-                              style={{ backgroundColor: "#0a0f1e" }}
-                            />
-                            <p className="text-[11px] text-white/30 leading-relaxed">
-                              Paste the URL of the Google Sheet where data should be saved
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Actions */}
-                        <div className="px-5 py-4 flex items-center gap-3">
-                          <button
-                            onClick={handleConfirmTool}
-                            disabled={confirmingTool || (toolPreview.connector === "google_sheets" && !spreadsheetUrl.trim())}
-                            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2"
-                            style={{ backgroundColor: "#3b5bfc" }}
-                          >
-                            {confirmingTool ? (
-                              <>
-                                <span className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                                Saving…
-                              </>
-                            ) : "Confirm & Add Tool"}
-                          </button>
-                          <button
-                            onClick={() => { setToolPreview(null); setToolPrompt(""); setSpreadsheetUrl(""); }}
-                            disabled={confirmingTool}
-                            className="px-4 py-2.5 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all disabled:opacity-40"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-white/5" />
-
-                {/* ── Section 2: Connected Tools ── */}
-                <div className="flex flex-col gap-3">
-                  <h2 className="text-base font-semibold text-white">Connected Tools</h2>
-
-                  {loadingTools ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
-                    </div>
-                  ) : tools.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 py-10 px-6 text-center">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center mb-1"
-                        style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="rgba(255,255,255,0.25)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <p className="text-sm font-medium text-white/35">No tools connected yet</p>
-                      <p className="text-xs text-white/25 leading-relaxed max-w-[220px]">
-                        Describe a tool above and AI will build it for you
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {tools.map((tool) => (
-                        <div
-                          key={tool.id}
-                          className="rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3"
-                          style={{ backgroundColor: "#111827" }}
-                        >
-                          <span className="text-xl flex-shrink-0">
-                            {CONNECTOR_ICONS[tool.connector] ?? "🔧"}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-white truncate">{tool.tool_name}</p>
-                            {tool.tool_description && (
-                              <p className="text-xs text-white/40 mt-0.5 truncate">{tool.tool_description}</p>
-                            )}
-                          </div>
-                          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                            <span
-                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                              style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
-                            >
-                              Active
-                            </span>
-                            <button
-                              onClick={() => handleDeleteTool(tool.id)}
-                              disabled={deletingToolId === tool.id}
-                              className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-150 hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-                              style={{ borderColor: "rgba(239,68,68,0.3)", color: "#f87171", backgroundColor: "rgba(239,68,68,0.08)" }}
-                            >
-                              {deletingToolId === tool.id ? (
-                                <>
-                                  <span className="w-2.5 h-2.5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
-                                  Removing…
-                                </>
-                              ) : "Delete"}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-white/5" />
-
-                {/* ── Section 3: Connected Accounts ── */}
-                <div className="flex flex-col gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold text-white">Connected Accounts</h2>
-                    <p className="text-sm text-white/40 mt-1">
-                      Authorize services so your agent can write data on your behalf
-                    </p>
-                  </div>
-
-                  {/* Google row */}
-                  <div
-                    className="rounded-xl border border-white/8 overflow-hidden"
-                    style={{ backgroundColor: "#111827" }}
-                  >
-                    <div className="px-4 py-3.5 flex items-center gap-3">
-                      <span className="text-xl flex-shrink-0">📊</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-white">Google</p>
-                        <p className="text-xs text-white/40 mt-0.5">
-                          {googleConnected && googleEmail ? googleEmail : "Sheets, Drive & Gmail access"}
-                        </p>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 sm:gap-2 flex-shrink-0">
-                        {checkingGoogle ? (
-                          <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white/70 animate-spin block" />
-                        ) : googleConnected ? (
-                          <>
-                            <span
-                              className="text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
-                              style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
-                            >
-                              <span className="text-[10px]">✓</span> Connected
-                            </span>
-                            <button
-                              onClick={() => setGoogleDisconnectConfirm(true)}
-                              className="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all duration-150"
-                              style={{ color: "rgba(248,113,113,0.8)", borderColor: "rgba(248,113,113,0.25)" }}
-                            >
-                              Disconnect
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              if (!userId) return;
-                              window.open(`/api/auth/google?userId=${userId}`, "_blank");
-                            }}
-                            disabled={!userId}
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
-                            style={{ backgroundColor: "#3b5bfc" }}
-                          >
-                            Connect Google Account
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Disconnect confirmation panel */}
-                    {googleDisconnectConfirm && (
-                      <div
-                        className="px-4 py-3.5 border-t border-white/5 flex items-start gap-3"
-                        style={{ backgroundColor: "rgba(239,68,68,0.05)" }}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-red-400/90">Are you sure?</p>
-                          <p className="text-[11px] text-white/40 mt-0.5 leading-relaxed">
-                            Your tools using this service will stop working.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
-                          <button
-                            onClick={() => setGoogleDisconnectConfirm(false)}
-                            disabled={disconnectingGoogle}
-                            className="px-3 py-1.5 rounded-lg text-[11px] font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all disabled:opacity-40"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={handleDisconnectGoogle}
-                            disabled={disconnectingGoogle}
-                            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 flex items-center gap-1.5"
-                            style={{ backgroundColor: "#dc2626" }}
-                          >
-                            {disconnectingGoogle ? (
-                              <>
-                                <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                                Disconnecting…
-                              </>
-                            ) : "Disconnect"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-white/5" />
-
-                {/* ── Section 4: Available Connectors ── */}
-                <div className="flex flex-col gap-4">
-                  <h2 className="text-base font-semibold text-white">Available Connectors</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {[
-                      { icon: "📊", name: "Google Sheets", desc: "Save data to spreadsheets",       soon: false },
-                      { icon: "📱", name: "Telegram",      desc: "Send Telegram notifications",     soon: false },
-                      { icon: "📧", name: "Gmail",         desc: "Send emails automatically",       soon: false },
-                      { icon: "💬", name: "WhatsApp",      desc: "Send WhatsApp messages",          soon: true  },
-                      { icon: "📸", name: "Instagram",     desc: "Post or reply on Instagram",      soon: true  },
-                    ].map(({ icon, name, desc, soon }) => (
-                      <div
-                        key={name}
-                        className="relative rounded-xl border border-white/8 px-4 py-3.5 flex items-center gap-3 transition-all duration-150"
-                        style={{
-                          backgroundColor: "#111827",
-                          opacity: soon ? 0.6 : 1,
-                        }}
-                      >
-                        <span className="text-xl flex-shrink-0">{icon}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="text-sm font-medium text-white">{name}</p>
-                            {soon && (
-                              <span
-                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                                style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.4)" }}
-                              >
-                                Soon
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-white/35 mt-0.5 leading-tight">{desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  ))}
                 </div>
 
               </div>
