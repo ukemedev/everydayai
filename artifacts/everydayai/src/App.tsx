@@ -33,6 +33,9 @@ function Router() {
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
+      <Route path="/studio">
+        {() => <ProtectedRoute component={Studio} />}
+      </Route>
       <Route path="/studio/:agentId">
         {() => <ProtectedRoute component={Studio} />}
       </Route>

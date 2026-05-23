@@ -1612,6 +1612,108 @@ function ShareModal({ agentId, isLive, publishing, onClose, onToggleLive }: Shar
   );
 }
 
+// ─── Studio: No-agent create view ─────────────────────────────────────────────
+
+function StudioNoAgentView() {
+  const [, navigate] = useLocation();
+  const [agentName, setAgentName] = useState("");
+  const [description, setDescription] = useState("");
+  const [model, setModel] = useState("gpt-4o-mini");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const font = { fontFamily: "'Inter', sans-serif" };
+
+  async function handleCreate() {
+    setNameError(""); setError("");
+    if (!agentName.trim()) { setNameError("Agent name is required."); return; }
+    setCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setError("You must be logged in."); setCreating(false); return; }
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ name: agentName.trim(), description: description.trim() || undefined, model }),
+      });
+      const data = await res.json() as { id?: string; error?: string };
+      if (!res.ok) { setError(data.error ?? "Failed to create agent"); setCreating(false); return; }
+      navigate(`/studio/${(data as { id: string }).id}`);
+    } catch { setError("Something went wrong. Please try again."); setCreating(false); }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: "#0a0f1e", ...font }}>
+      <div className="w-full max-w-md flex flex-col gap-5">
+        <div>
+          <h1 className="text-xl font-bold text-white">Create a New Agent</h1>
+          <p className="text-sm text-white/40 mt-1">Configure your AI agent to get started</p>
+        </div>
+
+        <div
+          className="flex flex-col gap-4 rounded-2xl border px-6 py-6"
+          style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Agent Name</label>
+            <input
+              type="text" placeholder="e.g. Smith's Solar Assistant" autoFocus
+              value={agentName} onChange={(e) => { setAgentName(e.target.value); setNameError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleCreate(); }}
+              className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none"
+              style={{ backgroundColor: "#0a0f1e", border: `1px solid ${nameError ? "#f87171" : "rgba(255,255,255,0.08)"}` }}
+            />
+            {nameError && <p className="text-xs text-red-400">{nameError}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>
+              Description <span style={{ color: "rgba(255,255,255,0.25)" }}>(optional)</span>
+            </label>
+            <textarea
+              placeholder="Describe your agent in a few words"
+              value={description} onChange={(e) => setDescription(e.target.value)}
+              rows={3} className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none resize-none"
+              style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Model</label>
+            <select
+              value={model} onChange={(e) => setModel(e.target.value)}
+              className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none appearance-none cursor-pointer"
+              style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            </select>
+          </div>
+
+          {error && <p className="text-sm text-red-400 -mt-1">{error}</p>}
+        </div>
+
+        <button
+          onClick={handleCreate} disabled={creating}
+          className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+          style={{ backgroundColor: "#3b5bfc" }}
+        >
+          {creating ? "Creating…" : "Create Agent"}
+        </button>
+
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="text-sm text-center transition-colors"
+          style={{ color: "rgba(255,255,255,0.30)" }}
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Studio page ──────────────────────────────────────────────────────────────
 
 interface AgentVersion {
@@ -2239,6 +2341,10 @@ export default function Studio() {
   }
 
   const font = { fontFamily: "'Inter', sans-serif" };
+
+  if (!agentId) {
+    return <StudioNoAgentView />;
+  }
 
   if (loading) {
     return (

@@ -260,11 +260,7 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
             <button
               onClick={() => { setMenuOpen(false); navigate(`/studio/${agent.id}`); }}
               className="w-full text-left px-4 py-2.5 text-xs text-white/70 hover:bg-white/5 transition-colors"
-            >Open</button>
-            <button
-              onClick={startRename}
-              className="w-full text-left px-4 py-2.5 text-xs text-white/70 hover:bg-white/5 transition-colors"
-            >Rename</button>
+            >Edit</button>
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
             <button
               onClick={() => { setMenuOpen(false); onRequestDelete(agent); }}
@@ -433,6 +429,21 @@ export default function Dashboard() {
               <div className="w-4 h-4 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
               Loading agents…
             </div>
+          ) : agents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+              <div className="text-5xl select-none">🤖</div>
+              <div>
+                <p className="text-base font-semibold text-white">No agents yet</p>
+                <p className="text-sm text-white/40 mt-1">Go to Studio to create your first agent</p>
+              </div>
+              <button
+                onClick={() => navigate("/studio")}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+                style={{ backgroundColor: "#3b5bfc" }}
+              >
+                Open Studio
+              </button>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {agents.map((agent) => (
@@ -443,14 +454,6 @@ export default function Dashboard() {
                   onRename={handleRename}
                 />
               ))}
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="h-40 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer hover:opacity-80 transition-all duration-200"
-                style={{ borderColor: "rgba(255,255,255,0.08)" }}
-              >
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-xl" style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "#3b5bfc" }}>+</div>
-                <span className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Create New Agent</span>
-              </button>
             </div>
           )}
         </div>
