@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 const navItems = [
   { id: "home",     icon: "🏠", label: "Home",     path: "/dashboard" },
   { id: "studio",   icon: "🎛️", label: "Studio",   path: "/studio"    },
-  { id: "billing",  icon: "💳", label: "Billing",  path: "/billing"   },
   { id: "settings", icon: "⚙️", label: "Settings", path: "/settings"  },
 ];
 
