@@ -1809,6 +1809,7 @@ export default function Studio() {
   const [instructions, setInstructions] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
+  const [editingInstructions, setEditingInstructions] = useState(false);
 
   const [showDeployModal, setShowDeployModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -2158,6 +2159,7 @@ export default function Studio() {
     await supabase.from("agents").update({ model, instructions, prompt_model: model }).eq("id", agent.id);
     setSaving(false);
     setSavedMsg(true);
+    setEditingInstructions(false);
     setTimeout(() => setSavedMsg(false), 2500);
   }
 
@@ -2393,6 +2395,8 @@ export default function Studio() {
           <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 md:px-8 md:py-6">
             {activeTab === "Prompt" && (
               <div className="flex flex-col gap-6 max-w-xl">
+
+                {/* ── Model selector ── */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-white/70">Model</label>
                   <select
@@ -2423,29 +2427,222 @@ export default function Studio() {
                   </p>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-white/70">Instructions</label>
-                  <textarea
-                    value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    placeholder="Write your agent instructions here..."
-                    rows={16}
-                    className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc] transition-colors resize-none leading-relaxed"
-                    style={{ backgroundColor: "#111827" }}
-                  />
+                {/* ── Instructions ── */}
+                <div className="flex flex-col gap-2">
+                  {/* Label row */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-white/70">Instructions</label>
+                    {!editingInstructions && (
+                      <button
+                        onClick={() => setEditingInstructions(true)}
+                        className="flex items-center gap-1 text-xs text-white/35 hover:text-white/65 transition-colors"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Edit
+                      </button>
+                    )}
+                  </div>
+
+                  {editingInstructions ? (
+                    /* ── Edit mode ── */
+                    <div className="flex flex-col gap-2.5">
+                      <textarea
+                        value={instructions}
+                        onChange={(e) => setInstructions(e.target.value)}
+                        placeholder="Write your agent instructions here..."
+                        rows={5}
+                        autoFocus
+                        className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-[#3b5bfc]/50 outline-none focus:border-[#3b5bfc] transition-colors resize-none leading-relaxed"
+                        style={{ backgroundColor: "#111827" }}
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleSave}
+                          disabled={saving}
+                          className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: "#3b5bfc" }}
+                        >
+                          {saving ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={() => setEditingInstructions(false)}
+                          disabled={saving}
+                          className="px-4 py-2 rounded-lg text-sm font-medium border border-white/10 hover:border-white/20 transition-all disabled:opacity-40"
+                          style={{ color: "rgba(255,255,255,0.45)" }}
+                        >
+                          Cancel
+                        </button>
+                        {savedMsg && (
+                          <span className="text-sm text-green-400 flex items-center gap-1">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Saved
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Read-only mode ── */
+                    <div
+                      className="rounded-xl px-4 py-3 text-sm leading-relaxed border border-white/6 cursor-pointer hover:border-white/12 transition-colors min-h-[5rem]"
+                      style={{ backgroundColor: "#111827", color: instructions.trim() ? "rgba(255,255,255,0.75)" : undefined }}
+                      onClick={() => setEditingInstructions(true)}
+                    >
+                      {instructions.trim() ? (
+                        <span className="whitespace-pre-wrap">{instructions}</span>
+                      ) : (
+                        <span style={{ color: "rgba(255,255,255,0.22)", fontStyle: "italic" }}>
+                          No instructions yet — click to add…
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: "#3b5bfc" }}
+                {/* ── Input Capabilities ── */}
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium text-white/70">Input Capabilities</h3>
+                    <p className="text-xs text-white/30 mt-0.5">What types of input your agent accepts</p>
+                  </div>
+
+                  <div
+                    className="rounded-xl border border-white/8 px-4 py-4"
+                    style={{ backgroundColor: "#111827" }}
                   >
-                    {saving ? "Saving…" : "Save"}
-                  </button>
-                  {savedMsg && <span className="text-sm text-green-400">✓ Saved</span>}
+                    <div className="grid grid-cols-4 gap-2">
+
+                      {/* ── Text (always on) ── */}
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M4 6h16M4 10h16M4 14h10" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        </div>
+                        {/* ON toggle */}
+                        <div
+                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0"
+                          style={{ backgroundColor: "rgba(255,255,255,0.3)" }}
+                        >
+                          <div
+                            className="absolute right-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
+                          />
+                        </div>
+                        <span className="text-[11px] font-medium text-white/55 text-center leading-tight">Text</span>
+                      </div>
+
+                      {/* ── Images (locked, Pro) ── */}
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="3" width="18" height="18" rx="2" stroke="rgba(255,255,255,0.35)" strokeWidth="2"/>
+                            <path d="M3 15l5-5 4 4 3-3 6 6" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="8.5" cy="8.5" r="1.5" fill="rgba(255,255,255,0.35)"/>
+                          </svg>
+                        </div>
+                        {/* OFF toggle */}
+                        <div
+                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0 opacity-45"
+                          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+                        >
+                          <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white/60" />
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center gap-0.5">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+                              <rect x="3" y="11" width="18" height="11" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
+                              <path d="M7 11V7a5 5 0 0110 0v4" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"/>
+                            </svg>
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                              style={{ backgroundColor: "rgba(59,91,252,0.2)", color: "#7b93ff" }}
+                            >Pro</span>
+                          </div>
+                          <span className="text-[11px] font-medium text-white/35 text-center leading-tight">Images</span>
+                        </div>
+                      </div>
+
+                      {/* ── Voice Notes (locked, Business) ── */}
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <rect x="9" y="2" width="6" height="11" rx="3" stroke="rgba(255,255,255,0.35)" strokeWidth="2"/>
+                            <path d="M5 10a7 7 0 0014 0" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
+                            <line x1="12" y1="17" x2="12" y2="21" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
+                            <line x1="9" y1="21" x2="15" y2="21" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
+                        </div>
+                        {/* OFF toggle */}
+                        <div
+                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0 opacity-45"
+                          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+                        >
+                          <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white/60" />
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center gap-0.5">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+                              <rect x="3" y="11" width="18" height="11" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
+                              <path d="M7 11V7a5 5 0 0110 0v4" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"/>
+                            </svg>
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                              style={{ backgroundColor: "rgba(255,165,0,0.15)", color: "rgba(255,180,50,0.9)" }}
+                            >Biz</span>
+                          </div>
+                          <span className="text-[11px] font-medium text-white/35 text-center leading-tight">Voice</span>
+                        </div>
+                      </div>
+
+                      {/* ── Files (locked, Business, 20mb max) ── */}
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <polyline points="14,2 14,8 20,8" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        {/* OFF toggle */}
+                        <div
+                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0 opacity-45"
+                          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+                        >
+                          <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white/60" />
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center gap-0.5">
+                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
+                              <rect x="3" y="11" width="18" height="11" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
+                              <path d="M7 11V7a5 5 0 0110 0v4" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"/>
+                            </svg>
+                            <span
+                              className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
+                              style={{ backgroundColor: "rgba(255,165,0,0.15)", color: "rgba(255,180,50,0.9)" }}
+                            >Biz</span>
+                          </div>
+                          <span className="text-[11px] font-medium text-white/35 text-center leading-tight">Files</span>
+                          <span className="text-[9px] text-white/22 leading-none">20mb max</span>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
                 </div>
+
               </div>
             )}
 
