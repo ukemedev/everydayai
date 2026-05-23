@@ -93,20 +93,100 @@ const CONNECTOR_LABELS: Record<string, string> = {
   instagram:     "Instagram",
 };
 
-// ─── Static tools catalogue (UI only — no live connections) ──────────────────
+// ─── Static tools catalogue ──────────────────────────────────────────────────
 
-const STATIC_TOOLS = [
-  { id: "paystack",        name: "Paystack",        category: "💰 Payments",        desc: "Accept payments and process transactions across Africa",                initials: "PS", color: "#00C3F7", bg: "rgba(0,195,247,0.12)"   },
-  { id: "google_sheets",   name: "Google Sheets",   category: "📊 Save Data",        desc: "Save collected data directly to your spreadsheets",                    initials: "GS", color: "#0F9D58", bg: "rgba(15,157,88,0.12)"   },
-  { id: "gmail",           name: "Gmail",           category: "📧 Email",            desc: "Send automated emails to your leads and customers",                    initials: "Gm", color: "#EA4335", bg: "rgba(234,67,53,0.12)"   },
-  { id: "google_calendar", name: "Google Calendar", category: "📅 Booking",          desc: "Let customers book appointments in your calendar in real time",         initials: "GC", color: "#4285F4", bg: "rgba(66,133,244,0.12)" },
-  { id: "telegram",        name: "Telegram",        category: "💬 Notify Owner",     desc: "Get instant Telegram alerts whenever a key event happens",              initials: "Tg", color: "#2AABEE", bg: "rgba(42,171,238,0.12)" },
-  { id: "termii",          name: "Termii",          category: "🔔 SMS",              desc: "Send OTPs and SMS messages to any phone number in Africa",              initials: "Tm", color: "#F97316", bg: "rgba(249,115,22,0.12)" },
-  { id: "web_search",      name: "Web Search",      category: "🔍 Intelligence",     desc: "Let your agent search the internet for live, up-to-date information",   initials: "WS", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)" },
-  { id: "vapi",            name: "Vapi.ai",         category: "📞 Voice Calls",      desc: "Make and receive AI-powered phone calls automatically",                 initials: "Vi", color: "#10B981", bg: "rgba(16,185,129,0.12)" },
-  { id: "google_drive",    name: "Google Drive",    category: "📄 Documents",        desc: "Create, read, and manage files and folders in your Drive",              initials: "GD", color: "#FBBC04", bg: "rgba(251,188,4,0.12)"  },
-  { id: "hubspot",         name: "HubSpot",         category: "👤 Customer Memory",  desc: "Store and recall customer information directly from your CRM",          initials: "HS", color: "#FF7A59", bg: "rgba(255,122,89,0.12)" },
-] as const;
+interface ToolField { key: string; label: string; placeholder: string; type: "text" | "email" | "password" | "textarea" }
+interface StaticTool { id: string; name: string; category: string; desc: string; initials: string; color: string; bg: string; fields: ToolField[] }
+
+const STATIC_TOOLS: StaticTool[] = [
+  {
+    id: "paystack", name: "Paystack", category: "💰 Payments",
+    desc: "Accept payments and process transactions across Africa",
+    initials: "PS", color: "#00C3F7", bg: "rgba(0,195,247,0.12)",
+    fields: [
+      { key: "secret_key", label: "Secret Key", placeholder: "sk_live_xxxxxxxxxxxxxxxxxx", type: "password" },
+    ],
+  },
+  {
+    id: "google_sheets", name: "Google Sheets", category: "📊 Save Data",
+    desc: "Save collected data directly to your spreadsheets",
+    initials: "GS", color: "#0F9D58", bg: "rgba(15,157,88,0.12)",
+    fields: [
+      { key: "sheet_url",  label: "Sheet URL",        placeholder: "https://docs.google.com/spreadsheets/d/...", type: "text" },
+      { key: "sheet_name", label: "Sheet Name (Tab)", placeholder: "Sheet1", type: "text" },
+    ],
+  },
+  {
+    id: "gmail", name: "Gmail", category: "📧 Email",
+    desc: "Send automated emails to your leads and customers",
+    initials: "Gm", color: "#EA4335", bg: "rgba(234,67,53,0.12)",
+    fields: [
+      { key: "email",        label: "Gmail Address", placeholder: "you@gmail.com",         type: "email" },
+      { key: "app_password", label: "App Password",  placeholder: "xxxx xxxx xxxx xxxx",   type: "password" },
+    ],
+  },
+  {
+    id: "google_calendar", name: "Google Calendar", category: "📅 Booking",
+    desc: "Let customers book appointments in your calendar in real time",
+    initials: "GC", color: "#4285F4", bg: "rgba(66,133,244,0.12)",
+    fields: [
+      { key: "calendar_id", label: "Calendar ID",          placeholder: "you@gmail.com",                            type: "text" },
+      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
+    ],
+  },
+  {
+    id: "telegram", name: "Telegram", category: "💬 Notify Owner",
+    desc: "Get instant Telegram alerts whenever a key event happens",
+    initials: "Tg", color: "#2AABEE", bg: "rgba(42,171,238,0.12)",
+    fields: [
+      { key: "bot_token", label: "Bot Token", placeholder: "123456:ABC-DEF...",  type: "password" },
+      { key: "chat_id",   label: "Chat ID",   placeholder: "-100123456789",       type: "text" },
+    ],
+  },
+  {
+    id: "termii", name: "Termii", category: "🔔 SMS",
+    desc: "Send OTPs and SMS messages to any phone number in Africa",
+    initials: "Tm", color: "#F97316", bg: "rgba(249,115,22,0.12)",
+    fields: [
+      { key: "api_key",   label: "API Key",   placeholder: "TLtest_xxxxxxxxxx", type: "password" },
+      { key: "sender_id", label: "Sender ID", placeholder: "YourBrand",         type: "text" },
+    ],
+  },
+  {
+    id: "web_search", name: "Web Search", category: "🔍 Intelligence",
+    desc: "Let your agent search the internet for live, up-to-date information",
+    initials: "WS", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",
+    fields: [
+      { key: "api_key", label: "Serper API Key", placeholder: "Your Serper.dev key", type: "password" },
+    ],
+  },
+  {
+    id: "vapi", name: "Vapi.ai", category: "📞 Voice Calls",
+    desc: "Make and receive AI-powered phone calls automatically",
+    initials: "Vi", color: "#10B981", bg: "rgba(16,185,129,0.12)",
+    fields: [
+      { key: "api_key",         label: "API Key",         placeholder: "vapi_xxxxxxxxxx",  type: "password" },
+      { key: "phone_number_id", label: "Phone Number ID", placeholder: "phnum_xxxxxxxxxx", type: "text" },
+    ],
+  },
+  {
+    id: "google_drive", name: "Google Drive", category: "📄 Documents",
+    desc: "Create, read, and manage files and folders in your Drive",
+    initials: "GD", color: "#FBBC04", bg: "rgba(251,188,4,0.12)",
+    fields: [
+      { key: "folder_id",  label: "Target Folder ID",     placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgm...", type: "text" },
+      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
+    ],
+  },
+  {
+    id: "hubspot", name: "HubSpot", category: "👤 Customer Memory",
+    desc: "Store and recall customer information directly from your CRM",
+    initials: "HS", color: "#FF7A59", bg: "rgba(255,122,89,0.12)",
+    fields: [
+      { key: "access_token", label: "Private App Token", placeholder: "pat-na1-xxxxxxxxxx", type: "password" },
+    ],
+  },
+];
 
 interface Tool {
   id: string;
@@ -1738,6 +1818,11 @@ export default function Studio() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
+  // Tools tab — accordion
+  const [openToolId, setOpenToolId] = useState<string | null>(null);
+  const [toolFields, setToolFields] = useState<Record<string, Record<string, string>>>({});
+  const [toolSaved, setToolSaved] = useState<Record<string, boolean>>({});
+
   // Tools tab
   const [toolPrompt, setToolPrompt] = useState("");
   const [toolAnalyzing, setToolAnalyzing] = useState(false);
@@ -2520,54 +2605,170 @@ export default function Studio() {
             )}
 
             {activeTab === "Tools" && (
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-3">
 
                 {/* ── Header ── */}
-                <div>
+                <div className="mb-2">
                   <h2 className="text-base font-semibold text-white">Integrations</h2>
-                  <p className="text-sm text-white/40 mt-1">
-                    Connect tools to give your agent real capabilities
-                  </p>
+                  <p className="text-sm text-white/40 mt-0.5">Connect tools to give your agent real capabilities</p>
                 </div>
 
-                {/* ── Tool cards ── */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {STATIC_TOOLS.map((tool) => (
+                {/* ── Accordion list ── */}
+                {STATIC_TOOLS.map((tool) => {
+                  const isOpen = openToolId === tool.id;
+                  const fields = toolFields[tool.id] ?? {};
+                  const saved  = toolSaved[tool.id]  ?? false;
+
+                  return (
                     <div
                       key={tool.id}
-                      className="rounded-xl border border-white/8 p-4 flex flex-col gap-4 transition-all duration-150"
-                      style={{ backgroundColor: "#0d1117" }}
+                      className="rounded-xl overflow-hidden transition-all duration-150"
+                      style={{
+                        border: isOpen
+                          ? "1px solid rgba(59,91,252,0.4)"
+                          : "1px solid rgba(255,255,255,0.07)",
+                        backgroundColor: "#0d1117",
+                      }}
                     >
-                      {/* Card top: icon + text */}
-                      <div className="flex items-start gap-3">
+                      {/* ── Clickable row ── */}
+                      <button
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                        onClick={() => setOpenToolId(isOpen ? null : tool.id)}
+                      >
+                        {/* Brand icon */}
                         <div
-                          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold tracking-wide"
+                          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-[11px] font-bold tracking-wide"
                           style={{ backgroundColor: tool.bg, color: tool.color }}
                         >
                           {tool.initials}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <span
-                            className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full leading-tight"
-                            style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.38)" }}
-                          >
-                            {tool.category}
-                          </span>
-                          <p className="text-sm font-semibold text-white mt-1.5 leading-snug">{tool.name}</p>
-                          <p className="text-xs text-white/40 mt-0.5 leading-relaxed">{tool.desc}</p>
-                        </div>
-                      </div>
 
-                      {/* Connect button */}
-                      <button
-                        className="w-full py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
-                        style={{ backgroundColor: "#3b5bfc" }}
-                      >
-                        Connect
+                        {/* Category · Name */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] text-white/35 leading-none">{tool.category}</span>
+                            <span className="text-[10px] text-white/20">·</span>
+                            <span className="text-sm font-semibold text-white leading-none">{tool.name}</span>
+                          </div>
+                        </div>
+
+                        {/* Active badge + chevron */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {saved && (
+                            <span
+                              className="hidden sm:flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
+                            >
+                              ✓ Active
+                            </span>
+                          )}
+                          <div
+                            className="w-6 h-6 rounded-md flex items-center justify-center transition-transform duration-200"
+                            style={{
+                              backgroundColor: isOpen ? "rgba(59,91,252,0.15)" : "rgba(255,255,255,0.05)",
+                              color: isOpen ? "#3b5bfc" : "rgba(255,255,255,0.35)",
+                              transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                            }}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        </div>
                       </button>
+
+                      {/* ── Expanded panel ── */}
+                      {isOpen && (
+                        <div
+                          className="border-t px-4 pt-4 pb-5 flex flex-col gap-4"
+                          style={{ borderColor: "rgba(59,91,252,0.2)", backgroundColor: "rgba(8,14,32,0.6)" }}
+                        >
+                          {/* Tool header */}
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold tracking-wide"
+                              style={{ backgroundColor: tool.bg, color: tool.color }}
+                            >
+                              {tool.initials}
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-white">{tool.name}</p>
+                              <p className="text-xs text-white/45 mt-0.5 leading-relaxed">{tool.desc}</p>
+                            </div>
+                          </div>
+
+                          {/* Credential fields */}
+                          <div className="flex flex-col gap-3">
+                            {tool.fields.map((field) => (
+                              <div key={field.key} className="flex flex-col gap-1.5">
+                                <label className="text-[11px] font-semibold text-white/45 uppercase tracking-wider">
+                                  {field.label}
+                                </label>
+                                {field.type === "textarea" ? (
+                                  <textarea
+                                    rows={3}
+                                    value={fields[field.key] ?? ""}
+                                    onChange={(e) =>
+                                      setToolFields((prev) => ({
+                                        ...prev,
+                                        [tool.id]: { ...(prev[tool.id] ?? {}), [field.key]: e.target.value },
+                                      }))
+                                    }
+                                    placeholder={field.placeholder}
+                                    className="w-full rounded-lg px-3 py-2.5 text-xs text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none font-mono leading-relaxed"
+                                    style={{ backgroundColor: "#0a0f1e" }}
+                                  />
+                                ) : (
+                                  <input
+                                    type={field.type}
+                                    value={fields[field.key] ?? ""}
+                                    onChange={(e) =>
+                                      setToolFields((prev) => ({
+                                        ...prev,
+                                        [tool.id]: { ...(prev[tool.id] ?? {}), [field.key]: e.target.value },
+                                      }))
+                                    }
+                                    placeholder={field.placeholder}
+                                    className="w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors"
+                                    style={{ backgroundColor: "#0a0f1e" }}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2.5 pt-1">
+                            <button
+                              className="flex-1 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-80 active:scale-95 border"
+                              style={{
+                                color: "rgba(255,255,255,0.55)",
+                                borderColor: "rgba(255,255,255,0.12)",
+                                backgroundColor: "transparent",
+                              }}
+                            >
+                              Test Connection
+                            </button>
+                            <button
+                              onClick={() => setToolSaved((prev) => ({ ...prev, [tool.id]: true }))}
+                              className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                              style={{ backgroundColor: "#3b5bfc" }}
+                            >
+                              {saved ? "✓ Activated" : "Save & Activate"}
+                            </button>
+                          </div>
+
+                          {/* Mobile active indicator */}
+                          {saved && (
+                            <p className="sm:hidden text-[11px] font-semibold text-center" style={{ color: "#4ade80" }}>
+                              ✓ This tool is active
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
 
               </div>
             )}
