@@ -3,12 +3,10 @@ import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
-  { id: "home",        icon: "🏠", label: "Home",        path: "/dashboard" },
-  { id: "learn",       icon: "📚", label: "Learn",       path: "/dashboard" },
-  { id: "studio",      icon: "🎛️", label: "Studio",      path: "/dashboard" },
-  { id: "automations", icon: "⚡", label: "Automations", path: "/automations" },
-  { id: "billing",     icon: "💳", label: "Billing",     path: "/billing"    },
-  { id: "settings",    icon: "⚙️", label: "Settings",    path: "/settings"   },
+  { id: "home",     icon: "🏠", label: "Home",     path: "/dashboard" },
+  { id: "studio",   icon: "🎛️", label: "Studio",   path: "/dashboard" },
+  { id: "billing",  icon: "💳", label: "Billing",  path: "/billing"   },
+  { id: "settings", icon: "⚙️", label: "Settings", path: "/settings"  },
 ];
 
 interface AppLayoutProps {

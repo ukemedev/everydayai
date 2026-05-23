@@ -9,18 +9,15 @@ import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
 import Studio from "@/pages/Studio";
 import Settings from "@/pages/Settings";
-import Automations from "@/pages/Automations";
 import Chat from "@/pages/Chat";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoute from "@/components/AdminRoute";
 import Admin from "@/pages/Admin";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminAgents from "@/pages/AdminAgents";
-import AdminAutomations from "@/pages/AdminAutomations";
 import AdminRevenue from "@/pages/AdminRevenue";
 import AdminBlog from "@/pages/AdminBlog";
 import AdminAuditLog from "@/pages/AdminAuditLog";
-import AdminDevBot from "@/pages/AdminDevBot";
 import Pricing from "@/pages/Pricing";
 import Billing from "@/pages/Billing";
 
@@ -42,9 +39,6 @@ function Router() {
       <Route path="/settings">
         {() => <ProtectedRoute component={Settings} />}
       </Route>
-      <Route path="/automations">
-        {() => <ProtectedRoute component={Automations} />}
-      </Route>
       <Route path="/billing">
         {() => <ProtectedRoute component={Billing} />}
       </Route>
@@ -58,9 +52,6 @@ function Router() {
       <Route path="/admin/agents">
         {() => <AdminRoute component={AdminAgents} />}
       </Route>
-      <Route path="/admin/automations">
-        {() => <AdminRoute component={AdminAutomations} />}
-      </Route>
       <Route path="/admin/blog">
         {() => <AdminRoute component={AdminBlog} />}
       </Route>
@@ -69,9 +60,6 @@ function Router() {
       </Route>
       <Route path="/admin/audit">
         {() => <AdminRoute component={AdminAuditLog} />}
-      </Route>
-      <Route path="/admin/devbot">
-        {() => <AdminRoute component={AdminDevBot} />}
       </Route>
       <Route component={NotFound} />
     </Switch>

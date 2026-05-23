@@ -69,10 +69,9 @@ router.get("/admin/stats", async (req: Request, res: Response) => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  const [usersRes, agentsRes, automationsRes, messagesRes] = await Promise.all([
+  const [usersRes, agentsRes, messagesRes] = await Promise.all([
     sb.from("profiles").select("*", { count: "exact", head: true }),
     sb.from("agents").select("*", { count: "exact", head: true }),
-    sb.from("automations").select("*", { count: "exact", head: true }),
     Promise.resolve(
       sb.from("messages")
         .select("*", { count: "exact", head: true })
@@ -81,10 +80,9 @@ router.get("/admin/stats", async (req: Request, res: Response) => {
   ]);
 
   const stats = {
-    totalUsers:        usersRes.count       ?? 0,
-    totalAgents:       agentsRes.count      ?? 0,
-    totalAutomations:  automationsRes.count ?? 0,
-    messagesThisMonth: messagesRes.count    ?? 0,
+    totalUsers:        usersRes.count    ?? 0,
+    totalAgents:       agentsRes.count   ?? 0,
+    messagesThisMonth: messagesRes.count ?? 0,
   };
 
   req.log.info(stats, "admin stats fetched");
@@ -240,56 +238,6 @@ router.get("/admin/agents", async (req: Request, res: Response) => {
 
   req.log.info({ count: agents.length }, "admin agents fetched");
   res.json({ agents });
-});
-
-// ─── GET /api/admin/automations ──────────────────────────────────────────────
-
-router.get("/admin/automations", async (req: Request, res: Response) => {
-  const result = await requireAdmin(req, res);
-  if (!result) return;
-
-  const { sb } = result;
-
-  const [automationsRes, authRes] = await Promise.all([
-    sb.from("automations")
-      .select("id, name, description, trigger_type, status, user_id, created_at")
-      .order("created_at", { ascending: false }),
-    sb.auth.admin.listUsers({ perPage: 1000 }),
-  ]);
-
-  if (automationsRes.error) {
-    req.log.error({ err: automationsRes.error }, "failed to fetch automations");
-    res.status(500).json({ error: "Failed to fetch automations" });
-    return;
-  }
-
-  const emailMap = new Map<string, string>();
-  for (const u of authRes.data?.users ?? []) {
-    emailMap.set(u.id, u.email ?? "");
-  }
-
-  type AutomationRow = {
-    id: string;
-    name: string;
-    description: string | null;
-    trigger_type: string | null;
-    status: string | null;
-    user_id: string;
-    created_at: string;
-  };
-
-  const automations = (automationsRes.data as AutomationRow[]).map((a) => ({
-    id:           a.id,
-    name:         a.name,
-    description:  a.description ?? "",
-    trigger_type: a.trigger_type ?? "",
-    status:       a.status ?? "inactive",
-    owner_email:  emailMap.get(a.user_id) ?? "",
-    created_at:   a.created_at,
-  }));
-
-  req.log.info({ count: automations.length }, "admin automations fetched");
-  res.json({ automations });
 });
 
 // ─── GET /api/admin/revenue ───────────────────────────────────────────────────
