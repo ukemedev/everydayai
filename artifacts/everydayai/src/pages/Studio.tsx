@@ -239,8 +239,17 @@ interface Message {
   text: string;
   type?: "no-key" | "tool-debug" | "limit-reached";
   provider?: string;
+  model?: string;
   toolCall?: ToolCallDebug;
   limitData?: { current: number; limit: number };
+}
+
+function getModelLabel(modelValue: string): string {
+  for (const group of modelGroups) {
+    const m = group.models.find((m) => m.value === modelValue);
+    if (m) return m.label;
+  }
+  return modelValue;
 }
 
 // ─── Tool debug card ──────────────────────────────────────────────────────────
@@ -410,7 +419,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
         if (data.error === "NO_API_KEY") {
           setMessages((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), role: "agent", type: "no-key", provider, text: "" },
+            { id: crypto.randomUUID(), role: "agent", type: "no-key", provider, model, text: "" },
           ]);
           setIsTyping(false);
           return;
@@ -576,17 +585,27 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                       className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed"
                       style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}
                     >
-                      <p className="text-amber-400/90 text-xs mb-1.5 font-medium">No API key found</p>
+                      <p className="text-amber-400/90 text-xs mb-1 font-medium">No API key found</p>
                       <p className="text-white/60 text-xs leading-relaxed">
-                        You need to add a{" "}
-                        <span className="text-white/80 capitalize">{msg.provider}</span> API key to use this model.
+                        <span className="text-white/80">{msg.model ? getModelLabel(msg.model) : "This model"}</span>
+                        {" "}requires a{" "}
+                        <span className="text-white/80 capitalize">{msg.provider}</span>
+                        {" "}API key, but you haven't added one yet.
                       </p>
-                      <button
-                        onClick={() => navigate("/settings")}
-                        className="mt-2.5 text-xs text-[#3b5bfc] hover:underline"
-                      >
-                        → Go to Settings to add your key
-                      </button>
+                      <div className="mt-2.5 flex flex-col gap-1.5">
+                        <button
+                          onClick={() => navigate("/settings")}
+                          className="text-xs text-[#3b5bfc] hover:underline text-left"
+                        >
+                          → Add {msg.provider} key in Settings
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("Prompt")}
+                          className="text-xs text-white/40 hover:text-white/70 transition-colors text-left"
+                        >
+                          → Or switch to a different model in the Prompt tab
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
