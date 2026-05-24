@@ -1,8 +1,42 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
+
+function signState(payload: object): string {
+  const json = JSON.stringify(payload);
+  const b64  = Buffer.from(json).toString("base64url");
+  const secret = process.env.SESSION_SECRET ?? "everydayai-oauth-secret";
+  const sig  = createHmac("sha256", secret).update(b64).digest("hex").slice(0, 32);
+  return `${b64}.${sig}`;
+}
+
+function verifyAndParseState(state: string): { userId: string; ts: number } | null {
+  const dot = state.lastIndexOf(".");
+  if (dot === -1) return null;
+  const b64 = state.slice(0, dot);
+  const sig  = state.slice(dot + 1);
+  const secret = process.env.SESSION_SECRET ?? "everydayai-oauth-secret";
+  const expectedSig = createHmac("sha256", secret).update(b64).digest("hex").slice(0, 32);
+  try {
+    const a = Buffer.from(sig, "utf8");
+    const b = Buffer.from(expectedSig, "utf8");
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(Buffer.from(b64, "base64url").toString("utf-8"));
+    if (!parsed?.userId) return null;
+    // Reject state tokens older than 15 minutes
+    if (Date.now() - (parsed.ts ?? 0) > 15 * 60 * 1000) return null;
+    return parsed as { userId: string; ts: number };
+  } catch {
+    return null;
+  }
+}
 
 const router = Router();
 
@@ -49,7 +83,7 @@ router.get("/auth/google", (req: Request, res: Response) => {
     return;
   }
 
-  const state = Buffer.from(JSON.stringify({ userId, ts: Date.now() })).toString("base64url");
+  const state = signState({ userId, ts: Date.now() });
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
@@ -81,14 +115,12 @@ router.get("/auth/google/callback", async (req: Request, res: Response) => {
   }
 
   let userId: string;
-  try {
-    const parsed = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
-    userId = parsed.userId;
-    if (!userId) throw new Error("No userId in state");
-  } catch {
-    res.status(400).send("Invalid state parameter");
+  const parsedState = verifyAndParseState(state);
+  if (!parsedState) {
+    res.status(400).send("Invalid or expired state parameter");
     return;
   }
+  userId = parsedState.userId;
 
   let oauth2Client: ReturnType<typeof getOAuth2Client>;
   try {

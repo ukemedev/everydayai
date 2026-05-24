@@ -91,8 +91,8 @@ app.use(
 );
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // ── Static files ──────────────────────────────────────────────────────────────
 app.use(express.static(join(__dirname, "../public")));

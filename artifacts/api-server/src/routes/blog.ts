@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { sanitizeText } from "../lib/sanitize.js";
 
 const router = Router();
 
@@ -85,16 +86,27 @@ router.post("/admin/blog", async (req: Request, res: Response) => {
     return;
   }
 
+  if (title.trim().length > 200) {
+    res.status(400).json({ error: "title must be 200 characters or fewer" });
+    return;
+  }
+
+  const safeSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+  if (!safeSlug) {
+    res.status(400).json({ error: "slug contains no valid characters" });
+    return;
+  }
+
   const { data, error } = await sb
     .from("blog_posts")
     .insert({
-      title:       title.trim(),
-      slug:        slug.trim(),
-      category:    category ?? "General",
-      excerpt:     excerpt ?? "",
-      content:     content.trim(),
+      title:       sanitizeText(title.trim()),
+      slug:        safeSlug,
+      category:    category ? sanitizeText(category) : "General",
+      excerpt:     excerpt  ? sanitizeText(excerpt)  : "",
+      content:     sanitizeText(content.trim()),
       cover_image: cover_image ?? "",
-      author:      author ?? "EverydayAI Team",
+      author:      author  ? sanitizeText(author)  : "EverydayAI Team",
       published:   published ?? false,
     })
     .select()

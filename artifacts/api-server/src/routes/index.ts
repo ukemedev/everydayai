@@ -15,6 +15,8 @@ import {
   generalLimiter,
   chatLimiter,
   authLimiter,
+  uploadLimiter,
+  webhookLimiter,
 } from "../middleware/rateLimiter";
 import { requireAuth } from "../middleware/auth";
 
@@ -26,6 +28,9 @@ router.use(generalLimiter);
 // ── Route-specific rate limiters ──────────────────────────────────────────────
 router.post("/chat", chatLimiter);
 router.use("/admin", authLimiter);
+router.use("/auth/google", authLimiter);
+router.use("/documents", uploadLimiter);
+router.use("/telegram/webhook", webhookLimiter);
 
 // ── JWT auth — applied before routers, only to protected paths ────────────────
 

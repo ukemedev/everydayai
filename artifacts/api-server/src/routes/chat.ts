@@ -8,7 +8,7 @@ import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
 import { checkMessageLimit } from "../lib/planLimits.js";
-import { sanitizeText, validateMessageLength, detectPromptInjection } from "../lib/sanitize.js";
+import { sanitizeText, validateMessageLength, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import { appendToSheet } from "../lib/googleSheets.js";
 import { sendTelegramMessage } from "../lib/telegram.js";
 import { sendEmail } from "../lib/gmail.js";
@@ -380,9 +380,35 @@ router.post("/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  // ── Message limit check (only for authenticated studio sessions) ───────────
-  if (userId?.trim()) {
-    const limitCheck = await checkMessageLimit(userId.trim());
+  // ── Verify identity for studio sessions ───────────────────────────────────
+  // SECURITY: Never trust userId from the request body without a verified JWT.
+  // Only use the verified identity from the Authorization header for key lookups.
+  let verifiedUserId: string | null = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const sb = getServiceClient();
+    if (sb) {
+      const { data, error } = await sb.auth.getUser(token);
+      if (!error && data.user) {
+        verifiedUserId = data.user.id;
+      }
+    }
+  }
+
+  // ── Validate and sanitize conversation history ─────────────────────────────
+  const MAX_HISTORY = 50;
+  const history: ConversationMessage[] = (Array.isArray(conversationHistory) ? conversationHistory : [])
+    .slice(-MAX_HISTORY)
+    .map((m) => ({
+      role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+      content: sanitizeText(String(m.content ?? "").slice(0, 2000)),
+    }))
+    .filter((m) => m.content.length > 0);
+
+  // ── Message limit check (only for verified studio sessions) ───────────────
+  if (verifiedUserId) {
+    const limitCheck = await checkMessageLimit(verifiedUserId);
     if (!limitCheck.allowed) {
       res.status(403).json({
         error:   "MESSAGE_LIMIT_REACHED",
@@ -394,21 +420,21 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
-  // Resolve API key — never trust a key sent from the frontend (it may be an encrypted blob).
-  // Always look it up server-side so we can decrypt it properly.
-  let resolvedApiKey    = "";          // always start empty — ignore any apiKey from the client
+  // Resolve API key — never trust apiKey sent from the frontend.
+  // Always look up server-side from the verified user or the live agent's owner.
+  let resolvedApiKey    = "";
   let resolvedModel     = model?.trim()    || "gpt-4o-mini";
   let resolvedProvider  = provider?.trim() || "openai";
   let baseInstructions  = instructions?.trim() || "You are a helpful assistant.";
 
-  // 1. Studio session — look up the current user's own key (decrypted) using the userId they sent.
-  if (!resolvedApiKey && userId?.trim()) {
+  // 1. Studio session — JWT-verified user's own key.
+  if (!resolvedApiKey && verifiedUserId) {
     const sb = getServiceClient();
     if (sb) {
       const { data: keyRow } = await sb
         .from("api_keys")
         .select("api_key")
-        .eq("user_id", userId.trim())
+        .eq("user_id", verifiedUserId)
         .eq("provider", resolvedProvider)
         .maybeSingle();
       if (keyRow?.api_key) {
@@ -453,8 +479,6 @@ router.post("/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const history: ConversationMessage[] = Array.isArray(conversationHistory) ? conversationHistory : [];
-
   req.log.info(
     { provider: resolvedProvider, model: resolvedModel, historyLength: history.length, agentId },
     "chat request received"
@@ -483,7 +507,7 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
-  const systemPrompt = baseInstructions + docContext + toolsContext;
+  const systemPrompt = buildHardenedSystemPrompt(baseInstructions + docContext + toolsContext);
 
   req.log.info(
     { systemPromptLength: systemPrompt.length, docContextLength: docContext.length, toolCount: agentTools.length },

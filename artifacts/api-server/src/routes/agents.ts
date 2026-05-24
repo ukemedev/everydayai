@@ -3,8 +3,16 @@ import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { getUserPlan, PLAN_LIMITS } from "../lib/planLimits.js";
 import { logAudit } from "../lib/auditLog.js";
+import { sanitizeText } from "../lib/sanitize.js";
 
 const router = Router();
+
+const VALID_MODELS = new Set([
+  "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo",
+  "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307", "claude-3-opus-20240229",
+  "gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash",
+  "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768",
+]);
 
 function getServiceClient() {
   const url = process.env.VITE_SUPABASE_URL;
@@ -62,7 +70,6 @@ router.post("/agents", async (req: Request, res: Response) => {
     return;
   }
 
-  // Create agent
   const { name, description, model } = req.body as {
     name: string;
     description?: string;
@@ -74,12 +81,31 @@ router.post("/agents", async (req: Request, res: Response) => {
     return;
   }
 
+  if (name.trim().length > 100) {
+    res.status(400).json({ error: "name must be 100 characters or fewer" });
+    return;
+  }
+
+  if (description && description.trim().length > 500) {
+    res.status(400).json({ error: "description must be 500 characters or fewer" });
+    return;
+  }
+
+  const resolvedModel = model ?? "gpt-4o-mini";
+  if (!VALID_MODELS.has(resolvedModel)) {
+    res.status(400).json({ error: "Unsupported model" });
+    return;
+  }
+
+  const safeName = sanitizeText(name.trim());
+  const safeDescription = description ? sanitizeText(description.trim()) : null;
+
   const { data, error: insertErr } = await sb
     .from("agents")
     .insert({
-      name:        name.trim(),
-      description: description?.trim() || null,
-      model:       model ?? "gpt-4o-mini",
+      name:        safeName,
+      description: safeDescription || null,
+      model:       resolvedModel,
       user_id:     userId,
     })
     .select()

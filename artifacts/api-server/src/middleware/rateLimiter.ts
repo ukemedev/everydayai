@@ -39,3 +39,19 @@ export const analyzeLimiter = rateLimit({
   legacyHeaders: false,
   handler: makeHandler("Too many requests. Please wait a moment."),
 });
+
+export const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeHandler("Too many uploads. Please wait a moment."),
+});
+
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeHandler("Too many requests."),
+});

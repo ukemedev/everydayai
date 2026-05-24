@@ -3,6 +3,12 @@ import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { logAudit } from "../lib/auditLog.js";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(id: string): boolean {
+  return UUID_RE.test(id);
+}
+
 const router = Router();
 
 function getServiceClient() {
@@ -150,6 +156,11 @@ router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => 
 
   const { sb, adminUserId } = result;
   const { id } = req.params as { id: string };
+
+  if (!isValidUuid(id)) {
+    res.status(400).json({ error: "Invalid user ID format" });
+    return;
+  }
 
   // Get current state
   const { data: profile, error: fetchErr } = await sb
@@ -335,6 +346,11 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
   if (!result) return;
   const { sb, adminUserId } = result;
   const { id } = req.params as { id: string };
+
+  if (!isValidUuid(id)) {
+    res.status(400).json({ error: "Invalid user ID format" });
+    return;
+  }
 
   const VALID_PLANS = ["free", "starter", "pro", "business"] as const;
   const { plan } = req.body as { plan: string };

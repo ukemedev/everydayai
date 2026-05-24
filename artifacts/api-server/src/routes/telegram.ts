@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
@@ -6,6 +7,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { logger } from "../lib/logger.js";
+import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
+
+function getWebhookSecret(agentId: string): string {
+  const secret = process.env.SESSION_SECRET ?? "everydayai-webhook-secret";
+  return createHmac("sha256", secret).update(agentId).digest("hex").slice(0, 64);
+}
 
 const router = Router();
 
@@ -139,13 +146,15 @@ router.post("/telegram/setup", async (req: Request, res: Response) => {
     webhookUrl?.trim() ||
     `${req.protocol}://${req.get("host") ?? ""}/api/telegram/webhook/${agentId.trim()}`;
 
+  const webhookSecret = getWebhookSecret(agentId.trim());
+
   try {
     const tgRes = await fetch(
       `https://api.telegram.org/bot${botToken.trim()}/setWebhook`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhook }),
+        body: JSON.stringify({ url: webhook, secret_token: webhookSecret }),
       }
     );
     const tgData = (await tgRes.json()) as { ok: boolean; description?: string };
@@ -219,6 +228,15 @@ router.delete("/telegram/deployment/:agentId", async (req: Request, res: Respons
 
 router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) => {
   const { agentId } = req.params as { agentId: string };
+
+  // ── Verify that this request actually came from Telegram ──────────────────
+  const receivedSecret = req.headers["x-telegram-bot-api-secret-token"] as string | undefined;
+  const expectedSecret = getWebhookSecret(agentId);
+  if (!receivedSecret || receivedSecret !== expectedSecret) {
+    res.status(401).json({ ok: false });
+    return;
+  }
+
   const update = req.body as {
     message?: {
       chat?: { id?: number | string };
@@ -229,9 +247,16 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
   res.json({ ok: true });
 
   const chatId = update.message?.chat?.id;
-  const text = update.message?.text;
+  const rawText = update.message?.text;
 
-  if (!chatId || !text?.trim()) return;
+  if (!chatId || !rawText?.trim()) return;
+
+  // Sanitize and check for prompt injection
+  const text = sanitizeText(rawText.trim());
+  if (!text || detectPromptInjection(text)) {
+    logger.warn({ agentId, chatId }, "Telegram message rejected (empty or prompt injection)");
+    return;
+  }
 
   const sb = getServiceClient();
   if (!sb) return;
@@ -278,9 +303,9 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       keyRow.api_key as string,
       provider,
       model,
-      instructions,
+      buildHardenedSystemPrompt(instructions),
       [],
-      text.trim()
+      text
     );
 
     await fetch(

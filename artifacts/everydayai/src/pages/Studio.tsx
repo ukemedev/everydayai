@@ -351,9 +351,10 @@ interface ChatPanelProps {
   model: string;
   docCount: number;
   userId: string;
+  onSwitchTab: (tab: string) => void;
 }
 
-function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanelProps) {
+function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab }: ChatPanelProps) {
   const [, navigate] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -390,12 +391,18 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
     }));
 
     // Do NOT fetch or send the API key from the frontend — the backend looks it up
-    // server-side and decrypts it. Sending the key from here would transmit an
-    // encrypted blob that Groq/OpenAI etc. would reject.
+    // server-side and decrypts it. We send the JWT so the backend can verify who
+    // is making the request before looking up their stored API key.
+    const { data: { session: chatSession } } = await supabase.auth.getSession();
+    const chatHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (chatSession?.access_token) {
+      chatHeaders["Authorization"] = `Bearer ${chatSession.access_token}`;
+    }
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: chatHeaders,
         body: JSON.stringify({
           message: text,
           instructions: instructions.trim() || "You are a helpful assistant.",
@@ -600,7 +607,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId }: ChatPanel
                           → Add {msg.provider} key in Settings
                         </button>
                         <button
-                          onClick={() => setActiveTab("Prompt")}
+                          onClick={() => onSwitchTab("Prompt")}
                           className="text-xs text-white/40 hover:text-white/70 transition-colors text-left"
                         >
                           → Or switch to a different model in the Prompt tab
@@ -3172,7 +3179,7 @@ export default function Studio() {
           className="hidden md:flex flex-col overflow-hidden md:w-[40%]"
           style={{ position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
         >
-          <ChatPanel key={agent.id} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
+          <ChatPanel key={agent.id} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} onSwitchTab={setActiveTab} />
         </div>
       </div>
 
@@ -3216,7 +3223,7 @@ export default function Studio() {
             </button>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <ChatPanel key={`mobile-${agent.id}`} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} />
+            <ChatPanel key={`mobile-${agent.id}`} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} onSwitchTab={setActiveTab} />
           </div>
         </div>
       )}
