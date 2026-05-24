@@ -186,6 +186,7 @@ export default function Settings() {
   const [openSection, setOpenSection] = useState<Section>(null);
   const [theme, setTheme]             = useState<"dark" | "light">("dark");
   const [toast, setToast]             = useState("");
+  const [toastType, setToastType]     = useState<"success" | "error">("success");
 
   // Profile
   const [userEmail, setUserEmail]       = useState("");
@@ -254,7 +255,11 @@ export default function Settings() {
   }, [openSection, billingData, billingLoading]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
-  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 3000); }
+  function showToast(msg: string, type: "success" | "error" = "success") {
+    setToast(msg);
+    setToastType(type);
+    setTimeout(() => setToast(""), 3000);
+  }
   function toggleSection(s: Exclude<Section, null>) { setOpenSection((p) => p === s ? null : s); }
 
   function handleTheme(next: "dark" | "light") {
@@ -280,10 +285,10 @@ export default function Settings() {
     if (res.ok) {
       const masked = "••••••••••••" + (val.length > 4 ? val.slice(-4) : val);
       setKeyStates((p) => ({ ...p, [id]: { inputValue: "", maskedKey: masked, saving: false, removing: false } }));
-      showToast("API key saved successfully");
+      showToast("API key saved successfully", "success");
     } else {
       setKeyStates((p) => ({ ...p, [id]: { ...p[id], saving: false } }));
-      showToast("Failed to save key");
+      showToast("Failed to save key", "error");
     }
   }
 
@@ -298,10 +303,10 @@ export default function Settings() {
     });
     if (res.ok) {
       setKeyStates((p) => ({ ...p, [id]: { inputValue: "", maskedKey: null, saving: false, removing: false } }));
-      showToast("API key removed");
+      showToast("API key removed", "success");
     } else {
       setKeyStates((p) => ({ ...p, [id]: { ...p[id], removing: false } }));
-      showToast("Failed to remove key");
+      showToast("Failed to remove key", "error");
     }
   }
 
@@ -313,8 +318,11 @@ export default function Settings() {
     <AppLayout activeItemId="settings">
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg" style={{ backgroundColor: "#16a34a" }}>
-          ✓ {toast}
+        <div
+          className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg"
+          style={{ backgroundColor: toastType === "error" ? "#dc2626" : "#16a34a" }}
+        >
+          {toastType === "error" ? "✕" : "✓"} {toast}
         </div>
       )}
 

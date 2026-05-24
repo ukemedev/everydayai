@@ -99,6 +99,7 @@ API_PORT = "8080"
 BASE_PATH = "/"
 NODE_ENV = "development"
 VITE_DEV_PORT = ""
+ENCRYPTION_KEY = "6ecb6491364f6033a38c6f196029e883"
 
 [nix]
 channel = "stable-25_05"
