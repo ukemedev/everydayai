@@ -428,20 +428,20 @@ export default function Settings() {
                         </div>
                       )}
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2">
                         <input
                           type="password"
                           placeholder={connected ? "Replace with new key…" : provider.placeholder}
                           value={state.inputValue}
                           onChange={(e) => setInputVal(provider.id, e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") void handleSaveKey(provider.id); }}
-                          className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm outline-none transition-colors"
+                          className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors"
                           style={inputBg}
                         />
                         <button
                           onClick={() => void handleSaveKey(provider.id)}
                           disabled={!state.inputValue.trim() || state.saving}
-                          className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 flex-shrink-0"
+                          className="w-full py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
                           style={{ backgroundColor: "#3b5bfc" }}
                         >
                           {state.saving ? "Saving…" : connected ? "Replace" : "Save"}
