@@ -245,7 +245,7 @@ export default function Admin() {
                   />
                 ) : (
                   <p className="text-2xl font-bold text-white leading-tight mt-0.5">
-                    {stats[key].toLocaleString()}
+                    {(stats[key] ?? 0).toLocaleString()}
                   </p>
                 )}
               </div>
