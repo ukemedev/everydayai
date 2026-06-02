@@ -569,15 +569,35 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const rawApiKey = keyRow.api_key as string;
     const apiKey    = isEncrypted(rawApiKey) ? decrypt(rawApiKey) : rawApiKey;
 
+    // ── Typing indicator ─────────────────────────────────────────────────────
+    // Telegram clears the "typing…" bubble after 5 seconds automatically.
+    // AI calls can take 10-30 seconds, so we send the action immediately and
+    // then repeat every 4 seconds until we have a reply to send.
+    const sendTyping = () =>
+      fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, action: "typing" }),
+      }).catch(() => {});
+
+    void sendTyping();
+    const typingInterval = setInterval(() => void sendTyping(), 4000);
+
     // ── Load tools context ──
     const { prompt: toolsPrompt, tools: agentTools } = await buildToolsContext(agentId, sb);
 
-    let reply = imageBase64 && imageMime
-      ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), [], effectiveText, imageBase64, imageMime)
-      : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), [], effectiveText);
+    let reply: string;
+    try {
+      reply = imageBase64 && imageMime
+        ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), [], effectiveText, imageBase64, imageMime)
+        : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), [], effectiveText);
+    } finally {
+      // Always stop the typing indicator — even if the AI call throws
+      clearInterval(typingInterval);
+    }
 
     // ── Execute any tool calls the AI emitted ──
-    const { reply: cleanedReply } = await executeToolsInReply(reply, agentTools, ownerId, sb);
+    const { reply: cleanedReply } = await executeToolsInReply(reply!, agentTools, ownerId, sb);
     reply = cleanedReply;
 
     await fetch(
