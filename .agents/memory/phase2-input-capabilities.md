@@ -1,6 +1,6 @@
 ---
-name: Phase 2 Input Capabilities
-description: How vision, voice, file, and image inputs are wired across chat route, webhooks, Studio, and Chat widget.
+name: Input capabilities architecture
+description: How vision, voice, file, and image inputs flow across the chat pipeline and webhooks.
 ---
 
 ## Architecture

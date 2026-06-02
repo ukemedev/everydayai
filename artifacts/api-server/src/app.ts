@@ -26,6 +26,15 @@ const allowedOrigins = [
   ...extraOrigins,
 ];
 
+// ── CSP connect-src allowlist ─────────────────────────────────────────────────
+// Supabase and other external APIs the frontend must connect to.
+// Read from env so the same code works for dev, staging, and production.
+const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "";
+const supabaseHost = supabaseUrl ? new URL(supabaseUrl).host : "";
+const supabaseConnect = supabaseHost ? `https://${supabaseHost}` : "";
+const extraConnect = process.env.CSP_CONNECT_SRC?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+const connectSrc = ["'self'", "https:", "wss:", "ws:", supabaseConnect, ...extraConnect].filter(Boolean);
+
 // ── App ───────────────────────────────────────────────────────────────────────
 const app: Express = express();
 
@@ -42,7 +51,7 @@ app.use(
         styleSrc:       ["'self'", "'unsafe-inline'"],
         imgSrc:         ["'self'", "data:", "https:"],
         fontSrc:        ["'self'", "data:"],
-        connectSrc:     ["'self'"],
+        connectSrc:     connectSrc,
         frameSrc:       ["'none'"],
         objectSrc:      ["'none'"],
         baseUri:        ["'self'"],
