@@ -184,7 +184,6 @@ function SectionRow({
 
 export default function Settings() {
   const [openSection, setOpenSection] = useState<Section>(null);
-  const [theme, setTheme]             = useState<"dark" | "light">("dark");
   const [toast, setToast]             = useState("");
   const [toastType, setToastType]     = useState<"success" | "error">("success");
 
@@ -229,9 +228,6 @@ export default function Settings() {
       });
     })();
 
-    // Theme preference
-    const saved = localStorage.getItem("theme") as "dark" | "light" | null;
-    if (saved) setTheme(saved);
   }, []);
 
   // Fetch billing when section opens
@@ -261,11 +257,6 @@ export default function Settings() {
     setTimeout(() => setToast(""), 3000);
   }
   function toggleSection(s: Exclude<Section, null>) { setOpenSection((p) => p === s ? null : s); }
-
-  function handleTheme(next: "dark" | "light") {
-    setTheme(next);
-    localStorage.setItem("theme", next);
-  }
 
   function setInputVal(id: string, val: string) {
     setKeyStates((p) => ({ ...p, [id]: { ...p[id], inputValue: val } }));
@@ -587,32 +578,6 @@ export default function Settings() {
                 )}
               </div>
             )}
-
-            <RowDivider />
-
-            {/* ── Theme ─────────────────────────────────────────────────────── */}
-            <SectionRow
-              emoji="🎨"
-              label="Theme"
-              right={
-                <div className="flex items-center gap-1 p-1 rounded-lg flex-shrink-0" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                  {(["dark", "light"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={(e) => { e.stopPropagation(); handleTheme(t); }}
-                      className="px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 capitalize"
-                      style={
-                        theme === t
-                          ? { backgroundColor: "#3b5bfc", color: "#ffffff" }
-                          : { backgroundColor: "transparent", color: "rgba(255,255,255,0.35)" }
-                      }
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
 
           </div>
         </div>
