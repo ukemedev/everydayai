@@ -10,6 +10,9 @@ import { logger } from "../lib/logger.js";
 import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import {
   checkAgentDailyLimit, incrementAgentDailyCount, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE,
+  checkCustomerDailyLimit, incrementCustomerDailyCount, checkBurstLimit,
+  isDuplicateMessage, isAiCooldownActive, setAiCooldown,
+  CUSTOMER_DAILY_LIMIT_MESSAGE, BURST_LIMIT_MESSAGE, DUPLICATE_MESSAGE, COOLDOWN_MESSAGE,
 } from "../lib/agentLimits.js";
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
@@ -318,6 +321,33 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
       return;
     }
     incrementAgentDailyCount(agentId);
+
+    // ── PER-CUSTOMER ANTI-SPAM ──
+    const customerId = from;
+    const customerDaily = checkCustomerDailyLimit(agentId, customerId, ownerPlan);
+    if (!customerDaily.allowed) {
+      logger.warn({ agentId, customerId, count: customerDaily.count }, "WhatsApp customer daily limit reached");
+      await sendWhatsAppMessage(phoneNumberId, accessToken, from, CUSTOMER_DAILY_LIMIT_MESSAGE);
+      return;
+    }
+    const burstCheck = checkBurstLimit(agentId, customerId);
+    if (!burstCheck.allowed) {
+      logger.warn({ agentId, customerId, count: burstCheck.count }, "WhatsApp burst limit hit");
+      await sendWhatsAppMessage(phoneNumberId, accessToken, from, BURST_LIMIT_MESSAGE);
+      return;
+    }
+    if (isDuplicateMessage(agentId, customerId, text)) {
+      logger.warn({ agentId, customerId }, "WhatsApp duplicate message");
+      await sendWhatsAppMessage(phoneNumberId, accessToken, from, DUPLICATE_MESSAGE);
+      return;
+    }
+    if (isAiCooldownActive(agentId, customerId)) {
+      logger.warn({ agentId, customerId }, "WhatsApp AI cooldown active");
+      await sendWhatsAppMessage(phoneNumberId, accessToken, from, COOLDOWN_MESSAGE);
+      return;
+    }
+    incrementCustomerDailyCount(agentId, customerId);
+    setAiCooldown(agentId, customerId);
 
     // ── Download and process media attachments ──────────────────────────────
     const caps = (agent.input_capabilities as { images?: boolean; voice?: boolean; files?: boolean } | null) ?? {};

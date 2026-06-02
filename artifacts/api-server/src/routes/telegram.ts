@@ -11,6 +11,9 @@ import { logger } from "../lib/logger.js";
 import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import {
   checkAgentDailyLimit, incrementAgentDailyCount, checkSessionLimit, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE,
+  checkCustomerDailyLimit, incrementCustomerDailyCount, checkBurstLimit,
+  isDuplicateMessage, isAiCooldownActive, setAiCooldown,
+  CUSTOMER_DAILY_LIMIT_MESSAGE, BURST_LIMIT_MESSAGE, DUPLICATE_MESSAGE, COOLDOWN_MESSAGE,
 } from "../lib/agentLimits.js";
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
@@ -420,6 +423,45 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       return;
     }
     incrementAgentDailyCount(agentId);
+
+    // ── PER-CUSTOMER ANTI-SPAM ──
+    const customerId = String(chatId);
+    const customerDaily = checkCustomerDailyLimit(agentId, customerId, ownerPlan);
+    if (!customerDaily.allowed) {
+      logger.warn({ agentId, customerId, count: customerDaily.count }, "telegram customer daily limit reached");
+      await fetch(
+        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: CUSTOMER_DAILY_LIMIT_MESSAGE }) },
+      );
+      return;
+    }
+    const burstCheck = checkBurstLimit(agentId, customerId);
+    if (!burstCheck.allowed) {
+      logger.warn({ agentId, customerId, count: burstCheck.count }, "telegram burst limit hit");
+      await fetch(
+        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: BURST_LIMIT_MESSAGE }) },
+      );
+      return;
+    }
+    if (isDuplicateMessage(agentId, customerId, text)) {
+      logger.warn({ agentId, customerId }, "telegram duplicate message");
+      await fetch(
+        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: DUPLICATE_MESSAGE }) },
+      );
+      return;
+    }
+    if (isAiCooldownActive(agentId, customerId)) {
+      logger.warn({ agentId, customerId }, "telegram AI cooldown active");
+      await fetch(
+        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: COOLDOWN_MESSAGE }) },
+      );
+      return;
+    }
+    incrementCustomerDailyCount(agentId, customerId);
+    setAiCooldown(agentId, customerId);
 
     // ── Download and process media attachments ──────────────────────────────
     const caps = (agent.input_capabilities as { images?: boolean; voice?: boolean; files?: boolean } | null) ?? {};

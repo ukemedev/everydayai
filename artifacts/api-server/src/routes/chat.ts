@@ -8,7 +8,11 @@ import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
 import { checkMessageLimit, getUserPlan } from "../lib/planLimits.js";
-import { checkAgentDailyLimit, incrementAgentDailyCount, checkSessionLimit, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE } from "../lib/agentLimits.js";
+import { checkAgentDailyLimit, incrementAgentDailyCount, checkSessionLimit, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE,
+  checkCustomerDailyLimit, incrementCustomerDailyCount, checkBurstLimit,
+  isDuplicateMessage, isAiCooldownActive, setAiCooldown,
+  CUSTOMER_DAILY_LIMIT_MESSAGE, BURST_LIMIT_MESSAGE, DUPLICATE_MESSAGE, COOLDOWN_MESSAGE,
+} from "../lib/agentLimits.js";
 import { sanitizeText, validateMessageLength, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import { logAudit } from "../lib/auditLog.js";
 import {
@@ -492,6 +496,33 @@ router.post("/chat", async (req: Request, res: Response) => {
             res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
             return;
           }
+
+          // 3. PER-CUSTOMER ANTI-SPAM (web widget)
+          const customerId = sessionId?.trim() || userId?.trim() || req.ip || "anonymous";
+          const customerDaily = checkCustomerDailyLimit(agentId.trim(), customerId, ownerPlan);
+          if (!customerDaily.allowed) {
+            req.log.warn({ agentId, customerId, count: customerDaily.count }, "web customer daily limit reached");
+            res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: CUSTOMER_DAILY_LIMIT_MESSAGE });
+            return;
+          }
+          const burstCheck = checkBurstLimit(agentId.trim(), customerId);
+          if (!burstCheck.allowed) {
+            req.log.warn({ agentId, customerId, count: burstCheck.count }, "web burst limit hit");
+            res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: BURST_LIMIT_MESSAGE });
+            return;
+          }
+          if (isDuplicateMessage(agentId.trim(), customerId, cleanMessage)) {
+            req.log.warn({ agentId, customerId }, "web duplicate message");
+            res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: DUPLICATE_MESSAGE });
+            return;
+          }
+          if (isAiCooldownActive(agentId.trim(), customerId)) {
+            req.log.warn({ agentId, customerId }, "web AI cooldown active");
+            res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: COOLDOWN_MESSAGE });
+            return;
+          }
+          incrementCustomerDailyCount(agentId.trim(), customerId);
+          setAiCooldown(agentId.trim(), customerId);
         }
 
         const { data: keyRow } = await sb

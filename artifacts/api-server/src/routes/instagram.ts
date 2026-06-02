@@ -9,6 +9,9 @@ import { logger } from "../lib/logger.js";
 import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import {
   checkAgentDailyLimit, incrementAgentDailyCount, checkIpRateLimit,
+  checkCustomerDailyLimit, incrementCustomerDailyCount, checkBurstLimit,
+  isDuplicateMessage, isAiCooldownActive, setAiCooldown,
+  CUSTOMER_DAILY_LIMIT_MESSAGE, BURST_LIMIT_MESSAGE, DUPLICATE_MESSAGE, COOLDOWN_MESSAGE,
 } from "../lib/agentLimits.js";
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
@@ -194,6 +197,33 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
     const daily = checkAgentDailyLimit(agentId, ownerPlan);
     if (!daily.allowed) { logger.warn({ agentId }, "Instagram daily limit hit"); return; }
     incrementAgentDailyCount(agentId);
+
+    // ── PER-CUSTOMER ANTI-SPAM ──
+    const customerId = senderId;
+    const customerDaily = checkCustomerDailyLimit(agentId, customerId, ownerPlan);
+    if (!customerDaily.allowed) {
+      logger.warn({ agentId, customerId, count: customerDaily.count }, "Instagram customer daily limit reached");
+      await sendMetaMessage(accessToken, senderId, CUSTOMER_DAILY_LIMIT_MESSAGE);
+      return;
+    }
+    const burstCheck = checkBurstLimit(agentId, customerId);
+    if (!burstCheck.allowed) {
+      logger.warn({ agentId, customerId, count: burstCheck.count }, "Instagram burst limit hit");
+      await sendMetaMessage(accessToken, senderId, BURST_LIMIT_MESSAGE);
+      return;
+    }
+    if (isDuplicateMessage(agentId, customerId, text)) {
+      logger.warn({ agentId, customerId }, "Instagram duplicate message");
+      await sendMetaMessage(accessToken, senderId, DUPLICATE_MESSAGE);
+      return;
+    }
+    if (isAiCooldownActive(agentId, customerId)) {
+      logger.warn({ agentId, customerId }, "Instagram AI cooldown active");
+      await sendMetaMessage(accessToken, senderId, COOLDOWN_MESSAGE);
+      return;
+    }
+    incrementCustomerDailyCount(agentId, customerId);
+    setAiCooldown(agentId, customerId);
 
     // ── Find or create conversation ──
     const { data: existingConv } = await sb
