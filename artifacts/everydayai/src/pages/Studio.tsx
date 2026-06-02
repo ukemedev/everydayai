@@ -785,37 +785,45 @@ function DeployModal({ agentId, agentName, userId, onClose }: DeployModalProps) 
   const [igLoadingDeployment, setIgLoadingDeployment] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/telegram/deployment/${agentId}`)
-      .then((r) => r.json())
-      .then((d: { deployment: { bot_username: string | null } | null }) => {
-        setTgDeployment(d.deployment ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setTgLoadingDeployment(false));
+    async function loadDeployments() {
+      const { data: { session: deploySession } } = await supabase.auth.getSession();
+      const authHeaders = deploySession?.access_token
+        ? { Authorization: `Bearer ${deploySession.access_token}` }
+        : {};
 
-    fetch(`/api/whatsapp/deployment/${agentId}`)
-      .then((r) => r.json())
-      .then((d: { deployment: { phone_number_id: string; display_name: string | null } | null }) => {
-        setWaDeployment(d.deployment ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setWaLoadingDeployment(false));
+      fetch(`/api/telegram/deployment/${agentId}`, { headers: authHeaders })
+        .then((r) => r.json())
+        .then((d: { deployment: { bot_username: string | null } | null }) => {
+          setTgDeployment(d.deployment ?? null);
+        })
+        .catch(() => {})
+        .finally(() => setTgLoadingDeployment(false));
 
-    fetch(`/api/messenger/deployment/${agentId}`)
-      .then((r) => r.json())
-      .then((d: { deployment: { page_id: string; page_name: string | null } | null }) => {
-        setMsgrDeployment(d.deployment ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setMsgrLoadingDeployment(false));
+      fetch(`/api/whatsapp/deployment/${agentId}`, { headers: authHeaders })
+        .then((r) => r.json())
+        .then((d: { deployment: { phone_number_id: string; display_name: string | null } | null }) => {
+          setWaDeployment(d.deployment ?? null);
+        })
+        .catch(() => {})
+        .finally(() => setWaLoadingDeployment(false));
 
-    fetch(`/api/instagram/deployment/${agentId}`)
-      .then((r) => r.json())
-      .then((d: { deployment: { ig_account_id: string; ig_username: string | null } | null }) => {
-        setIgDeployment(d.deployment ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setIgLoadingDeployment(false));
+      fetch(`/api/messenger/deployment/${agentId}`, { headers: authHeaders })
+        .then((r) => r.json())
+        .then((d: { deployment: { page_id: string; page_name: string | null } | null }) => {
+          setMsgrDeployment(d.deployment ?? null);
+        })
+        .catch(() => {})
+        .finally(() => setMsgrLoadingDeployment(false));
+
+      fetch(`/api/instagram/deployment/${agentId}`, { headers: authHeaders })
+        .then((r) => r.json())
+        .then((d: { deployment: { ig_account_id: string; ig_username: string | null } | null }) => {
+          setIgDeployment(d.deployment ?? null);
+        })
+        .catch(() => {})
+        .finally(() => setIgLoadingDeployment(false));
+    }
+    void loadDeployments();
   }, [agentId]);
 
   const apiUrl = `${window.location.origin}/api/chat`;

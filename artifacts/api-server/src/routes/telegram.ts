@@ -366,7 +366,12 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
   const hasVoice    = !!update.message?.voice;
   const hasDocument = !!update.message?.document;
 
-  if (!chatId || (!rawText.trim() && !hasPhoto && !hasVoice && !hasDocument)) return;
+  logger.info({ agentId, chatId, rawTextLen: rawText.length, hasPhoto, hasVoice, hasDocument }, "telegram webhook async processing started");
+
+  if (!chatId || (!rawText.trim() && !hasPhoto && !hasVoice && !hasDocument)) {
+    logger.warn({ agentId, chatId, rawText }, "telegram webhook: no chatId or no content — skipping");
+    return;
+  }
 
   // ── Sanitize and check for prompt injection ──
   const text = rawText.trim() ? sanitizeText(rawText.trim()) : "";
@@ -376,9 +381,14 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
   }
 
   const sb = getServiceClient();
-  if (!sb) return;
+  if (!sb) {
+    logger.error({ agentId }, "telegram webhook: service client unavailable — check VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    return;
+  }
 
   try {
+    logger.info({ agentId, chatId }, "telegram webhook: fetching deployment from DB");
+
     const { data: deployment } = await sb
       .from("telegram_deployments")
       .select("bot_token, user_id")
@@ -391,15 +401,20 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       return;
     }
 
+    logger.info({ agentId, chatId }, "telegram webhook: deployment found, fetching agent");
+
     const { data: agent } = await sb
       .from("agents")
       .select("model, instructions, user_id, status, input_capabilities")
       .eq("id", agentId)
       .maybeSingle();
 
-    if (!agent) return;
+    if (!agent) {
+      logger.warn({ agentId }, "telegram webhook: agent not found in DB");
+      return;
+    }
     if ((agent.status as string) !== "live") {
-      logger.warn({ agentId }, "Agent not live — Telegram webhook ignored");
+      logger.warn({ agentId, status: agent.status }, "Agent not live — Telegram webhook ignored");
       await fetch(
         `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
         {
@@ -413,6 +428,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       );
       return;
     }
+
+    logger.info({ agentId, chatId, status: agent.status, model: agent.model }, "telegram webhook: agent is live, proceeding with AI call");
 
     const model = (agent.model as string) || "gpt-4o-mini";
     const instructions = (agent.instructions as string) || "You are a helpful assistant.";
@@ -528,9 +545,22 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       .maybeSingle();
 
     if (!keyRow?.api_key) {
-      logger.warn({ agentId, provider }, "no API key found for telegram webhook agent");
+      logger.warn({ agentId, provider, ownerId }, "no API key found for telegram webhook agent");
+      await fetch(
+        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: `⚠️ This agent is missing a ${provider.toUpperCase()} API key. The owner needs to add one in the EverydayAI dashboard under Settings → API Keys.`,
+          }),
+        }
+      );
       return;
     }
+
+    logger.info({ agentId, chatId, provider }, "telegram webhook: API key found, calling AI");
 
     const rawApiKey = keyRow.api_key as string;
     const apiKey    = isEncrypted(rawApiKey) ? decrypt(rawApiKey) : rawApiKey;
