@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AppLayout from "@/components/AppLayout";
 import UpgradeModal from "@/components/UpgradeModal";
-import { useTheme } from "@/lib/ThemeContext";
 
 // ── API key providers ─────────────────────────────────────────────────────────
 
@@ -185,7 +184,6 @@ function SectionRow({
 
 export default function Settings() {
   const [openSection, setOpenSection] = useState<Section>(null);
-  const { theme, setTheme }           = useTheme();
   const [toast, setToast]             = useState("");
   const [toastType, setToastType]     = useState<"success" | "error">("success");
 
@@ -580,32 +578,6 @@ export default function Settings() {
                 )}
               </div>
             )}
-
-            <RowDivider />
-
-            {/* ── Theme ─────────────────────────────────────────────────────── */}
-            <SectionRow
-              emoji="🎨"
-              label="Theme"
-              right={
-                <div className="flex items-center gap-1 p-1 rounded-lg flex-shrink-0" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                  {(["dark", "light"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={(e) => { e.stopPropagation(); setTheme(t); }}
-                      className="px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 capitalize"
-                      style={
-                        theme === t
-                          ? { backgroundColor: "#3b5bfc", color: "#ffffff" }
-                          : { backgroundColor: "transparent", color: "rgba(255,255,255,0.35)" }
-                      }
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
 
           </div>
         </div>

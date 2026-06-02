@@ -82,19 +82,6 @@
   --app-logout-border:   rgba(255,255,255,0.10);
 }
 
-[data-theme="light"] {
-  --app-bg:              #f0f4f8;
-  --app-sidebar:         #ffffff;
-  --app-card:            #ffffff;
-  --app-surface:         #f8fafc;
-  --app-border:          rgba(0,0,0,0.08);
-  --app-border-subtle:   rgba(0,0,0,0.06);
-  --app-text:            #0a0f1e;
-  --app-text-muted:      rgba(0,0,0,0.50);
-  --app-text-faint:      rgba(0,0,0,0.35);
-  --app-text-nav:        rgba(0,0,0,0.55);
-  --app-logout-border:   rgba(0,0,0,0.12);
-}
 
 /* Dark-first theme — EverydayAI uses dark as default */
 :root {
