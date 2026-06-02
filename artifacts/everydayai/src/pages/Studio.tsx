@@ -345,13 +345,15 @@ function TypingDots() {
 
 // ─── Chat panel ───────────────────────────────────────────────────────────────
 
+type ActiveTab = "Prompt" | "Knowledge" | "Tools";
+
 interface ChatPanelProps {
   agentId: string;
   instructions: string;
   model: string;
   docCount: number;
   userId: string;
-  onSwitchTab: (tab: string) => void;
+  onSwitchTab: (tab: ActiveTab) => void;
 }
 
 function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab }: ChatPanelProps) {

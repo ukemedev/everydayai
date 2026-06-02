@@ -8,4 +8,19 @@ router.get("/healthz", (_req, res) => {
   res.json(data);
 });
 
+router.post("/devbot/capture-error", (req, res) => {
+  const { pageUrl, errorMessage, errorStack, component, severity } = req.body as {
+    pageUrl?: string;
+    errorMessage?: string;
+    errorStack?: string;
+    component?: string;
+    severity?: string;
+  };
+  req.log.error(
+    { pageUrl, component, severity, errorStack },
+    `[ClientError] ${errorMessage ?? "(no message)"}`,
+  );
+  res.status(200).json({ ok: true });
+});
+
 export default router;
