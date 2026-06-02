@@ -204,7 +204,7 @@ const CHANNEL_ICONS = [
 
 function Hero() {
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center text-center px-4 overflow-hidden pt-16">
+    <section className="relative min-h-[85vh] sm:min-h-screen flex flex-col items-center justify-center text-center px-4 sm:px-6 overflow-hidden pt-20 pb-10 sm:pb-16">
       {/* Background glow */}
       <div
         className="absolute rounded-full blur-3xl pointer-events-none"
@@ -220,7 +220,7 @@ function Hero() {
 
       {/* Badge */}
       <div
-        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium mb-8"
+        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium mb-6 sm:mb-8"
         style={{ backgroundColor: "rgba(59,91,252,0.15)", border: "1px solid rgba(59,91,252,0.35)", color: "#818cf8" }}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -241,7 +241,7 @@ function Hero() {
       </p>
 
       {/* FIX 2: "Join Waitlist" replaced with "See How It Works" */}
-      <div className="mt-10 flex flex-col sm:flex-row items-center gap-3">
+      <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center gap-3">
         <Link href="/signup">
           <span
             className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold text-white cursor-pointer hover:opacity-90 transition-all hover:scale-105 active:scale-95"
@@ -266,9 +266,9 @@ function Hero() {
       </div>
 
       {/* FIX 3: Channel pills in a single scrollable row — no orphan wrapping */}
-      <div className="mt-12 w-full max-w-lg mx-auto">
+      <div className="mt-10 sm:mt-14 w-full max-w-lg mx-auto">
         <p className="text-xs text-white/30 mb-3">Connects with</p>
-        <div className="flex items-center justify-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        <div className="flex items-center justify-center gap-2 overflow-x-auto pb-2 px-2 scrollbar-none">
           {CHANNEL_ICONS.map((ch) => (
             <div
               key={ch.name}
@@ -283,7 +283,7 @@ function Hero() {
       </div>
 
       {/* Stats */}
-      <div className="mt-14 grid grid-cols-3 gap-8 sm:gap-16 border-t border-white/5 pt-10 w-full max-w-lg">
+      <div className="mt-12 sm:mt-16 grid grid-cols-3 gap-8 sm:gap-16 border-t border-white/5 pt-10 w-full max-w-lg">
         {[
           { value: "10+", label: "Built-in Tools" },
           { value: "5", label: "Channels" },

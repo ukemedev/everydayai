@@ -19,6 +19,7 @@ import instagramRouter from "./instagram";
 import uploadRouter from "./upload";
 import authEmailRouter from "./authEmail";
 import onboardingRouter from "./onboarding";
+import analyticsRouter from "./analytics";
 import {
   generalLimiter,
   chatLimiter,
@@ -88,6 +89,9 @@ router.use("/documents", requireAuth as RequestHandler);
 // Onboarding routes
 router.use("/onboarding", requireAuth as RequestHandler);
 
+// Analytics route
+router.use("/analytics", requireAuth as RequestHandler);
+
 // ── Routers ───────────────────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(chatRouter);
@@ -105,6 +109,7 @@ router.use(documentsRouter);
 router.use(uploadRouter);
 router.use(authEmailRouter);
 router.use(onboardingRouter);
+router.use(analyticsRouter);
 router.use(conversationsRouter);
 router.use(whatsappRouter);
 router.use(messengerRouter);

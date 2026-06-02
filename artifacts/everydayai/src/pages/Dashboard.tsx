@@ -457,6 +457,236 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
   );
 }
 
+// ─── Analytics Section ─────────────────────────────────────────────────────────
+
+interface AnalyticsData {
+  summary: {
+    totalAgents: number;
+    liveAgents: number;
+    totalConversations: number;
+    conversationsToday: number;
+    totalMessages: number;
+    messagesToday: number;
+  };
+  planUsage: {
+    plan: string;
+    messageCount: number;
+    messageLimit: number | null;
+    agentCount: number;
+    agentLimit: number | null;
+  };
+  dailyVolume: number[];
+  activity: {
+    id: string;
+    role: string;
+    preview: string;
+    created_at: string;
+    conversation_name: string;
+  }[];
+}
+
+function AnalyticsSection({ agents }: { agents: Agent[] }) {
+  const [, navigate] = useLocation();
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchAnalytics() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      try {
+        const res = await fetch("/api/analytics", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          const json = await res.json() as AnalyticsData;
+          setData(json);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoading(false);
+      }
+    }
+    void fetchAnalytics();
+  }, []);
+
+  if (agents.length === 0) return null;
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-xl h-24 animate-pulse"
+            style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const s = data?.summary;
+  const p = data?.planUsage;
+  const maxVol = Math.max(1, ...(data?.dailyVolume ?? [0]));
+
+  const stats = [
+    {
+      label: "Agents",
+      value: s?.totalAgents ?? 0,
+      sub: s?.liveAgents ? `${s.liveAgents} live` : undefined,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+        </svg>
+      ),
+      color: "#3b5bfc",
+    },
+    {
+      label: "Conversations",
+      value: s?.totalConversations ?? 0,
+      sub: s?.conversationsToday ? `+${s.conversationsToday} today` : undefined,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+        </svg>
+      ),
+      color: "#10b981",
+    },
+    {
+      label: "Messages",
+      value: s?.totalMessages ?? 0,
+      sub: s?.messagesToday ? `+${s.messagesToday} today` : undefined,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.587c0-.548-.063-1.08-.184-1.588a8.147 8.147 0 002.46-5.69c0-4.556-4.03-8.25-9-8.25S0 7.444 0 12c0 2.177.99 4.126 2.54 5.552a5.977 5.977 0 01-.474 1.58 4.502 4.502 0 001.56 1.1c.548.256 1.143.421 1.755.474A9.76 9.76 0 0121 12z" />
+        </svg>
+      ),
+      color: "#8b5cf6",
+    },
+    {
+      label: "Plan",
+      value: (p?.plan ?? "free").charAt(0).toUpperCase() + (p?.plan ?? "free").slice(1),
+      sub: p?.messageLimit === null
+        ? `${p?.messageCount ?? 0} msgs`
+        : `${p?.messageCount ?? 0} / ${p?.messageLimit} msgs`,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      color: "#f59e0b",
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Stats cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {stats.map((stat) => (
+          <div
+            key={stat.label}
+            className="rounded-xl border p-4 flex flex-col gap-2"
+            style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.06)" }}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${stat.color}15`, color: stat.color }}>
+                {stat.icon}
+              </div>
+              <span className="text-xs font-medium text-white/50">{stat.label}</span>
+            </div>
+            <div>
+              <div className="text-xl font-bold text-white">{stat.value}</div>
+              {stat.sub && (
+                <div className="text-[11px] text-white/35 mt-0.5">{stat.sub}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom row: sparkline + recent activity */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Message volume sparkline */}
+        <div
+          className="rounded-xl border p-4 flex flex-col gap-3 md:col-span-2"
+          style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-white/50">Message Volume</span>
+              <span className="text-[10px] text-white/30">(7 days)</span>
+            </div>
+            <div className="text-xs font-bold text-white">
+              {data?.dailyVolume.reduce((a, b) => a + b, 0) ?? 0}
+            </div>
+          </div>
+          <div className="flex items-end gap-1 h-20">
+            {(data?.dailyVolume ?? [0, 0, 0, 0, 0, 0, 0]).map((v, i) => {
+              const h = maxVol > 0 ? Math.max((v / maxVol) * 100, 8) : 8;
+              const dayLabel = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][
+                (new Date().getDay() + 6 - (6 - i)) % 7
+              ];
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div
+                    className="w-full rounded-sm transition-all hover:opacity-80"
+                    style={{ height: `${h}%`, backgroundColor: v > 0 ? "#3b5bfc" : "rgba(255,255,255,0.06)" }}
+                    title={`${dayLabel}: ${v} messages`}
+                  />
+                  <span className="text-[9px] text-white/25">{dayLabel}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Recent activity */}
+        <div
+          className="rounded-xl border p-4 flex flex-col gap-3"
+          style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-white/50">Recent Activity</span>
+            <button
+              onClick={() => navigate("/inbox")}
+              className="text-[10px] text-[#3b5bfc] hover:opacity-80 transition-opacity"
+            >
+              View Inbox &rarr;
+            </button>
+          </div>
+          <div className="flex-1 flex flex-col gap-2 min-h-[120px]">
+            {(data?.activity ?? []).length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-xs text-white/20">
+                No activity yet
+              </div>
+            ) : (
+              (data?.activity ?? []).map((a) => (
+                <div key={a.id} className="flex items-start gap-2 py-1.5 border-b" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                    style={{
+                      backgroundColor: a.role === "ai" ? "#3b5bfc15" : "#10b98115",
+                      color: a.role === "ai" ? "#3b5bfc" : "#10b981",
+                    }}
+                  >
+                    <span className="text-[9px] font-bold">{a.role === "ai" ? "AI" : "C"}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-white/70 truncate">{a.preview}</p>
+                    <p className="text-[9px] text-white/25 mt-0.5">{a.conversation_name}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -621,8 +851,11 @@ export default function Dashboard() {
           )}
         </AnimatePresence>
 
+        {/* Analytics Overview */}
+        <AnalyticsSection agents={agents} />
+
         {/* My Agents */}
-        <div>
+        <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-white">My Agents</h2>
             {hasAgents && (
