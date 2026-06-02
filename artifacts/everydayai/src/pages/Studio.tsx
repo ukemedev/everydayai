@@ -3069,13 +3069,6 @@ export default function Studio() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Desktop-only buttons */}
           <button
-            onClick={() => navigate("/automations")}
-            className="hidden md:flex px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 items-center gap-1.5"
-          >
-            <span className="text-sm">⚡</span>
-            Automations
-          </button>
-          <button
             onClick={() => navigate("/settings")}
             className="hidden md:flex px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 items-center gap-1.5"
           >
@@ -3140,7 +3133,6 @@ export default function Studio() {
                   )}
                   <button onClick={() => { setShowMobileMenu(false); setShowShareModal(true); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Share</button>
                   <button onClick={() => { setShowMobileMenu(false); setShowVersionModal(true); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Version History</button>
-                  <button onClick={() => { setShowMobileMenu(false); navigate("/automations"); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Automations</button>
                   <button onClick={() => { setShowMobileMenu(false); navigate("/settings"); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Settings</button>
 
                 </div>
