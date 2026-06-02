@@ -1,0 +1,3 @@
+- [Phase 2 input capabilities](phase2-input-capabilities.md) — vision functions, upload route, whisper, Studio toggles, Chat media UI, webhook media all wired together.
+- [Whisper transcribeAudio signature](whisper-signature.md) — third arg `openaiApiKey` is optional; falls back to `OPENAI_API_KEY` env var; Buffer must be wrapped in `new Uint8Array()` for File constructor.
+- [Channel guard already complete](channel-guard-status.md) — T001-T003 (channelGuard.ts, Telegram setup, WhatsApp setup with ownership + exclusivity + rate limits) were all implemented before the session; only T004 SQL migration and Phase 2 media remained.
