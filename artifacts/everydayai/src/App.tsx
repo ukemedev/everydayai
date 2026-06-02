@@ -15,10 +15,12 @@ import Admin from "@/pages/Admin";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminAgents from "@/pages/AdminAgents";
 import AdminRevenue from "@/pages/AdminRevenue";
-import AdminBlog from "@/pages/AdminBlog";
+import AdminTemplates from "@/pages/AdminTemplates";
 import AdminAuditLog from "@/pages/AdminAuditLog";
 import Pricing from "@/pages/Pricing";
 import Billing from "@/pages/Billing";
+import Templates from "@/pages/Templates";
+import Inbox from "@/pages/Inbox";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +46,12 @@ function Router() {
       <Route path="/billing">
         {() => <ProtectedRoute component={Billing} />}
       </Route>
+      <Route path="/templates">
+        {() => <ProtectedRoute component={Templates} />}
+      </Route>
+      <Route path="/inbox">
+        {() => <ProtectedRoute component={Inbox} />}
+      </Route>
       <Route path="/chat/:agentId" component={Chat} />
       <Route path="/admin">
         {() => <AdminRoute component={Admin} />}
@@ -54,8 +62,8 @@ function Router() {
       <Route path="/admin/agents">
         {() => <AdminRoute component={AdminAgents} />}
       </Route>
-      <Route path="/admin/blog">
-        {() => <AdminRoute component={AdminBlog} />}
+      <Route path="/admin/templates">
+        {() => <AdminRoute component={AdminTemplates} />}
       </Route>
       <Route path="/admin/revenue">
         {() => <AdminRoute component={AdminRevenue} />}

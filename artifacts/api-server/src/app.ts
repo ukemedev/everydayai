@@ -35,7 +35,21 @@ app.set("trust proxy", 1);
 // ── Security headers (first middleware) ───────────────────────────────────────
 app.use(
   helmet({
-    contentSecurityPolicy: false,          // React frontend manages CSP
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc:     ["'self'"],
+        scriptSrc:      ["'self'"],
+        styleSrc:       ["'self'", "'unsafe-inline'"],
+        imgSrc:         ["'self'", "data:", "https:"],
+        fontSrc:        ["'self'", "data:"],
+        connectSrc:     ["'self'"],
+        frameSrc:       ["'none'"],
+        objectSrc:      ["'none'"],
+        baseUri:        ["'self'"],
+        formAction:     ["'self'"],
+        frameAncestors: ["'self'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,      // needed for Supabase Storage files to load
     crossOriginResourcePolicy: { policy: "cross-origin" }, // needed for embedded widgets and public chat page
   }),
@@ -91,7 +105,14 @@ app.use(
 );
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
-app.use(express.json({ limit: "100kb" }));
+// Capture raw body buffer on the request so Meta webhook routes can verify
+// HMAC-SHA256 signatures from X-Hub-Signature-256 headers.
+app.use(express.json({
+  limit: "100kb",
+  verify: (req: Request, _res: Response, buf: Buffer) => {
+    (req as Request & { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
 // ── Static files ──────────────────────────────────────────────────────────────

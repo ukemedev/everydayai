@@ -31,8 +31,12 @@ window.addEventListener("unhandledrejection", (event) => {
   }).catch(() => {});
 });
 
+import { ThemeProvider } from "./lib/ThemeContext";
+
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </ErrorBoundary>
 );

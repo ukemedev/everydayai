@@ -506,4 +506,153 @@ router.get("/admin/audit", async (req: Request, res: Response) => {
   res.json({ logs: enrichedLogs });
 });
 
+// ─── GET /api/admin/templates ─────────────────────────────────────────────────
+
+router.get("/admin/templates", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+
+  const { data, error } = await sb
+    .from("templates")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    req.log.error({ err: error }, "failed to fetch templates");
+    res.status(500).json({ error: "Failed to fetch templates" });
+    return;
+  }
+
+  res.json({ templates: data ?? [] });
+});
+
+// ─── POST /api/admin/templates ────────────────────────────────────────────────
+
+router.post("/admin/templates", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+
+  const {
+    name, slug, category, description, instructions,
+    tools_json, plan_required, featured, published, icon,
+  } = req.body as {
+    name?: string; slug?: string; category?: string; description?: string;
+    instructions?: string; tools_json?: unknown[]; plan_required?: string;
+    featured?: boolean; published?: boolean; icon?: string;
+  };
+
+  if (!name?.trim() || !instructions?.trim()) {
+    res.status(400).json({ error: "name and instructions are required" });
+    return;
+  }
+
+  const VALID_PLANS = ["free", "starter", "pro", "business"];
+  const resolvedPlan = VALID_PLANS.includes(plan_required ?? "") ? plan_required! : "free";
+
+  const finalSlug = slug?.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const { data, error } = await sb
+    .from("templates")
+    .insert({
+      name:          name.trim(),
+      slug:          finalSlug,
+      category:      category?.trim() || "General",
+      description:   description?.trim() || null,
+      instructions:  instructions.trim(),
+      tools_json:    tools_json ?? [],
+      plan_required: resolvedPlan,
+      featured:      featured ?? false,
+      published:     published ?? false,
+      icon:          icon?.trim() || "🤖",
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    req.log.error({ err: error }, "failed to create template");
+    const msg = error.message?.includes("duplicate") ? "A template with that slug already exists" : "Failed to create template";
+    res.status(500).json({ error: msg });
+    return;
+  }
+
+  req.log.info({ templateId: data.id, name }, "template created");
+  res.json({ template: data });
+});
+
+// ─── PATCH /api/admin/templates/:id ───────────────────────────────────────────
+
+router.patch("/admin/templates/:id", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+  const { id } = req.params as { id: string };
+
+  if (!isValidUuid(id)) { res.status(400).json({ error: "Invalid template ID" }); return; }
+
+  const {
+    name, slug, category, description, instructions,
+    tools_json, plan_required, featured, published, icon,
+  } = req.body as {
+    name?: string; slug?: string; category?: string; description?: string;
+    instructions?: string; tools_json?: unknown[]; plan_required?: string;
+    featured?: boolean; published?: boolean; icon?: string;
+  };
+
+  const VALID_PLANS = ["free", "starter", "pro", "business"];
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (name !== undefined)         updates.name          = name.trim();
+  if (slug !== undefined)         updates.slug          = slug.trim();
+  if (category !== undefined)     updates.category      = category.trim();
+  if (description !== undefined)  updates.description   = description.trim() || null;
+  if (instructions !== undefined) updates.instructions  = instructions.trim();
+  if (tools_json !== undefined)   updates.tools_json    = tools_json;
+  if (featured !== undefined)     updates.featured      = featured;
+  if (published !== undefined)    updates.published     = published;
+  if (icon !== undefined)         updates.icon          = icon.trim();
+  if (plan_required !== undefined && VALID_PLANS.includes(plan_required)) {
+    updates.plan_required = plan_required;
+  }
+
+  const { data, error } = await sb
+    .from("templates")
+    .update(updates)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    req.log.error({ err: error, id }, "failed to update template");
+    res.status(500).json({ error: "Failed to update template" });
+    return;
+  }
+
+  req.log.info({ templateId: id }, "template updated");
+  res.json({ template: data });
+});
+
+// ─── DELETE /api/admin/templates/:id ──────────────────────────────────────────
+
+router.delete("/admin/templates/:id", async (req: Request, res: Response) => {
+  const result = await requireAdmin(req, res);
+  if (!result) return;
+  const { sb } = result;
+  const { id } = req.params as { id: string };
+
+  if (!isValidUuid(id)) { res.status(400).json({ error: "Invalid template ID" }); return; }
+
+  const { error } = await sb.from("templates").delete().eq("id", id);
+
+  if (error) {
+    req.log.error({ err: error, id }, "failed to delete template");
+    res.status(500).json({ error: "Failed to delete template" });
+    return;
+  }
+
+  req.log.info({ templateId: id }, "template deleted");
+  res.json({ success: true });
+});
+
 export default router;

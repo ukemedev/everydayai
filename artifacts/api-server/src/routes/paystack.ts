@@ -3,6 +3,8 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { logAudit } from "../lib/auditLog.js";
+import { sendEmail, isEmailConfigured } from "../lib/email.js";
+import { paymentEmailHtml, paymentEmailSubject } from "../lib/emails/payment.js";
 
 const router = Router();
 
@@ -178,6 +180,33 @@ router.post("/payments/paystack/webhook", async (req: Request, res: Response) =>
       metadata:    { plan, amount: amount / 100, reference },
       req,
     });
+
+    // Send payment confirmation email
+    if (isEmailConfigured()) {
+      const { data: profile } = await sb
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", resolvedUserId)
+        .single();
+
+      const email     = (profile?.email as string | null) ?? customer.email;
+      const fullName  = (profile?.full_name as string | null) ?? "";
+      const firstName = fullName.split(" ")[0] ?? fullName;
+
+      if (email) {
+        void sendEmail({
+          to:      email,
+          subject: paymentEmailSubject(plan),
+          html:    paymentEmailHtml({
+            firstName: firstName || (email.split("@")[0] ?? "there"),
+            email,
+            plan,
+            amount,
+            reference,
+          }),
+        });
+      }
+    }
   } catch (err) {
     req.log.error({ err, reference }, "Paystack webhook processing error");
   }

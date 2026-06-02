@@ -99,14 +99,7 @@ interface ToolField { key: string; label: string; placeholder: string; type: "te
 interface StaticTool { id: string; name: string; category: string; desc: string; initials: string; color: string; bg: string; fields: ToolField[] }
 
 const STATIC_TOOLS: StaticTool[] = [
-  {
-    id: "paystack", name: "Paystack", category: "💰 Payments",
-    desc: "Accept payments and process transactions across Africa",
-    initials: "PS", color: "#00C3F7", bg: "rgba(0,195,247,0.12)",
-    fields: [
-      { key: "secret_key", label: "Secret Key", placeholder: "sk_live_xxxxxxxxxxxxxxxxxx", type: "password" },
-    ],
-  },
+  // ── Starter tier ────────────────────────────────────────────────────────────
   {
     id: "google_sheets", name: "Google Sheets", category: "📊 Save Data",
     desc: "Save collected data directly to your spreadsheets",
@@ -121,17 +114,8 @@ const STATIC_TOOLS: StaticTool[] = [
     desc: "Send automated emails to your leads and customers",
     initials: "Gm", color: "#EA4335", bg: "rgba(234,67,53,0.12)",
     fields: [
-      { key: "email",        label: "Gmail Address", placeholder: "you@gmail.com",         type: "email" },
-      { key: "app_password", label: "App Password",  placeholder: "xxxx xxxx xxxx xxxx",   type: "password" },
-    ],
-  },
-  {
-    id: "google_calendar", name: "Google Calendar", category: "📅 Booking",
-    desc: "Let customers book appointments in your calendar in real time",
-    initials: "GC", color: "#4285F4", bg: "rgba(66,133,244,0.12)",
-    fields: [
-      { key: "calendar_id", label: "Calendar ID",          placeholder: "you@gmail.com",                            type: "text" },
-      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
+      { key: "email",        label: "Gmail Address", placeholder: "you@gmail.com",       type: "email" },
+      { key: "app_password", label: "App Password",  placeholder: "xxxx xxxx xxxx xxxx", type: "password" },
     ],
   },
   {
@@ -139,8 +123,8 @@ const STATIC_TOOLS: StaticTool[] = [
     desc: "Get instant Telegram alerts whenever a key event happens",
     initials: "Tg", color: "#2AABEE", bg: "rgba(42,171,238,0.12)",
     fields: [
-      { key: "bot_token", label: "Bot Token", placeholder: "123456:ABC-DEF...",  type: "password" },
-      { key: "chat_id",   label: "Chat ID",   placeholder: "-100123456789",       type: "text" },
+      { key: "bot_token", label: "Bot Token", placeholder: "123456:ABC-DEF...", type: "password" },
+      { key: "chat_id",   label: "Chat ID",   placeholder: "-100123456789",     type: "text" },
     ],
   },
   {
@@ -152,12 +136,47 @@ const STATIC_TOOLS: StaticTool[] = [
       { key: "sender_id", label: "Sender ID", placeholder: "YourBrand",         type: "text" },
     ],
   },
+  // ── Pro tier ────────────────────────────────────────────────────────────────
+  {
+    id: "paystack", name: "Paystack", category: "💰 Payments",
+    desc: "Accept payments and process transactions across Africa",
+    initials: "PS", color: "#00C3F7", bg: "rgba(0,195,247,0.12)",
+    fields: [
+      { key: "secret_key", label: "Secret Key", placeholder: "sk_live_xxxxxxxxxxxxxxxxxx", type: "password" },
+    ],
+  },
+  {
+    id: "hubspot", name: "HubSpot", category: "👤 Customer Memory",
+    desc: "Store and recall customer information directly from your CRM",
+    initials: "HS", color: "#FF7A59", bg: "rgba(255,122,89,0.12)",
+    fields: [
+      { key: "access_token", label: "Private App Token", placeholder: "pat-na1-xxxxxxxxxx", type: "password" },
+    ],
+  },
   {
     id: "web_search", name: "Web Search", category: "🔍 Intelligence",
     desc: "Let your agent search the internet for live, up-to-date information",
     initials: "WS", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",
     fields: [
       { key: "api_key", label: "Serper API Key", placeholder: "Your Serper.dev key", type: "password" },
+    ],
+  },
+  {
+    id: "google_calendar", name: "Google Calendar", category: "📅 Booking",
+    desc: "Let customers book appointments in your calendar in real time",
+    initials: "GC", color: "#4285F4", bg: "rgba(66,133,244,0.12)",
+    fields: [
+      { key: "calendar_id", label: "Calendar ID",          placeholder: "you@gmail.com",                  type: "text" },
+      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
+    ],
+  },
+  {
+    id: "google_drive", name: "Google Drive", category: "📄 Documents",
+    desc: "Create, read, and manage files and folders in your Drive",
+    initials: "GD", color: "#FBBC04", bg: "rgba(251,188,4,0.12)",
+    fields: [
+      { key: "folder_id",   label: "Target Folder ID",     placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgm...",      type: "text" },
+      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
     ],
   },
   {
@@ -169,36 +188,22 @@ const STATIC_TOOLS: StaticTool[] = [
       { key: "phone_number_id", label: "Phone Number ID", placeholder: "phnum_xxxxxxxxxx", type: "text" },
     ],
   },
-  {
-    id: "google_drive", name: "Google Drive", category: "📄 Documents",
-    desc: "Create, read, and manage files and folders in your Drive",
-    initials: "GD", color: "#FBBC04", bg: "rgba(251,188,4,0.12)",
-    fields: [
-      { key: "folder_id",  label: "Target Folder ID",     placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgm...", type: "text" },
-      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
-    ],
-  },
-  {
-    id: "hubspot", name: "HubSpot", category: "👤 Customer Memory",
-    desc: "Store and recall customer information directly from your CRM",
-    initials: "HS", color: "#FF7A59", bg: "rgba(255,122,89,0.12)",
-    fields: [
-      { key: "access_token", label: "Private App Token", placeholder: "pat-na1-xxxxxxxxxx", type: "password" },
-    ],
-  },
 ];
 
-const USER_PLAN = "free"; // static — swap for real user plan when auth is wired
 const PLAN_ORDER = ["free", "starter", "pro", "business"];
-function toolRequiredPlan(index: number): string | null {
-  if (index < 2) return null;
-  if (index < 4) return "Starter";
-  if (index < 7) return "Pro";
-  return "Business";
+
+const STARTER_TOOL_IDS = new Set(["google_sheets", "gmail", "telegram", "termii"]);
+const PRO_TOOL_IDS     = new Set(["paystack", "hubspot", "web_search", "google_calendar", "google_drive", "vapi"]);
+
+function toolRequiredPlan(connectorId: string): string | null {
+  if (STARTER_TOOL_IDS.has(connectorId)) return "Starter";
+  if (PRO_TOOL_IDS.has(connectorId))     return "Pro";
+  return null;
 }
-function isPlanSufficient(required: string | null): boolean {
+
+function isPlanSufficientFor(required: string | null, userPlan: string): boolean {
   if (!required) return true;
-  return PLAN_ORDER.indexOf(USER_PLAN) >= PLAN_ORDER.indexOf(required.toLowerCase());
+  return PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(required.toLowerCase());
 }
 
 interface Tool {
@@ -345,15 +350,13 @@ function TypingDots() {
 
 // ─── Chat panel ───────────────────────────────────────────────────────────────
 
-type ActiveTab = "Prompt" | "Knowledge" | "Tools";
-
 interface ChatPanelProps {
   agentId: string;
   instructions: string;
   model: string;
   docCount: number;
   userId: string;
-  onSwitchTab: (tab: ActiveTab) => void;
+  onSwitchTab: (tab: Tab) => void;
 }
 
 function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab }: ChatPanelProps) {
@@ -742,6 +745,45 @@ function DeployModal({ agentId, agentName, userId, onClose }: DeployModalProps) 
   const [tgLoadingDeployment, setTgLoadingDeployment] = useState(true);
   const [tgDisconnecting, setTgDisconnecting] = useState(false);
 
+  // ── WhatsApp deployment state ───────────────────────────────────────────────
+  const [waOpen, setWaOpen] = useState(false);
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
+  const [waAccessToken, setWaAccessToken] = useState("");
+  const [waVerifyToken, setWaVerifyToken] = useState("");
+  const [waDisplayName, setWaDisplayName] = useState("");
+  const [waAppSecret, setWaAppSecret] = useState("");
+  const [waConnecting, setWaConnecting] = useState(false);
+  const [waDisconnecting, setWaDisconnecting] = useState(false);
+  const [waError, setWaError] = useState("");
+  const [waDeployment, setWaDeployment] = useState<{ phone_number_id: string; display_name: string | null } | null>(null);
+  const [waLoadingDeployment, setWaLoadingDeployment] = useState(true);
+
+  // ── Messenger deployment state ──────────────────────────────────────────────
+  const [msgrOpen, setMsgrOpen] = useState(false);
+  const [msgrPageId, setMsgrPageId] = useState("");
+  const [msgrPageName, setMsgrPageName] = useState("");
+  const [msgrAccessToken, setMsgrAccessToken] = useState("");
+  const [msgrVerifyToken, setMsgrVerifyToken] = useState("");
+  const [msgrAppSecret, setMsgrAppSecret] = useState("");
+  const [msgrConnecting, setMsgrConnecting] = useState(false);
+  const [msgrDisconnecting, setMsgrDisconnecting] = useState(false);
+  const [msgrError, setMsgrError] = useState("");
+  const [msgrDeployment, setMsgrDeployment] = useState<{ page_id: string; page_name: string | null } | null>(null);
+  const [msgrLoadingDeployment, setMsgrLoadingDeployment] = useState(true);
+
+  // ── Instagram deployment state ──────────────────────────────────────────────
+  const [igOpen, setIgOpen] = useState(false);
+  const [igAccountId, setIgAccountId] = useState("");
+  const [igUsername, setIgUsername] = useState("");
+  const [igAccessToken, setIgAccessToken] = useState("");
+  const [igVerifyToken, setIgVerifyToken] = useState("");
+  const [igAppSecret, setIgAppSecret] = useState("");
+  const [igConnecting, setIgConnecting] = useState(false);
+  const [igDisconnecting, setIgDisconnecting] = useState(false);
+  const [igError, setIgError] = useState("");
+  const [igDeployment, setIgDeployment] = useState<{ ig_account_id: string; ig_username: string | null } | null>(null);
+  const [igLoadingDeployment, setIgLoadingDeployment] = useState(true);
+
   useEffect(() => {
     fetch(`/api/telegram/deployment/${agentId}`)
       .then((r) => r.json())
@@ -750,6 +792,30 @@ function DeployModal({ agentId, agentName, userId, onClose }: DeployModalProps) 
       })
       .catch(() => {})
       .finally(() => setTgLoadingDeployment(false));
+
+    fetch(`/api/whatsapp/deployment/${agentId}`)
+      .then((r) => r.json())
+      .then((d: { deployment: { phone_number_id: string; display_name: string | null } | null }) => {
+        setWaDeployment(d.deployment ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setWaLoadingDeployment(false));
+
+    fetch(`/api/messenger/deployment/${agentId}`)
+      .then((r) => r.json())
+      .then((d: { deployment: { page_id: string; page_name: string | null } | null }) => {
+        setMsgrDeployment(d.deployment ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setMsgrLoadingDeployment(false));
+
+    fetch(`/api/instagram/deployment/${agentId}`)
+      .then((r) => r.json())
+      .then((d: { deployment: { ig_account_id: string; ig_username: string | null } | null }) => {
+        setIgDeployment(d.deployment ?? null);
+      })
+      .catch(() => {})
+      .finally(() => setIgLoadingDeployment(false));
   }, [agentId]);
 
   const apiUrl = `${window.location.origin}/api/chat`;
@@ -869,6 +935,133 @@ console.log(data.reply);`;
     }
   }
 
+  async function handleConnectWhatsApp() {
+    setWaConnecting(true);
+    setWaError("");
+    try {
+      const res = await fetch("/api/whatsapp/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          phoneNumberId: waPhoneNumberId.trim(),
+          accessToken:   waAccessToken.trim(),
+          verifyToken:   waVerifyToken.trim(),
+          displayName:   waDisplayName.trim() || null,
+          appSecret:     waAppSecret.trim() || null,
+        }),
+      });
+      const data = await res.json() as { error?: string; deployment?: { phone_number_id: string; display_name: string | null } };
+      if (!res.ok) throw new Error(data.error ?? "Failed to connect WhatsApp");
+      setWaDeployment(data.deployment ?? { phone_number_id: waPhoneNumberId.trim(), display_name: waDisplayName.trim() || null });
+      setWaOpen(false);
+      setWaPhoneNumberId("");
+      setWaAccessToken("");
+      setWaVerifyToken("");
+      setWaDisplayName("");
+      setWaAppSecret("");
+    } catch (err) {
+      setWaError(err instanceof Error ? err.message : "Failed to connect WhatsApp");
+    } finally {
+      setWaConnecting(false);
+    }
+  }
+
+  async function handleDisconnectWhatsApp() {
+    setWaDisconnecting(true);
+    try {
+      await fetch(`/api/whatsapp/deployment/${agentId}`, { method: "DELETE" });
+      setWaDeployment(null);
+      setWaOpen(false);
+    } catch {
+      // silent — state still cleared
+    } finally {
+      setWaDisconnecting(false);
+    }
+  }
+
+  async function handleConnectMessenger() {
+    setMsgrConnecting(true);
+    setMsgrError("");
+    try {
+      const res = await fetch("/api/messenger/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          pageId:      msgrPageId.trim(),
+          pageName:    msgrPageName.trim() || null,
+          accessToken: msgrAccessToken.trim(),
+          verifyToken: msgrVerifyToken.trim(),
+          appSecret:   msgrAppSecret.trim() || null,
+        }),
+      });
+      const data = await res.json() as { error?: string; deployment?: { page_id: string; page_name: string | null } };
+      if (!res.ok) throw new Error(data.error ?? "Failed to connect Messenger");
+      setMsgrDeployment(data.deployment ?? { page_id: msgrPageId.trim(), page_name: msgrPageName.trim() || null });
+      setMsgrOpen(false);
+      setMsgrPageId(""); setMsgrPageName(""); setMsgrAccessToken(""); setMsgrVerifyToken(""); setMsgrAppSecret("");
+    } catch (err) {
+      setMsgrError(err instanceof Error ? err.message : "Failed to connect Messenger");
+    } finally {
+      setMsgrConnecting(false);
+    }
+  }
+
+  async function handleDisconnectMessenger() {
+    setMsgrDisconnecting(true);
+    try {
+      await fetch(`/api/messenger/deployment/${agentId}`, { method: "DELETE" });
+      setMsgrDeployment(null);
+      setMsgrOpen(false);
+    } catch {
+      // silent — state still cleared
+    } finally {
+      setMsgrDisconnecting(false);
+    }
+  }
+
+  async function handleConnectInstagram() {
+    setIgConnecting(true);
+    setIgError("");
+    try {
+      const res = await fetch("/api/instagram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          igAccountId: igAccountId.trim(),
+          igUsername:  igUsername.trim() || null,
+          accessToken: igAccessToken.trim(),
+          verifyToken: igVerifyToken.trim(),
+          appSecret:   igAppSecret.trim() || null,
+        }),
+      });
+      const data = await res.json() as { error?: string; deployment?: { ig_account_id: string; ig_username: string | null } };
+      if (!res.ok) throw new Error(data.error ?? "Failed to connect Instagram");
+      setIgDeployment(data.deployment ?? { ig_account_id: igAccountId.trim(), ig_username: igUsername.trim() || null });
+      setIgOpen(false);
+      setIgAccountId(""); setIgUsername(""); setIgAccessToken(""); setIgVerifyToken(""); setIgAppSecret("");
+    } catch (err) {
+      setIgError(err instanceof Error ? err.message : "Failed to connect Instagram");
+    } finally {
+      setIgConnecting(false);
+    }
+  }
+
+  async function handleDisconnectInstagram() {
+    setIgDisconnecting(true);
+    try {
+      await fetch(`/api/instagram/deployment/${agentId}`, { method: "DELETE" });
+      setIgDeployment(null);
+      setIgOpen(false);
+    } catch {
+      // silent — state still cleared
+    } finally {
+      setIgDisconnecting(false);
+    }
+  }
+
   const tabs: { id: DeployTab; label: string }[] = [
     { id: "socials", label: "Socials" },
     { id: "code",    label: "Custom Code" },
@@ -927,7 +1120,7 @@ console.log(data.reply);`;
       name: "Instagram",
       desc: "Automate Instagram DMs",
       btnLabel: "Connect Instagram",
-      soon: true,
+      soon: false,
       icon: (
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
           <rect width="20" height="20" x="2" y="2" rx="5.5" fill="url(#igGrad)"/>
@@ -1000,6 +1193,161 @@ console.log(data.reply);`;
           {tab === "socials" && (
             <div className="flex flex-col gap-3">
               {socials.map((s) => {
+                if (s.id === "whatsapp") {
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-col rounded-xl border border-white/6 overflow-hidden transition-all duration-150"
+                      style={{
+                        backgroundColor: "#0d1117",
+                        borderColor: waDeployment ? "rgba(74,222,128,0.2)" : undefined,
+                      }}
+                    >
+                      {/* Header row */}
+                      <div className="flex items-center gap-4 px-4 py-4">
+                        <div
+                          className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+                        >
+                          {s.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-white">{s.name}</p>
+                            {waDeployment && (
+                              <span
+                                className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                style={{ backgroundColor: "rgba(74,222,128,0.12)", color: "#4ade80" }}
+                              >
+                                Connected
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+                        </div>
+
+                        {/* Right-side action */}
+                        {waLoadingDeployment ? (
+                          <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        ) : waDeployment ? (
+                          <button
+                            onClick={() => void handleDisconnectWhatsApp()}
+                            disabled={waDisconnecting}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                            style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171" }}
+                          >
+                            {waDisconnecting ? "Disconnecting…" : "Disconnect"}
+                          </button>
+                        ) : !waOpen ? (
+                          <button
+                            onClick={() => setWaOpen(true)}
+                            className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                            style={{ backgroundColor: "#3b5bfc" }}
+                          >
+                            Connect WhatsApp
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => { setWaOpen(false); setWaError(""); setWaPhoneNumberId(""); setWaAccessToken(""); setWaVerifyToken(""); setWaDisplayName(""); }}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/8 transition-all"
+                            style={{ color: "rgba(255,255,255,0.4)" }}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Connected info bar */}
+                      {waDeployment && (
+                        <div className="px-4 pb-4 pt-0">
+                          <div
+                            className="flex flex-col gap-1.5 rounded-xl px-3 py-2.5 border border-white/5"
+                            style={{ backgroundColor: "rgba(74,222,128,0.04)" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-white/40">Phone Number ID:</span>
+                              <span className="text-xs font-mono text-white/70">{waDeployment.phone_number_id}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-white/40">Webhook URL:</span>
+                              <span className="text-[11px] font-mono break-all" style={{ color: "#4ade80" }}>
+                                {window.location.origin}/api/whatsapp/webhook/{agentId}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Setup form */}
+                      {waOpen && !waDeployment && (
+                        <div className="px-4 pb-5 pt-0 flex flex-col gap-3 border-t border-white/5">
+                          <div className="pt-4">
+                            <h3 className="text-sm font-semibold text-white mb-1.5">Connect WhatsApp Business</h3>
+                            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                              1. Go to{" "}
+                              <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline text-white/60">
+                                developers.facebook.com
+                              </a>{" "}
+                              → your app → WhatsApp → API Setup
+                              <br />
+                              2. Copy your <span className="text-white/70 font-medium">Phone Number ID</span> and a{" "}
+                              <span className="text-white/70 font-medium">Permanent Access Token</span>
+                              <br />
+                              3. Set your webhook URL in Meta to:{" "}
+                              <span className="font-mono text-white/60 break-all">
+                                {window.location.origin}/api/whatsapp/webhook/{agentId}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {[
+                              { label: "Phone Number ID", value: waPhoneNumberId, setter: setWaPhoneNumberId, placeholder: "123456789012345", type: "text" },
+                              { label: "Access Token", value: waAccessToken, setter: setWaAccessToken, placeholder: "EAAxxxxxxxxxx…", type: "password" },
+                              { label: "Verify Token (choose your own)", value: waVerifyToken, setter: setWaVerifyToken, placeholder: "my-secret-verify-token", type: "text" },
+                              { label: "Display Name (optional)", value: waDisplayName, setter: setWaDisplayName, placeholder: "+234 802 123 4567", type: "text" },
+                              { label: "App Secret (recommended — enables webhook signature verification)", value: waAppSecret, setter: setWaAppSecret, placeholder: "From App Dashboard → App Settings → Basic", type: "password" },
+                            ].map(({ label, value, setter, placeholder, type }) => (
+                              <div key={label} className="flex flex-col gap-1">
+                                <label className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>
+                                  {label}
+                                </label>
+                                <input
+                                  type={type}
+                                  value={value}
+                                  onChange={(e) => setter(e.target.value)}
+                                  placeholder={placeholder}
+                                  className="rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                                  style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          {waError && (
+                            <p className="text-xs px-1" style={{ color: "#f87171" }}>{waError}</p>
+                          )}
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => void handleConnectWhatsApp()}
+                              disabled={waConnecting || !waPhoneNumberId.trim() || !waAccessToken.trim() || !waVerifyToken.trim()}
+                              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ backgroundColor: "#25D366" }}
+                            >
+                              {waConnecting ? "Connecting…" : "Connect WhatsApp"}
+                            </button>
+                            <button
+                              onClick={() => { setWaOpen(false); setWaError(""); setWaPhoneNumberId(""); setWaAccessToken(""); setWaVerifyToken(""); setWaDisplayName(""); }}
+                              className="px-4 py-2.5 rounded-xl text-sm font-medium border border-white/8 transition-all"
+                              style={{ color: "rgba(255,255,255,0.4)" }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 if (s.id === "telegram") {
                   return (
                     <div
@@ -1157,6 +1505,233 @@ console.log(data.reply);`;
                               className="px-4 py-2.5 rounded-xl text-sm font-medium border border-white/8 transition-all"
                               style={{ color: "rgba(255,255,255,0.4)" }}
                             >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (s.id === "messenger") {
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-col rounded-xl border border-white/6 overflow-hidden transition-all duration-150"
+                      style={{
+                        backgroundColor: "#0d1117",
+                        borderColor: msgrDeployment ? "rgba(74,222,128,0.2)" : undefined,
+                      }}
+                    >
+                      <div className="flex items-center gap-4 px-4 py-4">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(255,255,255,0.05)" }}>
+                          {s.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-white">{s.name}</p>
+                            {msgrDeployment && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(74,222,128,0.12)", color: "#4ade80" }}>
+                                Connected
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+                        </div>
+                        {msgrLoadingDeployment ? (
+                          <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        ) : msgrDeployment ? (
+                          <button onClick={() => void handleDisconnectMessenger()} disabled={msgrDisconnecting}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                            style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171" }}>
+                            {msgrDisconnecting ? "Disconnecting…" : "Disconnect"}
+                          </button>
+                        ) : !msgrOpen ? (
+                          <button onClick={() => setMsgrOpen(true)}
+                            className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+                            style={{ backgroundColor: "#3b5bfc" }}>
+                            Connect Messenger
+                          </button>
+                        ) : (
+                          <button onClick={() => { setMsgrOpen(false); setMsgrError(""); setMsgrPageId(""); setMsgrPageName(""); setMsgrAccessToken(""); setMsgrVerifyToken(""); }}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/8 transition-all"
+                            style={{ color: "rgba(255,255,255,0.4)" }}>
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                      {msgrDeployment && (
+                        <div className="px-4 pb-4 pt-0">
+                          <div className="flex flex-col gap-1.5 rounded-xl px-3 py-2.5 border border-white/5" style={{ backgroundColor: "rgba(74,222,128,0.04)" }}>
+                            {msgrDeployment.page_name && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-white/40">Page:</span>
+                                <span className="text-xs font-medium text-white/70">{msgrDeployment.page_name}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-white/40">Webhook URL:</span>
+                              <span className="text-[11px] font-mono break-all" style={{ color: "#4ade80" }}>
+                                {window.location.origin}/api/messenger/webhook/{agentId}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {msgrOpen && !msgrDeployment && (
+                        <div className="px-4 pb-5 pt-0 flex flex-col gap-3 border-t border-white/5">
+                          <div className="pt-4">
+                            <h3 className="text-sm font-semibold text-white mb-1.5">Connect Facebook Messenger</h3>
+                            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                              1. Go to{" "}<a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline text-white/60">developers.facebook.com</a>{" "}→ your app → Messenger → Settings
+                              <br />2. Under <span className="text-white/70 font-medium">Access Tokens</span>, generate a token for your Facebook Page
+                              <br />3. Set your Webhook URL to:{" "}
+                              <span className="font-mono text-white/60 break-all">{window.location.origin}/api/messenger/webhook/{agentId}</span>
+                              <br />4. Subscribe to <span className="text-white/70 font-medium">messages</span> events
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {[
+                              { label: "Facebook Page ID", value: msgrPageId, setter: setMsgrPageId, placeholder: "123456789012345", type: "text" },
+                              { label: "Page Name (optional)", value: msgrPageName, setter: setMsgrPageName, placeholder: "My Business Page", type: "text" },
+                              { label: "Page Access Token", value: msgrAccessToken, setter: setMsgrAccessToken, placeholder: "EAAxxxxxxxxxx…", type: "password" },
+                              { label: "Verify Token (choose your own)", value: msgrVerifyToken, setter: setMsgrVerifyToken, placeholder: "my-messenger-token", type: "text" },
+                              { label: "App Secret (recommended — enables webhook signature verification)", value: msgrAppSecret, setter: setMsgrAppSecret, placeholder: "From App Dashboard → App Settings → Basic", type: "password" },
+                            ].map(({ label, value, setter, placeholder, type }) => (
+                              <div key={label} className="flex flex-col gap-1">
+                                <label className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>{label}</label>
+                                <input type={type} value={value} onChange={e => setter(e.target.value)} placeholder={placeholder}
+                                  className="rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                                  style={{ backgroundColor: "rgba(255,255,255,0.04)" }} />
+                              </div>
+                            ))}
+                          </div>
+                          {msgrError && <p className="text-xs px-1" style={{ color: "#f87171" }}>{msgrError}</p>}
+                          <div className="flex gap-2 pt-1">
+                            <button onClick={() => void handleConnectMessenger()}
+                              disabled={msgrConnecting || !msgrPageId.trim() || !msgrAccessToken.trim() || !msgrVerifyToken.trim()}
+                              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ backgroundColor: "#0078FF" }}>
+                              {msgrConnecting ? "Connecting…" : "Connect Messenger"}
+                            </button>
+                            <button onClick={() => { setMsgrOpen(false); setMsgrError(""); setMsgrPageId(""); setMsgrPageName(""); setMsgrAccessToken(""); setMsgrVerifyToken(""); }}
+                              className="px-4 py-2.5 rounded-xl text-sm font-medium border border-white/8 transition-all"
+                              style={{ color: "rgba(255,255,255,0.4)" }}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (s.id === "instagram") {
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-col rounded-xl border border-white/6 overflow-hidden transition-all duration-150"
+                      style={{
+                        backgroundColor: "#0d1117",
+                        borderColor: igDeployment ? "rgba(74,222,128,0.2)" : undefined,
+                      }}
+                    >
+                      <div className="flex items-center gap-4 px-4 py-4">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(255,255,255,0.05)" }}>
+                          {s.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-white">{s.name}</p>
+                            {igDeployment && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(74,222,128,0.12)", color: "#4ade80" }}>
+                                Connected
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+                        </div>
+                        {igLoadingDeployment ? (
+                          <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        ) : igDeployment ? (
+                          <button onClick={() => void handleDisconnectInstagram()} disabled={igDisconnecting}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                            style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171" }}>
+                            {igDisconnecting ? "Disconnecting…" : "Disconnect"}
+                          </button>
+                        ) : !igOpen ? (
+                          <button onClick={() => setIgOpen(true)}
+                            className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+                            style={{ backgroundColor: "#3b5bfc" }}>
+                            Connect Instagram
+                          </button>
+                        ) : (
+                          <button onClick={() => { setIgOpen(false); setIgError(""); setIgAccountId(""); setIgUsername(""); setIgAccessToken(""); setIgVerifyToken(""); }}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/8 transition-all"
+                            style={{ color: "rgba(255,255,255,0.4)" }}>
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                      {igDeployment && (
+                        <div className="px-4 pb-4 pt-0">
+                          <div className="flex flex-col gap-1.5 rounded-xl px-3 py-2.5 border border-white/5" style={{ backgroundColor: "rgba(74,222,128,0.04)" }}>
+                            {igDeployment.ig_username && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-white/40">Account:</span>
+                                <span className="text-xs font-medium text-white/70">@{igDeployment.ig_username}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-white/40">Webhook URL:</span>
+                              <span className="text-[11px] font-mono break-all" style={{ color: "#4ade80" }}>
+                                {window.location.origin}/api/instagram/webhook/{agentId}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {igOpen && !igDeployment && (
+                        <div className="px-4 pb-5 pt-0 flex flex-col gap-3 border-t border-white/5">
+                          <div className="pt-4">
+                            <h3 className="text-sm font-semibold text-white mb-1.5">Connect Instagram DMs</h3>
+                            <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                              1. Connect your Instagram Professional account to a Facebook Page
+                              <br />2. Go to{" "}<a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="underline text-white/60">developers.facebook.com</a>{" "}→ your app → Instagram → Settings
+                              <br />3. Generate a <span className="text-white/70 font-medium">Page Access Token</span> with <span className="font-mono text-white/60">instagram_manage_messages</span> permission
+                              <br />4. Set your Webhook URL to:{" "}
+                              <span className="font-mono text-white/60 break-all">{window.location.origin}/api/instagram/webhook/{agentId}</span>
+                              <br />5. Subscribe to <span className="text-white/70 font-medium">messages</span> events
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            {[
+                              { label: "Instagram Account ID", value: igAccountId, setter: setIgAccountId, placeholder: "17841400000000000", type: "text" },
+                              { label: "Instagram Username (optional)", value: igUsername, setter: setIgUsername, placeholder: "mybusiness", type: "text" },
+                              { label: "Page Access Token", value: igAccessToken, setter: setIgAccessToken, placeholder: "EAAxxxxxxxxxx…", type: "password" },
+                              { label: "Verify Token (choose your own)", value: igVerifyToken, setter: setIgVerifyToken, placeholder: "my-instagram-token", type: "text" },
+                              { label: "App Secret (recommended — enables webhook signature verification)", value: igAppSecret, setter: setIgAppSecret, placeholder: "From App Dashboard → App Settings → Basic", type: "password" },
+                            ].map(({ label, value, setter, placeholder, type }) => (
+                              <div key={label} className="flex flex-col gap-1">
+                                <label className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.35)" }}>{label}</label>
+                                <input type={type} value={value} onChange={e => setter(e.target.value)} placeholder={placeholder}
+                                  className="rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none border border-white/8 focus:border-[#3b5bfc]/60 transition-colors"
+                                  style={{ backgroundColor: "rgba(255,255,255,0.04)" }} />
+                              </div>
+                            ))}
+                          </div>
+                          {igError && <p className="text-xs px-1" style={{ color: "#f87171" }}>{igError}</p>}
+                          <div className="flex gap-2 pt-1">
+                            <button onClick={() => void handleConnectInstagram()}
+                              disabled={igConnecting || !igAccountId.trim() || !igAccessToken.trim() || !igVerifyToken.trim()}
+                              className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ background: "linear-gradient(135deg, #fd5949 0%, #d6249f 50%, #285AEB 100%)" }}>
+                              {igConnecting ? "Connecting…" : "Connect Instagram"}
+                            </button>
+                            <button onClick={() => { setIgOpen(false); setIgError(""); setIgAccountId(""); setIgUsername(""); setIgAccessToken(""); setIgVerifyToken(""); }}
+                              className="px-4 py-2.5 rounded-xl text-sm font-medium border border-white/8 transition-all"
+                              style={{ color: "rgba(255,255,255,0.4)" }}>
                               Cancel
                             </button>
                           </div>
@@ -1967,10 +2542,36 @@ export default function Studio() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState("");
 
+  // User plan (fetched from billing API)
+  const [userPlan, setUserPlan] = useState("free");
+
+  // Input Capabilities — upgrade prompt
+  const [capabilityUpgradeFor, setCapabilityUpgradeFor] = useState<string | null>(null);
+  const [agentCapabilities, setAgentCapabilities] = useState({ images: false, voice: false, files: false });
+  const [savingCapability, setSavingCapability] = useState<string | null>(null);
+
   // Tools tab — accordion
   const [openToolId, setOpenToolId] = useState<string | null>(null);
   const [toolFields, setToolFields] = useState<Record<string, Record<string, string>>>({});
   const [toolSaved, setToolSaved] = useState<Record<string, boolean>>({});
+  const [toolSaving, setToolSaving] = useState<Record<string, boolean>>({});
+
+  const handleSaveToolCreds = async (toolId: string, fields: Record<string, string>) => {
+    setToolSaving((prev) => ({ ...prev, [toolId]: true }));
+    try {
+      const { error } = await supabase
+        .from("tools")
+        .update({ required_auth: fields, status: "active" })
+        .eq("id", toolId);
+      if (!error) {
+        setToolSaved((prev) => ({ ...prev, [toolId]: true }));
+      }
+    } catch (_) {
+      // silently ignore — user can retry
+    } finally {
+      setToolSaving((prev) => ({ ...prev, [toolId]: false }));
+    }
+  };
 
   // Tools tab
   const [toolPrompt, setToolPrompt] = useState("");
@@ -2013,17 +2614,51 @@ export default function Studio() {
           setAgent(data as Agent);
           setModel(data.model ?? "gpt-4o-mini");
           setInstructions(data.instructions ?? "");
+          const caps = (data as { input_capabilities?: { images?: boolean; voice?: boolean; files?: boolean } }).input_capabilities;
+          if (caps) setAgentCapabilities({ images: !!caps.images, voice: !!caps.voice, files: !!caps.files });
         }
         setLoading(false);
       });
   }, [agentId]);
 
-  // Fetch current user id once on mount
+  // Fetch current user id + billing plan once on mount
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUserId(session.user.id);
+        fetch("/api/billing", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+          .then((r) => r.json())
+          .then((d: { currentPlan?: string }) => {
+            if (d.currentPlan) setUserPlan(d.currentPlan);
+          })
+          .catch(() => {});
+      }
     });
   }, []);
+
+  async function handleToggleCapability(key: "images" | "voice" | "files") {
+    const requiredLevel = key === "files" ? 1 : 2;
+    const planOrder: Record<string, number> = { free: 0, starter: 1, pro: 2, enterprise: 3 };
+    const currentLevel = planOrder[(userPlan ?? "free").toLowerCase()] ?? 0;
+    if (currentLevel < requiredLevel) {
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      setCapabilityUpgradeFor((prev) => (prev === label ? null : label));
+      return;
+    }
+    const prevCaps = agentCapabilities;
+    const newCaps  = { ...prevCaps, [key]: !prevCaps[key] };
+    setAgentCapabilities(newCaps);
+    setSavingCapability(key);
+    try {
+      await supabase.from("agents").update({ input_capabilities: newCaps }).eq("id", agentId!);
+    } catch {
+      setAgentCapabilities(prevCaps);
+    } finally {
+      setSavingCapability(null);
+    }
+  }
 
   // Check Google connection whenever Tools tab is opened or window regains focus
   async function checkGoogleConnection() {
@@ -2434,6 +3069,13 @@ export default function Studio() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Desktop-only buttons */}
           <button
+            onClick={() => navigate("/automations")}
+            className="hidden md:flex px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 items-center gap-1.5"
+          >
+            <span className="text-sm">⚡</span>
+            Automations
+          </button>
+          <button
             onClick={() => navigate("/settings")}
             className="hidden md:flex px-3.5 py-2 rounded-lg text-sm font-medium text-white/50 border border-white/10 hover:border-white/20 hover:text-white/75 transition-all duration-150 items-center gap-1.5"
           >
@@ -2498,6 +3140,7 @@ export default function Studio() {
                   )}
                   <button onClick={() => { setShowMobileMenu(false); setShowShareModal(true); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Share</button>
                   <button onClick={() => { setShowMobileMenu(false); setShowVersionModal(true); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Version History</button>
+                  <button onClick={() => { setShowMobileMenu(false); navigate("/automations"); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Automations</button>
                   <button onClick={() => { setShowMobileMenu(false); navigate("/settings"); }} className="px-4 py-3 text-sm text-white/70 text-left transition-colors hover:bg-white/5 border-t border-white/5">Settings</button>
 
                 </div>
@@ -2679,112 +3322,108 @@ export default function Studio() {
                         <span className="text-[11px] font-medium text-white/55 text-center leading-tight">Text</span>
                       </div>
 
-                      {/* ── Images (locked, Pro) ── */}
-                      <div className="flex flex-col items-center gap-2">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center"
-                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                            <rect x="3" y="3" width="18" height="18" rx="2" stroke="rgba(255,255,255,0.35)" strokeWidth="2"/>
-                            <path d="M3 15l5-5 4 4 3-3 6 6" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            <circle cx="8.5" cy="8.5" r="1.5" fill="rgba(255,255,255,0.35)"/>
-                          </svg>
-                        </div>
-                        {/* OFF toggle */}
-                        <div
-                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0 opacity-45"
-                          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-                        >
-                          <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white/60" />
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="flex items-center gap-0.5">
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
-                              <rect x="3" y="11" width="18" height="11" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
-                              <path d="M7 11V7a5 5 0 0110 0v4" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"/>
+                      {/* ── Images (Pro+) ── */}
+                      {(["images", "voice", "files"] as const).map((key) => {
+                        const on = agentCapabilities[key];
+                        const saving = savingCapability === key;
+                        const icons: Record<string, React.ReactNode> = {
+                          images: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                              <rect x="3" y="3" width="18" height="18" rx="2" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2"/>
+                              <path d="M3 15l5-5 4 4 3-3 6 6" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <circle cx="8.5" cy="8.5" r="1.5" fill={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"}/>
                             </svg>
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                              style={{ backgroundColor: "rgba(59,91,252,0.2)", color: "#7b93ff" }}
-                            >Pro</span>
-                          </div>
-                          <span className="text-[11px] font-medium text-white/35 text-center leading-tight">Images</span>
-                        </div>
-                      </div>
-
-                      {/* ── Voice Notes (locked, Business) ── */}
-                      <div className="flex flex-col items-center gap-2">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center"
-                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                            <rect x="9" y="2" width="6" height="11" rx="3" stroke="rgba(255,255,255,0.35)" strokeWidth="2"/>
-                            <path d="M5 10a7 7 0 0014 0" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
-                            <line x1="12" y1="17" x2="12" y2="21" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
-                            <line x1="9" y1="21" x2="15" y2="21" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round"/>
-                          </svg>
-                        </div>
-                        {/* OFF toggle */}
-                        <div
-                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0 opacity-45"
-                          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-                        >
-                          <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white/60" />
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="flex items-center gap-0.5">
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
-                              <rect x="3" y="11" width="18" height="11" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
-                              <path d="M7 11V7a5 5 0 0110 0v4" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"/>
+                          ),
+                          voice: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                              <rect x="9" y="2" width="6" height="11" rx="3" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2"/>
+                              <path d="M5 10a7 7 0 0014 0" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="12" y1="17" x2="12" y2="21" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2" strokeLinecap="round"/>
+                              <line x1="9" y1="21" x2="15" y2="21" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2" strokeLinecap="round"/>
                             </svg>
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                              style={{ backgroundColor: "rgba(255,165,0,0.15)", color: "rgba(255,180,50,0.9)" }}
-                            >Biz</span>
-                          </div>
-                          <span className="text-[11px] font-medium text-white/35 text-center leading-tight">Voice</span>
-                        </div>
-                      </div>
-
-                      {/* ── Files (locked, Business, 20mb max) ── */}
-                      <div className="flex flex-col items-center gap-2">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center"
-                          style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            <polyline points="14,2 14,8 20,8" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </div>
-                        {/* OFF toggle */}
-                        <div
-                          className="w-9 h-5 rounded-full relative cursor-default flex-shrink-0 opacity-45"
-                          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-                        >
-                          <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white/60" />
-                        </div>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <div className="flex items-center gap-0.5">
-                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none">
-                              <rect x="3" y="11" width="18" height="11" rx="2" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5"/>
-                              <path d="M7 11V7a5 5 0 0110 0v4" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round"/>
+                          ),
+                          files: (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <polyline points="14,2 14,8 20,8" stroke={on ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.35)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
+                          ),
+                        };
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        return (
+                          <button
+                            key={key}
+                            className="flex flex-col items-center gap-2 cursor-pointer group"
+                            onClick={() => void handleToggleCapability(key)}
+                            disabled={saving}
+                          >
+                            <div
+                              className="w-9 h-9 rounded-xl flex items-center justify-center transition-colors group-hover:bg-white/10"
+                              style={{ backgroundColor: on ? "rgba(59,91,252,0.18)" : "rgba(255,255,255,0.05)" }}
+                            >
+                              {saving ? (
+                                <div className="w-3.5 h-3.5 rounded-full border border-white/30 border-t-transparent animate-spin" />
+                              ) : icons[key]}
+                            </div>
+                            <div
+                              className="w-9 h-5 rounded-full relative flex-shrink-0 transition-colors"
+                              style={{ backgroundColor: on ? "#3b5bfc" : "rgba(255,255,255,0.15)", opacity: on ? 1 : 0.45 }}
+                            >
+                              <div
+                                className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all"
+                                style={{ left: on ? "auto" : "2px", right: on ? "2px" : "auto" }}
+                              />
+                            </div>
                             <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide"
-                              style={{ backgroundColor: "rgba(255,165,0,0.15)", color: "rgba(255,180,50,0.9)" }}
-                            >Biz</span>
-                          </div>
-                          <span className="text-[11px] font-medium text-white/35 text-center leading-tight">Files</span>
-                          <span className="text-[9px] text-white/22 leading-none">20mb max</span>
-                        </div>
-                      </div>
+                              className="text-[11px] font-medium text-center leading-tight"
+                              style={{ color: on ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)" }}
+                            >
+                              {label}
+                            </span>
+                          </button>
+                        );
+                      })}
 
                     </div>
                   </div>
                 </div>
+
+                {/* ── Upgrade banner (shown when a locked capability is clicked) ── */}
+                {capabilityUpgradeFor && (
+                  <div
+                    className="rounded-xl p-4 flex items-start gap-3 border"
+                    style={{ backgroundColor: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.25)" }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5">
+                      <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2"/>
+                      <line x1="12" y1="8" x2="12" y2="12" stroke="#f87171" strokeWidth="2" strokeLinecap="round"/>
+                      <circle cx="12" cy="16" r="1" fill="#f87171"/>
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold" style={{ color: "#f87171" }}>
+                        {capabilityUpgradeFor} input is not available on your current plan
+                      </p>
+                      <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+                        Upgrade your plan to enable {capabilityUpgradeFor.toLowerCase()} capabilities for your agents.
+                      </p>
+                      <a
+                        href="/pricing"
+                        className="inline-block mt-2 text-xs font-semibold underline-offset-2 hover:underline"
+                        style={{ color: "#f87171" }}
+                      >
+                        View plans & upgrade →
+                      </a>
+                    </div>
+                    <button
+                      onClick={() => setCapabilityUpgradeFor(null)}
+                      className="text-white/25 hover:text-white/50 transition-colors flex-shrink-0"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </div>
+                )}
 
               </div>
             )}
@@ -2958,8 +3597,8 @@ export default function Studio() {
                   const isOpen = openToolId === tool.id;
                   const fields = toolFields[tool.id] ?? {};
                   const saved  = toolSaved[tool.id]  ?? false;
-                  const requiredPlan = toolRequiredPlan(toolIdx);
-                  const isLocked = !isPlanSufficient(requiredPlan);
+                  const requiredPlan = toolRequiredPlan(tool.id);
+                  const isLocked = !isPlanSufficientFor(requiredPlan, userPlan);
 
                   return (
                     <div
@@ -3004,20 +3643,7 @@ export default function Studio() {
                               ✓ Active
                             </span>
                           )}
-                          {isLocked && requiredPlan && (
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wide"
-                              style={
-                                requiredPlan === "Starter"
-                                  ? { backgroundColor: "rgba(34,197,94,0.14)", color: "#4ade80" }
-                                  : requiredPlan === "Pro"
-                                  ? { backgroundColor: "rgba(59,91,252,0.18)", color: "#7b93ff" }
-                                  : { backgroundColor: "rgba(251,188,4,0.14)", color: "#fbbf24" }
-                              }
-                            >
-                              🔒 {requiredPlan}
-                            </span>
-                          )}
+                          {/* Plan badges removed — upgrade prompt shown inside expanded panel */}
                           <div
                             className="w-6 h-6 rounded-md flex items-center justify-center transition-transform duration-200"
                             style={{
@@ -3097,36 +3723,24 @@ export default function Studio() {
                           {isLocked ? (
                             <div
                               className="rounded-xl p-4 flex flex-col gap-3 border"
-                              style={{ backgroundColor: "rgba(59,91,252,0.05)", borderColor: "rgba(59,91,252,0.18)" }}
+                              style={{ backgroundColor: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.25)" }}
                             >
                               <div className="flex items-start gap-2.5">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5">
-                                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="#7b93ff" strokeWidth="2"/>
-                                  <path d="M7 11V7a5 5 0 0110 0v4" stroke="#7b93ff" strokeWidth="2" strokeLinecap="round"/>
+                                  <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2"/>
+                                  <line x1="12" y1="8" x2="12" y2="12" stroke="#f87171" strokeWidth="2" strokeLinecap="round"/>
+                                  <circle cx="12" cy="16" r="1" fill="#f87171"/>
                                 </svg>
-                                <p className="text-xs text-white/55 leading-relaxed">
-                                  Requires the{" "}
-                                  <span
-                                    className="font-semibold"
-                                    style={
-                                      requiredPlan === "Starter"
-                                        ? { color: "#4ade80" }
-                                        : requiredPlan === "Pro"
-                                        ? { color: "#7b93ff" }
-                                        : { color: "#fbbf24" }
-                                    }
-                                  >
-                                    {requiredPlan} plan
-                                  </span>
-                                  {" "}— upgrade to connect this tool to your agent.
+                                <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
+                                  Your current plan doesn't include this tool. Upgrade to unlock it and connect it to your agent.
                                 </p>
                               </div>
                               <a
-                                href="/billing"
+                                href="/pricing"
                                 className="w-full py-2.5 rounded-lg text-xs font-semibold text-white text-center transition-all hover:opacity-90 active:scale-95 block"
-                                style={{ backgroundColor: "#3b5bfc" }}
+                                style={{ backgroundColor: "#ef4444" }}
                               >
-                                Upgrade to {requiredPlan} →
+                                View plans & upgrade →
                               </a>
                             </div>
                           ) : (
@@ -3143,11 +3757,12 @@ export default function Studio() {
                                   Test Connection
                                 </button>
                                 <button
-                                  onClick={() => setToolSaved((prev) => ({ ...prev, [tool.id]: true }))}
-                                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
+                                  onClick={() => handleSaveToolCreds(tool.id, toolFields[tool.id] ?? {})}
+                                  disabled={toolSaving[tool.id]}
+                                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-60"
                                   style={{ backgroundColor: "#3b5bfc" }}
                                 >
-                                  {saved ? "✓ Activated" : "Save & Activate"}
+                                  {toolSaving[tool.id] ? "Saving…" : saved ? "✓ Activated" : "Save & Activate"}
                                 </button>
                               </div>
                               {saved && (
@@ -3173,7 +3788,7 @@ export default function Studio() {
           className="hidden md:flex flex-col overflow-hidden md:w-[40%]"
           style={{ position: "sticky", top: 0, height: "100vh", flexShrink: 0 }}
         >
-          <ChatPanel key={agent.id} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} onSwitchTab={setActiveTab} />
+          <ChatPanel key={agent.id} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} onSwitchTab={(tab) => setActiveTab(tab as Tab)} />
         </div>
       </div>
 
@@ -3217,7 +3832,7 @@ export default function Studio() {
             </button>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <ChatPanel key={`mobile-${agent.id}`} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} onSwitchTab={setActiveTab} />
+            <ChatPanel key={`mobile-${agent.id}`} agentId={agent.id} instructions={instructions} model={model} docCount={documents.length} userId={userId} onSwitchTab={(tab) => setActiveTab(tab as Tab)} />
           </div>
         </div>
       )}

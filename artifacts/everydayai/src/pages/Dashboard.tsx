@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import AppLayout from "@/components/AppLayout";
 import UpgradeModal from "@/components/UpgradeModal";
+import OnboardingCard from "@/components/OnboardingCard";
 
 const modelOptions = [
   { value: "gpt-4o-mini", label: "GPT-4o Mini" },
@@ -10,30 +12,93 @@ const modelOptions = [
   { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
 ];
 
+const STEP3_SKIP_KEY = "everydayai-onboarding-step3-skipped";
+
+// ─── Business type templates ──────────────────────────────────────────────────
+
+const BUSINESS_TYPES = [
+  { id: "restaurant",   label: "Restaurant",      emoji: "🍽️" },
+  { id: "store",        label: "Online Store",     emoji: "🛍️" },
+  { id: "clinic",       label: "Clinic / Hospital",emoji: "🏥" },
+  { id: "service",      label: "Service Business", emoji: "🔧" },
+  { id: "other",        label: "Other",            emoji: "✨" },
+] as const;
+
+type BusinessTypeId = typeof BUSINESS_TYPES[number]["id"];
+
+function getTemplate(type: BusinessTypeId): { name: string; description: string } {
+  switch (type) {
+    case "restaurant":
+      return {
+        name:        "Food Assistant",
+        description: "I help customers with our menu, prices, opening hours, and food orders. Ask me about our dishes, daily specials, or delivery options.",
+      };
+    case "store":
+      return {
+        name:        "Store Assistant",
+        description: "I help customers find products, check prices and availability, track orders, and get answers to shopping questions.",
+      };
+    case "clinic":
+      return {
+        name:        "Health Assistant",
+        description: "I help patients book appointments, check our services and opening hours, and answer general health questions. For medical advice, please consult your doctor.",
+      };
+    case "service":
+      return {
+        name:        "Service Assistant",
+        description: "I help customers get quotes, book appointments, learn about our services, and find answers to common questions about how we work.",
+      };
+    default:
+      return {
+        name:        "Customer Assistant",
+        description: "I help customers with questions about our business, products, and services. How can I help you today?",
+      };
+  }
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 interface Agent {
-  id: string;
-  name: string;
+  id:          string;
+  name:        string;
   description: string | null;
-  model: string;
-  status: string;
-  created_at: string;
+  model:       string;
+  status:      string;
+  created_at:  string;
+}
+
+interface Profile {
+  onboarding_complete: boolean;
+  has_tested_chat:     boolean;
+  full_name?:          string;
 }
 
 // ─── Create Agent Modal ────────────────────────────────────────────────────────
 
 interface CreateAgentModalProps {
-  onClose: () => void;
-  onCreated: () => void;
+  onClose:        () => void;
+  onCreated:      () => void;
   onLimitReached: () => void;
+  isOnboarding:   boolean;
 }
 
-function CreateAgentModal({ onClose, onCreated, onLimitReached }: CreateAgentModalProps) {
-  const [agentName, setAgentName]               = useState("");
-  const [agentDescription, setAgentDescription] = useState("");
-  const [model, setModel]                       = useState("gpt-4o-mini");
-  const [loading, setLoading]                   = useState(false);
-  const [error, setError]                       = useState("");
-  const [nameError, setNameError]               = useState("");
+function CreateAgentModal({ onClose, onCreated, onLimitReached, isOnboarding }: CreateAgentModalProps) {
+  const [step,              setStep]              = useState<"pick" | "details">(isOnboarding ? "pick" : "details");
+  const [selectedType,      setSelectedType]      = useState<BusinessTypeId | null>(null);
+  const [agentName,         setAgentName]         = useState("");
+  const [agentDescription,  setAgentDescription]  = useState("");
+  const [model,             setModel]             = useState("gpt-4o-mini");
+  const [loading,           setLoading]           = useState(false);
+  const [error,             setError]             = useState("");
+  const [nameError,         setNameError]         = useState("");
+
+  function handlePickType(type: BusinessTypeId) {
+    setSelectedType(type);
+    const tpl = getTemplate(type);
+    setAgentName(tpl.name);
+    setAgentDescription(tpl.description);
+    setStep("details");
+  }
 
   async function handleCreate() {
     setNameError(""); setError("");
@@ -44,12 +109,16 @@ function CreateAgentModal({ onClose, onCreated, onLimitReached }: CreateAgentMod
       if (!session) { setError("You must be logged in."); setLoading(false); return; }
 
       const res = await fetch("/api/agents", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ name: agentName.trim(), description: agentDescription.trim() || undefined, model }),
+        body:    JSON.stringify({
+          name:        agentName.trim(),
+          description: agentDescription.trim() || undefined,
+          model,
+        }),
       });
 
-      const data = await res.json() as { error?: string; limit?: number; plan?: string };
+      const data = await res.json() as { error?: string };
       if (!res.ok) {
         if (data.error === "AGENT_LIMIT_REACHED") { onClose(); onLimitReached(); return; }
         setError(data.error ?? "Failed to create agent"); return;
@@ -65,58 +134,136 @@ function CreateAgentModal({ onClose, onCreated, onLimitReached }: CreateAgentMod
       style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(2px)" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        className="w-full max-w-md rounded-2xl border px-7 py-7 flex flex-col gap-5"
+      <motion.div
+        className="w-full max-w-md rounded-2xl border overflow-hidden"
         style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
+        initial={{ scale: 0.96, opacity: 0, y: 16 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 340, damping: 28 }}
       >
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white">Create a New Agent</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-xl" style={{ color: "rgba(255,255,255,0.35)" }}>×</button>
-        </div>
+        <AnimatePresence mode="wait">
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Agent Name</label>
-          <input
-            type="text" placeholder="e.g. Smith's Solar Assistant"
-            value={agentName} onChange={(e) => { setAgentName(e.target.value); setNameError(""); }}
-            className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none"
-            style={{ backgroundColor: "#0a0f1e", border: `1px solid ${nameError ? "#f87171" : "rgba(255,255,255,0.08)"}` }}
-          />
-          {nameError && <p className="text-xs text-red-400">{nameError}</p>}
-        </div>
+          {/* Step 1 — Business type picker */}
+          {step === "pick" && (
+            <motion.div
+              key="pick"
+              className="px-7 py-7 flex flex-col gap-5"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">What's your business?</h2>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                    We'll pre-fill your agent template
+                  </p>
+                </div>
+                <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-xl" style={{ color: "rgba(255,255,255,0.35)" }}>×</button>
+              </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Description</label>
-          <textarea
-            placeholder="Describe your agent in a few words"
-            value={agentDescription} onChange={(e) => setAgentDescription(e.target.value)}
-            rows={3} className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none resize-none"
-            style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
-          />
-        </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {BUSINESS_TYPES.map((bt) => (
+                  <button
+                    key={bt.id}
+                    onClick={() => handlePickType(bt.id)}
+                    className="flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all hover:border-[#3b5bfc]/60 hover:bg-[#3b5bfc]/5 active:scale-95"
+                    style={{ borderColor: "rgba(255,255,255,0.08)", backgroundColor: "#0a0f1e" }}
+                  >
+                    <span className="text-2xl">{bt.emoji}</span>
+                    <span className="text-sm font-medium text-white leading-tight">{bt.label}</span>
+                  </button>
+                ))}
+              </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Model</label>
-          <select
-            value={model} onChange={(e) => setModel(e.target.value)}
-            className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none appearance-none cursor-pointer"
-            style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
-          >
-            {modelOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-          </select>
-        </div>
+              <button
+                onClick={() => setStep("details")}
+                className="text-sm text-center transition-colors"
+                style={{ color: "rgba(255,255,255,0.30)" }}
+              >
+                Skip and enter manually →
+              </button>
+            </motion.div>
+          )}
 
-        {error && <p className="text-sm text-red-400 text-center -mt-1">{error}</p>}
+          {/* Step 2 — Agent details */}
+          {step === "details" && (
+            <motion.div
+              key="details"
+              className="px-7 py-7 flex flex-col gap-5"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {isOnboarding && (
+                    <button
+                      onClick={() => setStep("pick")}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors hover:bg-white/5"
+                      style={{ color: "rgba(255,255,255,0.40)" }}
+                    >
+                      ←
+                    </button>
+                  )}
+                  <h2 className="text-lg font-bold text-white">
+                    {selectedType
+                      ? `${BUSINESS_TYPES.find((b) => b.id === selectedType)?.emoji} Name your agent`
+                      : "Create a New Agent"}
+                  </h2>
+                </div>
+                <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-xl" style={{ color: "rgba(255,255,255,0.35)" }}>×</button>
+              </div>
 
-        <div className="flex flex-col gap-3 pt-1">
-          <button
-            onClick={handleCreate} disabled={loading}
-            className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
-            style={{ backgroundColor: "#3b5bfc" }}
-          >{loading ? "Creating…" : "Create Agent"}</button>
-          <button onClick={onClose} disabled={loading} className="text-sm text-center disabled:opacity-50" style={{ color: "rgba(255,255,255,0.35)" }}>Cancel</button>
-        </div>
-      </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Agent Name</label>
+                <input
+                  type="text" placeholder="e.g. Mama's Kitchen Assistant"
+                  value={agentName} onChange={(e) => { setAgentName(e.target.value); setNameError(""); }}
+                  className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none"
+                  style={{ backgroundColor: "#0a0f1e", border: `1px solid ${nameError ? "#f87171" : "rgba(255,255,255,0.08)"}` }}
+                />
+                {nameError && <p className="text-xs text-red-400">{nameError}</p>}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Instructions</label>
+                <textarea
+                  placeholder="Describe what your agent does"
+                  value={agentDescription} onChange={(e) => setAgentDescription(e.target.value)}
+                  rows={3} className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none resize-none"
+                  style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.55)" }}>Model</label>
+                <select
+                  value={model} onChange={(e) => setModel(e.target.value)}
+                  className="w-full rounded-lg px-4 py-2.5 text-sm text-white outline-none appearance-none cursor-pointer"
+                  style={{ backgroundColor: "#0a0f1e", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  {modelOptions.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
+
+              {error && <p className="text-sm text-red-400 text-center -mt-1">{error}</p>}
+
+              <div className="flex flex-col gap-3 pt-1">
+                <button
+                  onClick={() => void handleCreate()} disabled={loading}
+                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: "#3b5bfc" }}
+                >{loading ? "Creating…" : "Create Agent"}</button>
+                <button onClick={onClose} disabled={loading} className="text-sm text-center disabled:opacity-50" style={{ color: "rgba(255,255,255,0.35)" }}>Cancel</button>
+              </div>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }
@@ -124,7 +271,7 @@ function CreateAgentModal({ onClose, onCreated, onLimitReached }: CreateAgentMod
 // ─── Delete Confirm Modal ──────────────────────────────────────────────────────
 
 interface DeleteConfirmModalProps {
-  agent: Agent;
+  agent:    Agent;
   deleting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -141,7 +288,6 @@ function DeleteConfirmModal({ agent, deleting, onCancel, onConfirm }: DeleteConf
         className="w-full max-w-sm rounded-2xl border px-7 py-7 flex flex-col gap-5"
         style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
       >
-        {/* Icon */}
         <div className="flex flex-col items-center text-center gap-3">
           <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl" style={{ backgroundColor: "rgba(239,68,68,0.15)" }}>
             🗑️
@@ -179,24 +325,23 @@ function DeleteConfirmModal({ agent, deleting, onCancel, onConfirm }: DeleteConf
 // ─── Agent Card ───────────────────────────────────────────────────────────────
 
 interface AgentCardProps {
-  agent: Agent;
-  onRequestDelete: (agent: Agent) => void;
-  onRename: (id: string, newName: string) => Promise<void>;
+  agent:          Agent;
+  onRequestDelete:(agent: Agent) => void;
+  onRename:       (id: string, newName: string) => Promise<void>;
 }
 
 function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
-  const [, navigate]    = useLocation();
-  const [menuOpen, setMenuOpen]       = useState(false);
-  const [isRenaming, setIsRenaming]   = useState(false);
-  const [renameValue, setRenameValue] = useState(agent.name);
+  const [, navigate]            = useLocation();
+  const [menuOpen, setMenuOpen]         = useState(false);
+  const [isRenaming, setIsRenaming]     = useState(false);
+  const [renameValue, setRenameValue]   = useState(agent.name);
   const [renameSaving, setRenameSaving] = useState(false);
-  const menuRef   = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
+  const menuRef  = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const modelLabel = modelOptions.find((m) => m.value === agent.model)?.label ?? agent.model;
   const isLive     = agent.status === "live";
 
-  // Close menu on outside click
   useEffect(() => {
     if (!menuOpen) return;
     function handleClick(e: MouseEvent) {
@@ -206,16 +351,11 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [menuOpen]);
 
-  // Focus input when rename starts
   useEffect(() => {
     if (isRenaming) setTimeout(() => inputRef.current?.focus(), 0);
   }, [isRenaming]);
 
-  function startRename() {
-    setMenuOpen(false);
-    setRenameValue(agent.name);
-    setIsRenaming(true);
-  }
+  function startRename() { setMenuOpen(false); setRenameValue(agent.name); setIsRenaming(true); }
 
   async function commitRename() {
     const trimmed = renameValue.trim();
@@ -228,7 +368,7 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
 
   function handleRenameKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") { e.preventDefault(); void commitRename(); }
-    if (e.key === "Escape") { setIsRenaming(false); }
+    if (e.key === "Escape") setIsRenaming(false);
   }
 
   return (
@@ -237,20 +377,13 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
       style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
       onClick={() => { if (!menuOpen && !isRenaming) navigate(`/studio/${agent.id}`); }}
     >
-      {/* ··· menu button — visible on hover */}
-      <div
-        ref={menuRef}
-        className="absolute top-3 right-3 z-10"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div ref={menuRef} className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => setMenuOpen((v) => !v)}
           className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-bold opacity-40 hover:opacity-100 active:opacity-100 group-hover:opacity-100 transition-opacity duration-150 hover:bg-white/10"
           style={{ color: "rgba(255,255,255,0.8)" }}
           title="Options"
-        >
-          ···
-        </button>
+        >···</button>
 
         {menuOpen && (
           <div
@@ -261,6 +394,10 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
               onClick={() => { setMenuOpen(false); navigate(`/studio/${agent.id}`); }}
               className="w-full text-left px-4 py-2.5 text-xs text-white/70 hover:bg-white/5 transition-colors"
             >Edit</button>
+            <button
+              onClick={startRename}
+              className="w-full text-left px-4 py-2.5 text-xs text-white/70 hover:bg-white/5 transition-colors"
+            >Rename</button>
             <div style={{ height: "1px", backgroundColor: "rgba(255,255,255,0.06)" }} />
             <button
               onClick={() => { setMenuOpen(false); onRequestDelete(agent); }}
@@ -271,7 +408,6 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
         )}
       </div>
 
-      {/* Card content */}
       <div className="flex flex-col gap-1 overflow-hidden pr-6">
         {isRenaming ? (
           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -307,10 +443,9 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
       </div>
 
       <div className="flex flex-wrap gap-1.5 mt-2">
-        <span
-          className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-          style={{ backgroundColor: "rgba(59,91,252,0.18)", color: "#7b93ff" }}
-        >{modelLabel}</span>
+        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(59,91,252,0.18)", color: "#7b93ff" }}>
+          {modelLabel}
+        </span>
         <span
           className="text-[10px] font-medium px-2 py-0.5 rounded-full capitalize"
           style={isLive
@@ -325,14 +460,24 @@ function AgentCard({ agent, onRequestDelete, onRename }: AgentCardProps) {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [, navigate]                          = useLocation();
-  const [showCreateModal, setShowCreateModal]   = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [agents, setAgents]                     = useState<Agent[]>([]);
-  const [loadingAgents, setLoadingAgents]       = useState(true);
-  const [toast, setToast]                       = useState("");
-  const [deleteModal, setDeleteModal]           = useState<Agent | null>(null);
-  const [deleting, setDeleting]                 = useState(false);
+  const [, navigate] = useLocation();
+
+  const [showCreateModal,   setShowCreateModal]   = useState(false);
+  const [showUpgradeModal,  setShowUpgradeModal]  = useState(false);
+  const [agents,            setAgents]            = useState<Agent[]>([]);
+  const [loadingAgents,     setLoadingAgents]     = useState(true);
+  const [toast,             setToast]             = useState("");
+  const [deleteModal,       setDeleteModal]       = useState<Agent | null>(null);
+  const [deleting,          setDeleting]          = useState(false);
+
+  // Onboarding state
+  const [profile,           setProfile]           = useState<Profile | null>(null);
+  const [docCount,          setDocCount]          = useState(0);
+  const [onboardingDone,    setOnboardingDone]    = useState(false);
+  const [hasTestedChat,     setHasTestedChat]     = useState(false);
+  const [step3Skipped,      setStep3Skipped]      = useState(() =>
+    localStorage.getItem(STEP3_SKIP_KEY) === "true"
+  );
 
   function showToast(msg: string) {
     setToast(msg);
@@ -346,11 +491,37 @@ export default function Dashboard() {
     setLoadingAgents(false);
   }, []);
 
-  useEffect(() => { fetchAgents(); }, [fetchAgents]);
+  const fetchProfile = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("onboarding_complete, has_tested_chat, full_name")
+      .eq("id", user.id)
+      .single();
+    if (data) {
+      setProfile(data as Profile);
+      setOnboardingDone((data as Profile).onboarding_complete ?? false);
+      setHasTestedChat((data as Profile).has_tested_chat ?? false);
+    }
+  }, []);
+
+  const fetchDocCount = useCallback(async () => {
+    const { count } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true });
+    setDocCount(count ?? 0);
+  }, []);
+
+  useEffect(() => {
+    void fetchAgents();
+    void fetchProfile();
+    void fetchDocCount();
+  }, [fetchAgents, fetchProfile, fetchDocCount]);
 
   function handleAgentCreated() {
     setShowCreateModal(false);
-    fetchAgents();
+    void fetchAgents();
     showToast("Agent created successfully!");
   }
 
@@ -372,13 +543,28 @@ export default function Dashboard() {
     showToast("Agent renamed successfully");
   }
 
+  function handleSkipStep3() {
+    localStorage.setItem(STEP3_SKIP_KEY, "true");
+    setStep3Skipped(true);
+  }
+
+  // Derive greeting
+  const firstName  = profile?.full_name?.split(" ")[0] ?? "";
+  const hasAgents  = agents.length > 0;
+  const hasLiveCh  = agents.some((a) => a.status === "live");
+  const firstAgent = agents[0] ?? null;
+
+  // Show onboarding card if not dismissed and agents are loaded (avoid flash)
+  const showOnboarding = !onboardingDone && !loadingAgents;
+
   return (
     <AppLayout activeItemId="home">
       {showCreateModal && (
         <CreateAgentModal
           onClose={() => setShowCreateModal(false)}
           onCreated={handleAgentCreated}
-          onLimitReached={() => setShowUpgradeModal(true)}
+          onLimitReached={() => { setShowCreateModal(false); setShowUpgradeModal(true); }}
+          isOnboarding={showOnboarding}
         />
       )}
 
@@ -387,42 +573,68 @@ export default function Dashboard() {
           agent={deleteModal}
           deleting={deleting}
           onCancel={() => { if (!deleting) setDeleteModal(null); }}
-          onConfirm={handleDelete}
+          onConfirm={() => void handleDelete()}
         />
       )}
 
       <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} reason="agent_limit" />
 
       {/* Toast */}
-      {toast && (
-        <div
-          className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg transition-all"
-          style={{ backgroundColor: toast.includes("deleted") || toast.includes("renamed") || toast.includes("created") ? "#16a34a" : "#dc2626" }}
-        >
-          ✓ {toast}
-        </div>
-      )}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="fixed bottom-6 right-6 z-50 px-5 py-3 rounded-xl text-sm font-medium text-white shadow-lg"
+            style={{ backgroundColor: toast.toLowerCase().includes("fail") ? "#dc2626" : "#16a34a" }}
+            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+          >
+            ✓ {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="flex-1 px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
-        <h1 className="text-2xl font-bold mb-6 text-white">Welcome back 👋</h1>
 
-        {/* Blue banner */}
-        <div
-          className="w-full rounded-2xl px-6 md:px-8 py-6 md:py-7 mb-8 flex items-center justify-between gap-4"
-          style={{ background: "linear-gradient(135deg, #1e3a8a 0%, #3b5bfc 100%)" }}
-        >
-          <div>
-            <h2 className="text-lg md:text-xl font-bold text-white mb-1">Begin Your EverydayAI Journey</h2>
-            <p className="text-white/70 text-sm leading-relaxed">Build and deploy AI agents for any business in minutes</p>
-          </div>
-          <button className="flex-shrink-0 px-4 md:px-5 py-2.5 rounded-lg text-sm font-semibold text-[#3b5bfc] bg-white hover:bg-white/90 transition-all duration-150">
-            Learn More
-          </button>
-        </div>
+        {/* Greeting */}
+        <h1 className="text-2xl font-bold mb-6 text-white">
+          {firstName ? `Welcome${!hasAgents ? "" : " back"}, ${firstName} 👋` : "Welcome back 👋"}
+        </h1>
+
+        {/* Onboarding card */}
+        <AnimatePresence>
+          {showOnboarding && (
+            <OnboardingCard
+              hasAgents={hasAgents}
+              hasDocuments={docCount > 0}
+              hasTestedChat={hasTestedChat}
+              hasLiveChannel={hasLiveCh}
+              firstAgentId={firstAgent?.id ?? null}
+              firstAgentName={firstAgent?.name ?? "Your Agent"}
+              onComplete={() => setOnboardingDone(true)}
+              onTestedChat={() => setHasTestedChat(true)}
+              onCreateAgent={() => setShowCreateModal(true)}
+              step3Skipped={step3Skipped}
+              onSkipStep3={handleSkipStep3}
+            />
+          )}
+        </AnimatePresence>
 
         {/* My Agents */}
         <div>
-          <h2 className="text-base font-semibold mb-4 text-white">My Agents</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-white">My Agents</h2>
+            {hasAgents && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+                style={{ backgroundColor: "#3b5bfc" }}
+              >
+                <span className="text-base leading-none">+</span> New Agent
+              </button>
+            )}
+          </div>
 
           {loadingAgents ? (
             <div className="flex items-center gap-2 text-sm" style={{ color: "rgba(255,255,255,0.20)" }}>
@@ -430,18 +642,18 @@ export default function Dashboard() {
               Loading agents…
             </div>
           ) : agents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+            <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
               <div className="text-5xl select-none">🤖</div>
               <div>
                 <p className="text-base font-semibold text-white">No agents yet</p>
-                <p className="text-sm text-white/40 mt-1">Go to Studio to create your first agent</p>
+                <p className="text-sm text-white/40 mt-1">Create your first agent to get started</p>
               </div>
               <button
-                onClick={() => navigate("/studio")}
+                onClick={() => setShowCreateModal(true)}
                 className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
                 style={{ backgroundColor: "#3b5bfc" }}
               >
-                Open Studio
+                Create Agent
               </button>
             </div>
           ) : (

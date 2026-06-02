@@ -15,7 +15,7 @@ export default function Signup() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -27,6 +27,13 @@ export default function Signup() {
       setError(error.message);
       setLoading(false);
     } else {
+      // Fire welcome email (non-blocking — don't await)
+      if (data.session?.access_token) {
+        void fetch("/api/auth/welcome", {
+          method:  "POST",
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+        }).catch(() => { /* swallow — email failure should never block signup */ });
+      }
       navigate("/dashboard");
     }
   }

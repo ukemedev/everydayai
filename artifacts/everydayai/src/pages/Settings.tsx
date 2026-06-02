@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AppLayout from "@/components/AppLayout";
 import UpgradeModal from "@/components/UpgradeModal";
+import { useTheme } from "@/lib/ThemeContext";
 
 // ── API key providers ─────────────────────────────────────────────────────────
 
@@ -184,6 +185,7 @@ function SectionRow({
 
 export default function Settings() {
   const [openSection, setOpenSection] = useState<Section>(null);
+  const { theme, setTheme }           = useTheme();
   const [toast, setToast]             = useState("");
   const [toastType, setToastType]     = useState<"success" | "error">("success");
 
@@ -324,7 +326,7 @@ export default function Settings() {
         currentPlan={plan}
       />
 
-      <main className="flex-1 px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
+      <main className="flex-1 px-4 md:px-8 py-6 md:py-8 transition-colors duration-300" style={{ backgroundColor: "var(--app-bg)" }}>
         <div className="max-w-xl">
           <h1 className="text-2xl font-bold text-white">Settings</h1>
           <p className="text-sm mt-1 text-white/40">Manage your account and preferences</p>
@@ -578,6 +580,32 @@ export default function Settings() {
                 )}
               </div>
             )}
+
+            <RowDivider />
+
+            {/* ── Theme ─────────────────────────────────────────────────────── */}
+            <SectionRow
+              emoji="🎨"
+              label="Theme"
+              right={
+                <div className="flex items-center gap-1 p-1 rounded-lg flex-shrink-0" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
+                  {(["dark", "light"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={(e) => { e.stopPropagation(); setTheme(t); }}
+                      className="px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 capitalize"
+                      style={
+                        theme === t
+                          ? { backgroundColor: "#3b5bfc", color: "#ffffff" }
+                          : { backgroundColor: "transparent", color: "rgba(255,255,255,0.35)" }
+                      }
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
 
           </div>
         </div>

@@ -55,3 +55,27 @@ export const webhookLimiter = rateLimit({
   legacyHeaders: false,
   handler: makeHandler("Too many requests."),
 });
+
+export const publicPollingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeHandler("Too many requests. Please slow down."),
+});
+
+export const publicAgentInfoLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeHandler("Too many requests. Please try again later."),
+});
+
+export const deployLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: makeHandler("Too many deployment attempts. Please wait an hour."),
+});

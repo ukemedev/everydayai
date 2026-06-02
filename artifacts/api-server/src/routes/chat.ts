@@ -7,17 +7,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
-import { checkMessageLimit } from "../lib/planLimits.js";
+import { checkMessageLimit, getUserPlan } from "../lib/planLimits.js";
+import { checkAgentDailyLimit, incrementAgentDailyCount, checkSessionLimit, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE } from "../lib/agentLimits.js";
 import { sanitizeText, validateMessageLength, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
-import { appendToSheet } from "../lib/googleSheets.js";
-import { sendTelegramMessage } from "../lib/telegram.js";
-import { sendEmail } from "../lib/gmail.js";
 import { logAudit } from "../lib/auditLog.js";
-
-function extractSpreadsheetId(url: string): string {
-  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
-  return match?.[1] ?? url;
-}
+import {
+  buildToolsContext,
+  executeToolsInReply,
+  type ToolRecord,
+} from "../lib/toolEngine.js";
 
 // Maps a model name to its provider, mirroring the frontend catalogue.
 function getProviderForModel(model: string): string {
@@ -27,30 +25,6 @@ function getProviderForModel(model: string): string {
   return "openai";
 }
 
-// Finds every TOOL_CALL marker in an AI reply, tolerates missing brackets and nested JSON.
-function extractToolCallMarkers(text: string): Array<{ raw: string; json: string }> {
-  const results: Array<{ raw: string; json: string }> = [];
-  // Match optional `[`, then `TOOL_CALL:`, optional whitespace, then opening brace
-  const markerRe = /\[?TOOL_CALL:\s*(\{)/g;
-  let m: RegExpExecArray | null;
-  while ((m = markerRe.exec(text)) !== null) {
-    const braceStart = m.index + m[0].length - 1; // position of the opening `{`
-    let depth = 0;
-    let i = braceStart;
-    for (; i < text.length; i++) {
-      if (text[i] === "{") depth++;
-      else if (text[i] === "}") { depth--; if (depth === 0) break; }
-    }
-    if (depth !== 0) continue; // unbalanced — skip
-    const jsonStr = text.slice(braceStart, i + 1);
-    const hasClosingBracket = text[i + 1] === "]";
-    const raw = text.slice(m.index, i + 1 + (hasClosingBracket ? 1 : 0));
-    results.push({ raw, json: jsonStr });
-    // advance past this match to avoid re-processing
-    markerRe.lastIndex = i + 1 + (hasClosingBracket ? 1 : 0);
-  }
-  return results;
-}
 
 // pdf-parse and mammoth are externalized in esbuild — load via require at runtime
 const _require = createRequire(import.meta.url);
@@ -202,16 +176,6 @@ interface ConversationMessage {
   content: string;
 }
 
-interface ToolRecord {
-  id: string;
-  tool_name: string;
-  tool_description: string | null;
-  connector: string;
-  action: string;
-  required_inputs: Array<{ name: string; label: string; description: string }> | null;
-  required_auth: { type: string; provider: string; description: string } | null;
-}
-
 interface ChatBody {
   message?: string;
   instructions?: string;
@@ -221,60 +185,16 @@ interface ChatBody {
   conversationHistory?: ConversationMessage[];
   agentId?: string;
   userId?: string;
+  sessionId?: string;
+  attachments?: Attachment[];
 }
 
-async function buildToolsContext(agentId: string): Promise<{ prompt: string; tools: ToolRecord[] }> {
-  const sb = getServiceClient();
-  if (!sb) return { prompt: "", tools: [] };
-
-  const { data, error } = await sb
-    .from("tools")
-    .select("*")
-    .eq("agent_id", agentId)
-    .eq("status", "active");
-
-  if (error || !data || data.length === 0) return { prompt: "", tools: [] };
-
-  const tools = data as ToolRecord[];
-
-  const toolDescriptions = tools
-    .map((t) => {
-      const inputs =
-        t.required_inputs
-          ?.map((i) => `  - ${i.name} (${i.label}): ${i.description}`)
-          .join("\n") ?? "  (none)";
-
-      let connectorNotes = "";
-      if (t.connector === "google_sheets") {
-        connectorNotes = "\nNOTE: The spreadsheet destination is already configured — do NOT ask the user for any URL or spreadsheet ID. Just collect the required data fields and trigger the tool.";
-      } else if (t.connector === "telegram") {
-        connectorNotes = "\nNOTE: The Telegram bot is already configured — do NOT ask the user for any Telegram handle, chat ID, or bot token. When triggered, the notification is sent automatically. Your inputs should capture the data you want to notify about.";
-      } else if (t.connector === "gmail") {
-        connectorNotes = "\nNOTE: The Gmail account is already connected — do NOT ask the user for OAuth tokens or credentials. Just collect the recipient address, subject, and body from the conversation.";
-      }
-
-      return `Tool ID: ${t.id}\nName: ${t.tool_name}\nDescription: ${t.tool_description ?? ""}\nConnector: ${t.connector}\nAction: ${t.action}\nRequired inputs:\n${inputs}${connectorNotes}`;
-    })
-    .join("\n\n---\n\n");
-
-  const prompt = `
-
-You have access to the following tools. When you have collected ALL required inputs from the user, output each tool call on its own line in EXACTLY this format, then continue with a friendly confirmation:
-
-[TOOL_CALL:{"tool_id":"<id>","inputs":{"<field_name>":"<value>"}}]
-
-CRITICAL RULES:
-- If multiple tools are relevant (e.g. save to Google Sheets AND send a Telegram notification), output ALL tool calls one after another without waiting — use every relevant tool automatically in a single response.
-- For google_sheets tools: NEVER ask the user for a spreadsheet URL or ID — it is already saved. Collect only the data fields listed under "Required inputs", then trigger the tool immediately.
-- For telegram tools: NEVER ask the user for a Telegram handle, chat ID, or bot token. The bot is pre-configured. Trigger the tool with a "message" input summarising what happened, then confirm to the user that the notification was sent.
-- For gmail tools: NEVER ask the user for credentials. Just collect to/subject/body from the conversation.
-
-Available tools:
----
-${toolDescriptions}`;
-
-  logger.info({ agentId, toolCount: tools.length }, "tools context built");
-  return { prompt, tools };
+export interface Attachment {
+  type:      "voice" | "image" | "file";
+  content?:  string;   // voice transcript or extracted file text
+  base64?:   string;   // raw image bytes as base64
+  mimeType?: string;   // image/file MIME type
+  filename?: string;   // original filename
 }
 
 async function callOpenAI(
@@ -330,6 +250,81 @@ async function callGroq(
   return completion.choices[0]?.message?.content ?? "No response from model.";
 }
 
+// ─── Vision-capable call functions ────────────────────────────────────────────
+
+async function callOpenAIVision(
+  apiKey: string, model: string, systemPrompt: string,
+  history: ConversationMessage[], message: string,
+  imageBase64: string, imageMimeType: string
+): Promise<string> {
+  const client = new OpenAI({ apiKey });
+  const completion = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...history,
+      {
+        role: "user",
+        content: [
+          { type: "text" as const,      text: message },
+          { type: "image_url" as const, image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+  });
+  return completion.choices[0]?.message?.content ?? "No response from model.";
+}
+
+async function callAnthropicVision(
+  apiKey: string, model: string, systemPrompt: string,
+  history: ConversationMessage[], message: string,
+  imageBase64: string, imageMimeType: string
+): Promise<string> {
+  const client = new Anthropic({ apiKey });
+  const response = await client.messages.create({
+    model, max_tokens: 1024, system: systemPrompt,
+    messages: [
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content: [
+          {
+            type: "image" as const,
+            source: {
+              type:       "base64" as const,
+              media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data:       imageBase64,
+            },
+          },
+          { type: "text" as const, text: message },
+        ],
+      },
+    ],
+  });
+  const block = response.content[0];
+  return block.type === "text" ? block.text : "No response from model.";
+}
+
+async function callGoogleVision(
+  apiKey: string, model: string, systemPrompt: string,
+  history: ConversationMessage[], message: string,
+  imageBase64: string, imageMimeType: string
+): Promise<string> {
+  const genAI    = new GoogleGenerativeAI(apiKey);
+  const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
+  const chat = genModel.startChat({
+    history: history.map((m) => ({
+      role:  m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    })),
+  });
+  const result = await chat.sendMessage([
+    { text: message },
+    { inlineData: { mimeType: imageMimeType, data: imageBase64 } },
+  ]);
+  return result.response.text();
+}
+
 // ─── Public agent info endpoint ───────────────────────────────────────────────
 
 router.get("/public/agents/:agentId", async (req: Request, res: Response) => {
@@ -339,7 +334,7 @@ router.get("/public/agents/:agentId", async (req: Request, res: Response) => {
 
   const { data, error } = await sb
     .from("agents")
-    .select("id, name, description, status, model")
+    .select("id, name, description, status, model, input_capabilities")
     .eq("id", agentId)
     .maybeSingle();
 
@@ -351,13 +346,14 @@ router.get("/public/agents/:agentId", async (req: Request, res: Response) => {
 // ─── Chat route ───────────────────────────────────────────────────────────────
 
 router.post("/chat", async (req: Request, res: Response) => {
-  const { message, instructions, model, provider, apiKey, conversationHistory, agentId, userId } =
+  const { message, instructions, model, provider, apiKey, conversationHistory, agentId, userId, sessionId, attachments } =
     req.body as ChatBody;
 
-  if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
+  const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+  if (!message?.trim() && !hasAttachments) { res.status(400).json({ error: "message is required" }); return; }
 
   // ── Sanitize and validate the incoming message ─────────────────────────────
-  const cleanMessage = sanitizeText(message);
+  const cleanMessage = sanitizeText(message ?? "");
 
   if (!validateMessageLength(cleanMessage, 2000)) {
     res.status(400).json({ error: "Message is too long. Maximum 2000 characters." });
@@ -398,7 +394,7 @@ router.post("/chat", async (req: Request, res: Response) => {
 
   // ── Validate and sanitize conversation history ─────────────────────────────
   const MAX_HISTORY = 50;
-  const history: ConversationMessage[] = (Array.isArray(conversationHistory) ? conversationHistory : [])
+  let history: ConversationMessage[] = (Array.isArray(conversationHistory) ? conversationHistory : [])
     .slice(-MAX_HISTORY)
     .map((m) => ({
       role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
@@ -420,12 +416,26 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
+  // ── Public chat protection — IP rate limit (no auth header) ───────────────
+  // Applied before key resolution so abuse is stopped as early as possible.
+  const isPublicChat = !verifiedUserId && !!agentId?.trim();
+  if (isPublicChat) {
+    const clientIp  = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
+    const ipCheck   = checkIpRateLimit(clientIp);
+    if (!ipCheck.allowed) {
+      req.log.warn({ ip: clientIp, agentId }, "public chat IP rate limit hit");
+      res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
+      return;
+    }
+  }
+
   // Resolve API key — never trust apiKey sent from the frontend.
   // Always look up server-side from the verified user or the live agent's owner.
   let resolvedApiKey    = "";
   let resolvedModel     = model?.trim()    || "gpt-4o-mini";
   let resolvedProvider  = provider?.trim() || "openai";
   let baseInstructions  = instructions?.trim() || "You are a helpful assistant.";
+  let agentOwnerId      = "";
 
   // 1. Studio session — JWT-verified user's own key.
   if (!resolvedApiKey && verifiedUserId) {
@@ -456,13 +466,38 @@ router.post("/chat", async (req: Request, res: Response) => {
         .eq("status", "live")
         .maybeSingle();
       if (agentRow) {
+        agentOwnerId = agentRow.user_id as string;
         if (!model?.trim())        resolvedModel        = (agentRow.model as string)        || "gpt-4o-mini";
         if (!instructions?.trim()) baseInstructions     = (agentRow.instructions as string) || "You are a helpful assistant.";
         if (!provider?.trim())     resolvedProvider     = getProviderForModel(resolvedModel);
+
+        // ── Per-agent daily limit and session limit ──────────────────────────
+        // Only enforced on public chat (not studio sessions — those have their own plan limits).
+        if (isPublicChat) {
+          // Get agent owner's plan to determine limits
+          const ownerPlan = await getUserPlan(agentOwnerId).catch(() => "free");
+
+          // 1. Agent daily message cap
+          const dailyCheck = checkAgentDailyLimit(agentId.trim(), ownerPlan);
+          if (!dailyCheck.allowed) {
+            req.log.warn({ agentId, ownerPlan, dailyCount: dailyCheck.count, dailyLimit: dailyCheck.limit }, "agent daily message limit reached");
+            res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
+            return;
+          }
+
+          // 2. Session message cap (count user turns already in history)
+          const userTurnsInSession = history.filter((m) => m.role === "user").length;
+          if (!checkSessionLimit(ownerPlan, userTurnsInSession)) {
+            req.log.warn({ agentId, ownerPlan, userTurns: userTurnsInSession }, "session message limit reached");
+            res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
+            return;
+          }
+        }
+
         const { data: keyRow } = await sb
           .from("api_keys")
           .select("api_key")
-          .eq("user_id", agentRow.user_id as string)
+          .eq("user_id", agentOwnerId)
           .eq("provider", resolvedProvider)
           .maybeSingle();
         if (keyRow?.api_key) {
@@ -499,7 +534,7 @@ router.post("/chat", async (req: Request, res: Response) => {
   let agentTools: ToolRecord[] = [];
   if (agentId?.trim()) {
     try {
-      const result = await buildToolsContext(agentId.trim());
+      const result = await buildToolsContext(agentId.trim(), getServiceClient());
       toolsContext = result.prompt;
       agentTools   = result.tools;
     } catch (err) {
@@ -514,166 +549,62 @@ router.post("/chat", async (req: Request, res: Response) => {
     "system prompt assembled"
   );
 
+  // ── Process attachments (voice transcript / file text / image) ─────────────
+  const attachmentList: Attachment[] = Array.isArray(attachments) ? attachments as Attachment[] : [];
+  let effectiveMessage = cleanMessage;
+  const imageAtt = attachmentList.find((a) => a.type === "image" && a.base64 && a.mimeType);
+
+  for (const a of attachmentList) {
+    if (a.type === "voice" && a.content?.trim()) {
+      effectiveMessage = `[Voice note]: "${a.content.trim()}"\n\n${effectiveMessage}`.trim();
+    }
+    if (a.type === "file" && a.content?.trim()) {
+      const label = a.filename ? ` (${a.filename})` : "";
+      effectiveMessage = `${effectiveMessage}\n\n[Uploaded document${label}]:\n${a.content.trim()}`.trim();
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     let reply: string;
-    switch (resolvedProvider) {
-      case "anthropic": reply = await callAnthropic(resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
-      case "google":    reply = await callGoogle   (resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
-      case "groq":      reply = await callGroq     (resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
-      case "openai":
-      default:          reply = await callOpenAI   (resolvedApiKey, resolvedModel, systemPrompt, history, cleanMessage); break;
-    }
-
-    // ── Tool call execution ───────────────────────────────────────────────────
-    interface ToolCallResult {
-      name: string;
-      status: "success" | "failed";
-      data: Record<string, string>;
-      response: string;
-      timestamp: string;
-    }
-    const toolCallResults: ToolCallResult[] = [];
-
-    const markers = extractToolCallMarkers(reply);
-    if (markers.length > 0 && agentTools.length > 0) {
-      req.log.info({ count: markers.length }, "tool call markers detected in AI response");
-
-      for (const { raw, json } of markers) {
-        try {
-          const toolCallParsed = JSON.parse(json) as {
-            tool_id: string;
-            inputs: Record<string, string>;
-            spreadsheet_id?: string;
-            sheet_name?: string;
-          };
-
-          const tool = agentTools.find((t) => t.id === toolCallParsed.tool_id);
-
-          if (!tool || !userId?.trim()) {
-            reply = reply.replace(raw, "");
-            continue;
-          }
-
-          const sb = getServiceClient();
-          let resultMsg = "";
-          const uid = userId.trim();
-          let result: ToolCallResult;
-
-          if (tool.connector === "google_sheets" && sb) {
-            const { data: integration } = await sb
-              .from("integrations")
-              .select("access_token")
-              .eq("user_id", uid)
-              .eq("provider", "google")
-              .maybeSingle();
-
-            if (integration?.access_token) {
-              const rowData = tool.required_inputs?.length
-                ? tool.required_inputs.map((i: { name: string }) => toolCallParsed.inputs[i.name] ?? "")
-                : Object.values(toolCallParsed.inputs);
-
-              const sheetUrl = (tool.required_auth as { spreadsheet_url?: string } | null)?.spreadsheet_url ?? "";
-              const spreadsheetId = sheetUrl ? extractSpreadsheetId(sheetUrl) : (toolCallParsed.spreadsheet_id ?? "");
-
-              const sheetResult = await appendToSheet(
-                integration.access_token as string,
-                spreadsheetId,
-                toolCallParsed.sheet_name ?? "Sheet1",
-                rowData
-              );
-
-              const succeeded = sheetResult.success;
-              resultMsg = succeeded ? "✓ Saved to Google Sheets" : `⚠ Could not save to Google Sheets: ${sheetResult.error}`;
-              result = {
-                name:      tool.tool_name,
-                status:    succeeded ? "success" : "failed",
-                data:      toolCallParsed.inputs,
-                response:  succeeded ? "Row appended successfully" : (sheetResult.error ?? "Unknown error"),
-                timestamp: new Date().toISOString(),
-              };
-            } else {
-              resultMsg = "⚠ Google Sheets not connected. Please connect Google in the Tools tab.";
-              result = { name: tool.tool_name, status: "failed", data: toolCallParsed.inputs, response: "Google account not connected", timestamp: new Date().toISOString() };
-            }
-
-          } else if (tool.connector === "telegram" && sb) {
-            const toolOwnerId = (tool as { user_id?: string }).user_id ?? uid;
-            const { data: integration } = await sb
-              .from("integrations")
-              .select("access_token, refresh_token")
-              .eq("user_id", toolOwnerId)
-              .eq("provider", "telegram")
-              .maybeSingle();
-
-            const botToken = integration?.access_token as string | undefined;
-            const chatId   = integration?.refresh_token as string | undefined;
-
-            if (botToken && chatId) {
-              const summary   = toolCallParsed.inputs.message ?? Object.entries(toolCallParsed.inputs).map(([k, v]) => `${k}: ${v}`).join(", ");
-              const tgMessage = `🔔 New notification from ${tool.tool_name}:\n${summary}`;
-              const tgResult  = await sendTelegramMessage(botToken, chatId, tgMessage);
-              const succeeded = tgResult.success;
-
-              resultMsg = succeeded ? "✓ Telegram message sent" : `⚠ Could not send Telegram message: ${tgResult.error}`;
-              result = {
-                name:      tool.tool_name,
-                status:    succeeded ? "success" : "failed",
-                data:      toolCallParsed.inputs,
-                response:  succeeded ? "Message delivered" : (tgResult.error ?? "Unknown error"),
-                timestamp: new Date().toISOString(),
-              };
-            } else {
-              resultMsg = "⚠ Telegram not connected. Please add your Bot Token and Chat ID in Settings.";
-              result = { name: tool.tool_name, status: "failed", data: toolCallParsed.inputs, response: "Telegram credentials not configured", timestamp: new Date().toISOString() };
-            }
-
-          } else if (tool.connector === "gmail" && sb) {
-            const { data: integration } = await sb
-              .from("integrations")
-              .select("access_token")
-              .eq("user_id", uid)
-              .eq("provider", "google")
-              .maybeSingle();
-
-            if (integration?.access_token) {
-              const to      = toolCallParsed.inputs.to ?? toolCallParsed.inputs.email ?? "";
-              const subject = toolCallParsed.inputs.subject ?? "(no subject)";
-              const body    = toolCallParsed.inputs.body ?? toolCallParsed.inputs.message ?? "";
-
-              const gmailResult = await sendEmail(integration.access_token as string, to, subject, body);
-              const succeeded   = gmailResult.success;
-
-              resultMsg = succeeded ? "✓ Email sent via Gmail" : `⚠ Could not send email: ${gmailResult.error}`;
-              result = {
-                name:      tool.tool_name,
-                status:    succeeded ? "success" : "failed",
-                data:      toolCallParsed.inputs,
-                response:  succeeded ? `Email delivered to ${to}` : (gmailResult.error ?? "Unknown error"),
-                timestamp: new Date().toISOString(),
-              };
-            } else {
-              resultMsg = "⚠ Gmail not connected. Please connect Google in the Tools tab.";
-              result = { name: tool.tool_name, status: "failed", data: toolCallParsed.inputs, response: "Google account not connected", timestamp: new Date().toISOString() };
-            }
-
-          } else {
-            reply = reply.replace(raw, "");
-            continue;
-          }
-
-          req.log.info({ toolId: tool.id, connector: tool.connector, status: result.status }, "tool execution complete");
-          toolCallResults.push(result);
-          reply = reply.replace(raw, resultMsg ? `[${resultMsg}]` : "");
-
-        } catch (parseErr) {
-          logger.error({ parseErr }, "failed to parse tool call JSON — removing marker");
-          reply = reply.replace(raw, "");
-        }
+    if (imageAtt?.base64 && imageAtt?.mimeType) {
+      switch (resolvedProvider) {
+        case "anthropic": reply = await callAnthropicVision(resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage || "[Image]", imageAtt.base64, imageAtt.mimeType); break;
+        case "google":    reply = await callGoogleVision   (resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage || "[Image]", imageAtt.base64, imageAtt.mimeType); break;
+        case "groq":      reply = await callGroq           (resolvedApiKey, resolvedModel, systemPrompt, history, `[User sent an image. Image analysis unavailable.]\n\n${effectiveMessage}`.trim()); break;
+        case "openai":
+        default:          reply = await callOpenAIVision   (resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage || "[Image]", imageAtt.base64, imageAtt.mimeType); break;
       }
+    } else {
+      switch (resolvedProvider) {
+        case "anthropic": reply = await callAnthropic(resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage); break;
+        case "google":    reply = await callGoogle   (resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage); break;
+        case "groq":      reply = await callGroq     (resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage); break;
+        case "openai":
+        default:          reply = await callOpenAI   (resolvedApiKey, resolvedModel, systemPrompt, history, effectiveMessage); break;
+      }
+    }
+
+    // ── Tool call execution (shared engine) ──────────────────────────────────
+    const toolOwnerId = verifiedUserId ?? agentOwnerId;
+    const { reply: cleanedReply, results: toolCallResults } = await executeToolsInReply(
+      reply,
+      agentTools,
+      toolOwnerId,
+      getServiceClient()
+    );
+    reply = cleanedReply;
+    if (toolCallResults.length > 0) {
+      req.log.info({ count: toolCallResults.length }, "tool calls executed");
     }
     // ─────────────────────────────────────────────────────────────────────────
 
     req.log.info({ provider: resolvedProvider, model: resolvedModel, hasDocContext: docContext.length > 0 }, "chat completion successful");
+
+    // Increment agent daily counter for public chat
+    if (isPublicChat && agentId?.trim()) {
+      incrementAgentDailyCount(agentId.trim());
+    }
 
     // Increment message count for authenticated sessions
     if (userId?.trim()) {
@@ -703,6 +634,75 @@ router.post("/chat", async (req: Request, res: Response) => {
         resource_id: agentId?.trim() || undefined,
         req,
       });
+    }
+
+    // ── Persist conversation to inbox (public chat) ────────────────────
+    if (isPublicChat && agentId?.trim()) {
+      const clientIp = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
+      const sessionIdStr = sessionId?.trim() || clientIp;
+      const sb = getServiceClient();
+      if (sb) {
+        try {
+          // Check if conversation exists
+          const { data: existing } = await sb
+            .from("conversations")
+            .select("id, mode, owner_id, unread_count")
+            .eq("agent_id", agentId.trim())
+            .eq("channel", "web")
+            .eq("channel_conversation_id", sessionIdStr)
+            .maybeSingle();
+
+          let conversationId: string;
+
+          if (existing) {
+            conversationId = (existing as { id: string }).id;
+            // Only update mode if it was auto-locked from a previous limit
+            const needsModeReset = (existing as { mode: string }).mode === "human";
+            await sb.from("conversations").update({
+              last_message_at: new Date().toISOString(),
+              last_message_preview: reply.slice(0, 75),
+              unread_count: (existing as { unread_count: number }).unread_count + 1,
+              status: "active",
+              ...(needsModeReset ? { mode: "ai" } : {}),
+            }).eq("id", conversationId);
+          } else {
+            const { data: agent } = await sb
+              .from("agents")
+              .select("user_id, name")
+              .eq("id", agentId.trim())
+              .maybeSingle();
+            const ownerId = agent ? (agent as { user_id: string }).user_id : "";
+            const agentName = agent ? (agent as { name: string }).name : null;
+            const { data: newConv } = await sb
+              .from("conversations")
+              .insert({
+                agent_id: agentId.trim(),
+                agent_name: agentName,
+                owner_id: ownerId,
+                channel: "web",
+                channel_conversation_id: sessionIdStr,
+                customer_display: "Web visitor",
+                mode: "ai",
+                status: "active",
+                unread_count: 1,
+                last_message_at: new Date().toISOString(),
+                last_message_preview: reply.slice(0, 75),
+              })
+              .select("id")
+              .single();
+            conversationId = (newConv as { id: string }).id;
+          }
+
+          // Save both customer message and AI reply
+          await sb.from("messages").insert([
+            { conversation_id: conversationId, role: "customer", content: cleanMessage },
+            { conversation_id: conversationId, role: "ai", content: reply },
+          ]);
+        } catch (persistErr) {
+          req.log.error({ err: persistErr }, "failed to persist conversation to inbox");
+          // Non-fatal — chat already succeeded, customer already got their reply
+        }
+      }
     }
 
     res.json({ reply, toolCalls: toolCallResults.length > 0 ? toolCallResults : null });

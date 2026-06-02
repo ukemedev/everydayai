@@ -3,9 +3,11 @@ import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
-  { id: "home",     icon: "🏠", label: "Home",     path: "/dashboard" },
-  { id: "studio",   icon: "🎛️", label: "Studio",   path: "/studio"    },
-  { id: "settings", icon: "⚙️", label: "Settings", path: "/settings"  },
+  { id: "home",      icon: "🏠", label: "Home",      path: "/dashboard"  },
+  { id: "inbox",     icon: "💬", label: "Inbox",     path: "/inbox"      },
+  { id: "templates", icon: "📋", label: "Templates", path: "/templates"  },
+  { id: "studio",    icon: "🎛️", label: "Studio",    path: "/studio"     },
+  { id: "settings",  icon: "⚙️", label: "Settings",  path: "/settings"   },
 ];
 
 interface AppLayoutProps {
@@ -36,8 +38,8 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
 
   return (
     <div
-      className="flex min-h-screen w-full"
-      style={{ fontFamily: "'Inter', sans-serif", backgroundColor: "#0a0f1e" }}
+      className="flex h-screen w-full overflow-hidden"
+      style={{ fontFamily: "'Inter', sans-serif", backgroundColor: "var(--app-bg)" }}
     >
       {/* Mobile overlay backdrop */}
       {sidebarOpen && (
@@ -50,24 +52,32 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-screen w-60 flex flex-col border-r z-40 transition-transform duration-300 ease-in-out
+        className={`fixed top-0 left-0 h-full w-60 flex flex-col border-r z-40 transition-transform duration-300 ease-in-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
-        style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)" }}
+        style={{
+          backgroundColor: "var(--app-sidebar)",
+          borderColor: "var(--app-border)",
+        }}
       >
         {/* Logo + close */}
-        <div className="px-5 py-6 flex items-center justify-between">
-          <span className="font-bold text-lg tracking-tight text-white">EverydayAI</span>
+        <div className="px-5 py-6 flex items-center justify-between flex-shrink-0">
+          <span
+            className="font-bold text-lg tracking-tight"
+            style={{ color: "var(--app-text)" }}
+          >
+            EverydayAI
+          </span>
           <button
             className="md:hidden w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
             onClick={() => setSidebarOpen(false)}
-            style={{ color: "rgba(255,255,255,0.35)" }}
+            style={{ color: "var(--app-text-faint)" }}
           >
             ✕
           </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 flex flex-col gap-1">
+        <nav className="flex-1 px-3 flex flex-col gap-1 overflow-y-auto">
           {navItems.map((item) => {
             const active = isActive(item);
             return (
@@ -77,7 +87,7 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 text-left"
                 style={{
                   backgroundColor: active ? "rgba(59,91,252,0.15)" : "transparent",
-                  color: active ? "#3b5bfc" : "rgba(255,255,255,0.55)",
+                  color: active ? "#3b5bfc" : "var(--app-text-nav)",
                 }}
               >
                 <span className="text-base">{item.icon}</span>
@@ -89,13 +99,13 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
 
         {/* Footer */}
         <div
-          className="px-4 py-5 border-t flex flex-col gap-3"
-          style={{ borderColor: "rgba(255,255,255,0.05)" }}
+          className="px-4 py-5 border-t flex flex-col gap-3 flex-shrink-0"
+          style={{ borderColor: "var(--app-border-subtle)" }}
         >
           {userEmail && (
             <p
               className="text-xs truncate"
-              style={{ color: "rgba(255,255,255,0.35)" }}
+              style={{ color: "var(--app-text-faint)" }}
               title={userEmail}
             >
               {userEmail}
@@ -103,31 +113,46 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
           )}
           <button
             onClick={handleLogOut}
-            className="w-full py-2 rounded-lg text-sm font-medium transition-all duration-150"
-            style={{ color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.10)" }}
+            className="w-full py-2 rounded-lg text-sm font-medium transition-all duration-150 hover:opacity-80"
+            style={{
+              color: "var(--app-text-muted)",
+              border: "1px solid var(--app-logout-border)",
+            }}
           >
             Log Out
           </button>
         </div>
       </aside>
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col md:ml-60 min-h-screen">
+      {/* Main area — fills remaining space beside the sidebar on desktop */}
+      <div className="flex-1 flex flex-col overflow-hidden md:ml-60 min-w-0">
         {/* Mobile top bar */}
         <div
           className="md:hidden flex items-center gap-3 px-4 py-4 border-b flex-shrink-0"
-          style={{ backgroundColor: "#0d1117", borderColor: "rgba(255,255,255,0.05)" }}
+          style={{
+            backgroundColor: "var(--app-sidebar)",
+            borderColor: "var(--app-border)",
+          }}
         >
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-xl text-white"
+            className="text-xl"
+            style={{ color: "var(--app-text)" }}
           >
             ☰
           </button>
-          <span className="font-bold text-lg text-white">EverydayAI</span>
+          <span
+            className="font-bold text-lg"
+            style={{ color: "var(--app-text)" }}
+          >
+            EverydayAI
+          </span>
         </div>
 
-        {children}
+        {/* Page content — fills all remaining height, scrollable for normal pages */}
+        <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+          {children}
+        </div>
       </div>
     </div>
   );
