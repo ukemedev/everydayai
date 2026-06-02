@@ -291,12 +291,13 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     const deployOwnerId  = dep.user_id as string;
 
     // ── Load agent ──
-    const { data: agent } = await sb
+    const { data: agent, error: agentErr } = await sb
       .from("agents")
-      .select("model, instructions, user_id, name, status, input_capabilities")
+      .select("model, instructions, user_id, name, status")
       .eq("id", agentId)
       .maybeSingle();
 
+    if (agentErr) { logger.warn({ agentId, err: agentErr }, "DB error fetching agent for WhatsApp webhook"); return; }
     if (!agent) { logger.warn({ agentId }, "Agent not found for WhatsApp webhook"); return; }
     if ((agent.status as string) !== "live") { logger.warn({ agentId }, "Agent not live for WhatsApp webhook"); return; }
 
@@ -350,7 +351,7 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     setAiCooldown(agentId, customerId);
 
     // ── Download and process media attachments ──────────────────────────────
-    const caps = (agent.input_capabilities as { images?: boolean; voice?: boolean; files?: boolean } | null) ?? {};
+    const caps: { images?: boolean; voice?: boolean; files?: boolean } = {};
     let mediaText    = "";
     let imageBase64: string | null = null;
     let imageMime:   string | null = null;

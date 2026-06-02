@@ -403,12 +403,16 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     logger.info({ agentId, chatId }, "telegram webhook: deployment found, fetching agent");
 
-    const { data: agent } = await sb
+    const { data: agent, error: agentErr } = await sb
       .from("agents")
-      .select("model, instructions, user_id, status, input_capabilities")
+      .select("model, instructions, user_id, status")
       .eq("id", agentId)
       .maybeSingle();
 
+    if (agentErr) {
+      logger.error({ agentId, err: agentErr }, "telegram webhook: DB error fetching agent");
+      return;
+    }
     if (!agent) {
       logger.warn({ agentId }, "telegram webhook: agent not found in DB");
       return;
@@ -492,7 +496,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     setAiCooldown(agentId, customerId);
 
     // ── Download and process media attachments ──────────────────────────────
-    const caps = (agent.input_capabilities as { images?: boolean; voice?: boolean; files?: boolean } | null) ?? {};
+    const caps: { images?: boolean; voice?: boolean; files?: boolean } = {};
     const botToken = deployment.bot_token as string;
     let mediaText   = "";
     let imageBase64: string | null = null;
