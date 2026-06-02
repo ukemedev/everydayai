@@ -337,9 +337,9 @@ const STEPS = [
 
 function HowItWorks() {
   return (
-    <section id="how-it-works" className="py-24 px-4">
+    <section id="how-it-works" className="py-14 sm:py-24 px-4">
       <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-16">
+        <div className="text-center mb-10 sm:mb-16">
           <p className="text-sm font-medium mb-3" style={{ color: "#3b5bfc" }}>Simple process</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white">Up and running in minutes</h2>
           <p className="mt-4 text-white/50 max-w-md mx-auto">No technical knowledge needed. If you can use WhatsApp, you can build an AI agent.</p>
@@ -462,9 +462,9 @@ const FEATURES = [
 
 function Features() {
   return (
-    <section id="features" className="py-24 px-4" style={{ backgroundColor: "rgba(255,255,255,0.01)" }}>
+    <section id="features" className="py-14 sm:py-24 px-4" style={{ backgroundColor: "rgba(255,255,255,0.01)" }}>
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
+        <div className="text-center mb-10 sm:mb-16">
           <p className="text-sm font-medium mb-3" style={{ color: "#3b5bfc" }}>Everything included</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white">One platform, every channel</h2>
           <p className="mt-4 text-white/50 max-w-md mx-auto">Stop losing customers because you can't reply fast enough. Your AI agent never sleeps, never takes a break.</p>

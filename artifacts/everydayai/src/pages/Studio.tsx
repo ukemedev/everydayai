@@ -1247,7 +1247,7 @@ console.log(data.reply);`;
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+
                         </div>
 
                         {/* Right-side action */}
@@ -1402,7 +1402,7 @@ console.log(data.reply);`;
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+
                         </div>
 
                         {/* Right-side action */}
@@ -1561,7 +1561,7 @@ console.log(data.reply);`;
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+
                         </div>
                         {msgrLoadingDeployment ? (
                           <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />
@@ -1674,7 +1674,7 @@ console.log(data.reply);`;
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-white/35 mt-0.5">{s.desc}</p>
+
                         </div>
                         {igLoadingDeployment ? (
                           <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />

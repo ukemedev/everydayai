@@ -369,9 +369,18 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
 
   const oldPlan = (currentProfile as { plan?: string } | null)?.plan ?? "free";
 
+  const updatePayload: Record<string, unknown> = { plan };
+  // When upgrading to an unlimited plan, reset the monthly message counter
+  // so the user can immediately use their new allowance without hitting a
+  // stale count from a lower-tier plan.
+  if (plan === "business" || plan === "pro") {
+    updatePayload.message_count = 0;
+    updatePayload.message_count_reset_at = new Date().toISOString();
+  }
+
   const { error } = await sb
     .from("profiles")
-    .update({ plan })
+    .update(updatePayload)
     .eq("id", id);
 
   if (error) {
