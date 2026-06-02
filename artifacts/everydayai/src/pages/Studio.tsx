@@ -897,10 +897,12 @@ console.log(data.reply);`;
     setTgConnecting(true);
     setTgError("");
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated. Please log in again.");
       const webhookUrl = `${window.location.origin}/api/telegram/webhook/${agentId}`;
       const res = await fetch("/api/telegram/setup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({
           botToken: tgBotToken.trim(),
           botUsername: tgBotUsername.trim(),
@@ -925,7 +927,11 @@ console.log(data.reply);`;
   async function handleDisconnectTelegram() {
     setTgDisconnecting(true);
     try {
-      await fetch(`/api/telegram/deployment/${agentId}`, { method: "DELETE" });
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`/api/telegram/deployment/${agentId}`, {
+        method: "DELETE",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
       setTgDeployment(null);
       setTelegramOpen(false);
     } catch {
@@ -939,9 +945,11 @@ console.log(data.reply);`;
     setWaConnecting(true);
     setWaError("");
     try {
+      const { data: { session: waSess } } = await supabase.auth.getSession();
+      if (!waSess?.access_token) throw new Error("Not authenticated. Please log in again.");
       const res = await fetch("/api/whatsapp/setup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${waSess.access_token}` },
         body: JSON.stringify({
           agentId,
           phoneNumberId: waPhoneNumberId.trim(),
@@ -970,7 +978,11 @@ console.log(data.reply);`;
   async function handleDisconnectWhatsApp() {
     setWaDisconnecting(true);
     try {
-      await fetch(`/api/whatsapp/deployment/${agentId}`, { method: "DELETE" });
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`/api/whatsapp/deployment/${agentId}`, {
+        method: "DELETE",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
       setWaDeployment(null);
       setWaOpen(false);
     } catch {
@@ -984,9 +996,11 @@ console.log(data.reply);`;
     setMsgrConnecting(true);
     setMsgrError("");
     try {
+      const { data: { session: msgrSess } } = await supabase.auth.getSession();
+      if (!msgrSess?.access_token) throw new Error("Not authenticated. Please log in again.");
       const res = await fetch("/api/messenger/setup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${msgrSess.access_token}` },
         body: JSON.stringify({
           agentId,
           pageId:      msgrPageId.trim(),
@@ -1011,7 +1025,11 @@ console.log(data.reply);`;
   async function handleDisconnectMessenger() {
     setMsgrDisconnecting(true);
     try {
-      await fetch(`/api/messenger/deployment/${agentId}`, { method: "DELETE" });
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`/api/messenger/deployment/${agentId}`, {
+        method: "DELETE",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
       setMsgrDeployment(null);
       setMsgrOpen(false);
     } catch {
@@ -1025,9 +1043,11 @@ console.log(data.reply);`;
     setIgConnecting(true);
     setIgError("");
     try {
+      const { data: { session: igSess } } = await supabase.auth.getSession();
+      if (!igSess?.access_token) throw new Error("Not authenticated. Please log in again.");
       const res = await fetch("/api/instagram/setup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${igSess.access_token}` },
         body: JSON.stringify({
           agentId,
           igAccountId: igAccountId.trim(),
@@ -1052,7 +1072,11 @@ console.log(data.reply);`;
   async function handleDisconnectInstagram() {
     setIgDisconnecting(true);
     try {
-      await fetch(`/api/instagram/deployment/${agentId}`, { method: "DELETE" });
+      const { data: { session } } = await supabase.auth.getSession();
+      await fetch(`/api/instagram/deployment/${agentId}`, {
+        method: "DELETE",
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      });
       setIgDeployment(null);
       setIgOpen(false);
     } catch {
