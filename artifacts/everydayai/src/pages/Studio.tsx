@@ -1409,27 +1409,14 @@ console.log(data.reply);`;
                         {tgLoadingDeployment ? (
                           <div className="w-5 h-5 border-2 border-white/20 border-t-transparent rounded-full animate-spin flex-shrink-0" />
                         ) : tgDeployment ? (
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {tgDeployment.bot_username && (
-                              <a
-                                href={`https://t.me/${tgDeployment.bot_username}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/10 hover:border-white/20 transition-all"
-                                style={{ color: "rgba(255,255,255,0.6)" }}
-                              >
-                                Test Bot
-                              </a>
-                            )}
-                            <button
-                              onClick={() => void handleDisconnectTelegram()}
-                              disabled={tgDisconnecting}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
-                              style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171" }}
-                            >
-                              {tgDisconnecting ? "Disconnecting…" : "Disconnect"}
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => void handleDisconnectTelegram()}
+                            disabled={tgDisconnecting}
+                            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50"
+                            style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#f87171" }}
+                          >
+                            {tgDisconnecting ? "Disconnecting…" : "Disconnect"}
+                          </button>
                         ) : !telegramOpen ? (
                           <button
                             onClick={() => setTelegramOpen(true)}

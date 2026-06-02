@@ -400,6 +400,17 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     if (!agent) return;
     if ((agent.status as string) !== "live") {
       logger.warn({ agentId }, "Agent not live — Telegram webhook ignored");
+      await fetch(
+        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: "⚠️ This agent hasn't been published yet. The owner needs to publish it in the EverydayAI dashboard first.",
+          }),
+        }
+      );
       return;
     }
 
