@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# railway.toml — tells Railway how to build and run your app.
+#
+# Railway reads this file automatically when you connect your GitHub repo.
+# It finds the Dockerfile, builds it, and starts your app.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build]
+# Use our Dockerfile instead of Railway's auto-detection.
+# This gives us full control over how the image is built.
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# If the app crashes, Railway will restart it automatically (up to 10 times).
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

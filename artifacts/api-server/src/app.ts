@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import { v4 as uuidv4 } from "uuid";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { existsSync } from "fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -129,6 +130,20 @@ app.use(express.static(join(__dirname, "../public")));
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.use("/api", router);
+
+// ── SPA fallback ──────────────────────────────────────────────────────────────
+// In production, React handles routing client-side (e.g. /dashboard, /studio).
+// When a user visits one of those paths directly, the browser asks the server
+// for /dashboard — but only the API server exists. Without this fallback, the
+// server returns 404. With it, the server returns index.html and React's router
+// takes over. In development, Vite handles the frontend separately so this
+// file won't exist — that's fine, it just falls through to the next handler.
+const indexHtml = join(__dirname, "../public/index.html");
+if (existsSync(indexHtml)) {
+  app.get("*", (_req: Request, res: Response) => {
+    res.sendFile(indexHtml);
+  });
+}
 
 // ── CORS error handler ────────────────────────────────────────────────────────
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

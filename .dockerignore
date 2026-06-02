@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore — tells Docker what NOT to copy into the container.
+#
+# Think of it like .gitignore but for Docker builds.
+# Excluding these makes the build faster and the image smaller.
+# Docker doesn't need your local node_modules — it installs fresh ones inside.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Local dependency folders — Docker installs these fresh inside the container
+node_modules
+**/node_modules
+
+# Built output — Docker rebuilds these from source
+**/dist
+**/build
+**/.turbo
+
+# Environment files — NEVER bake secrets into a Docker image.
+# Set these as environment variables in Railway's dashboard instead.
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise
+.vscode
+.idea
+*.DS_Store
+Thumbs.db
+
+# Git history — not needed at runtime
+.git
+.gitignore
+
+# Replit-specific files
+.replit
+replit.nix
+.local
+.upm
+
+# Logs
+*.log
+logs/
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/__tests__
+
+# Docs (not needed in production)
+*.md
+!README.md
