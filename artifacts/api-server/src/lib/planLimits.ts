@@ -104,8 +104,9 @@ export async function checkMessageLimit(
     .eq("id", user_id)
     .single();
 
+  // Fail-open: if the DB query errors, don't block the user
   if (error || !data) {
-    return { allowed: false, current: 0, limit: PLAN_LIMITS.free.messagesPerMonth };
+    return { allowed: true, current: 0, limit: Infinity };
   }
 
   const plan    = (data.plan as string | null) ?? "free";
@@ -113,6 +114,11 @@ export async function checkMessageLimit(
   const current = (data.message_count as number | null) ?? 0;
   const email   = (data.email as string | null) ?? "";
   const name    = (data.full_name as string | null) ?? "";
+
+  // Business and pro plans have unlimited messages — skip the counter entirely
+  if (limits.messagesPerMonth === Infinity) {
+    return { allowed: true, current, limit: Infinity };
+  }
 
   // Reset counter if it's been more than 30 days since last reset
   const resetAt   = new Date((data.message_count_reset_at as string) ?? 0);
@@ -129,7 +135,7 @@ export async function checkMessageLimit(
   }
 
   const limit   = limits.messagesPerMonth;
-  const allowed = limit === Infinity || current < limit;
+  const allowed = current < limit;
 
   // Fire email if at 80% or 100% threshold
   if (email) {

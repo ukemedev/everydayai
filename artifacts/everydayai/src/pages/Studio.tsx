@@ -1268,7 +1268,7 @@ console.log(data.reply);`;
                             className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
                             style={{ backgroundColor: "#3b5bfc" }}
                           >
-                            Connect WhatsApp
+                            Connect
                           </button>
                         ) : (
                           <button
@@ -1436,7 +1436,7 @@ console.log(data.reply);`;
                             className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95"
                             style={{ backgroundColor: "#3b5bfc" }}
                           >
-                            Connect Telegram
+                            Connect
                           </button>
                         ) : (
                           <button
@@ -1575,7 +1575,7 @@ console.log(data.reply);`;
                           <button onClick={() => setMsgrOpen(true)}
                             className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95"
                             style={{ backgroundColor: "#3b5bfc" }}>
-                            Connect Messenger
+                            Connect
                           </button>
                         ) : (
                           <button onClick={() => { setMsgrOpen(false); setMsgrError(""); setMsgrPageId(""); setMsgrPageName(""); setMsgrAccessToken(""); setMsgrVerifyToken(""); }}
@@ -1688,7 +1688,7 @@ console.log(data.reply);`;
                           <button onClick={() => setIgOpen(true)}
                             className="flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95"
                             style={{ backgroundColor: "#3b5bfc" }}>
-                            Connect Instagram
+                            Connect
                           </button>
                         ) : (
                           <button onClick={() => { setIgOpen(false); setIgError(""); setIgAccountId(""); setIgUsername(""); setIgAccessToken(""); setIgVerifyToken(""); }}
