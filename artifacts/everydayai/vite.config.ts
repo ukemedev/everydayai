@@ -50,13 +50,35 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
+      // Force every import of react / react-dom to resolve to the same copy,
+      // preventing the "Cannot read properties of null (reading 'useState')"
+      // crash caused by duplicate React instances from pre-bundled chunks.
+      "react": path.resolve(import.meta.dirname, "node_modules/react"),
+      "react-dom": path.resolve(import.meta.dirname, "node_modules/react-dom"),
     },
+    dedupe: ["react", "react-dom"],
+  },
+  optimizeDeps: {
+    // Make Vite pre-bundle react/react-dom once and share that single copy
+    // across all dependencies (Radix UI, next-themes, framer-motion, etc.).
+    include: ["react", "react-dom"],
     dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Keep React in a single shared chunk so no two output chunks ever
+        // contain their own copy of React.
+        manualChunks(id) {
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "react-vendor";
+          }
+        },
+      },
+    },
   },
   server: {
     port,
