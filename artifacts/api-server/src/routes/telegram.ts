@@ -405,7 +405,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     const { data: agent, error: agentErr } = await sb
       .from("agents")
-      .select("model, instructions, user_id, status")
+      .select("model, instructions, user_id, status, name")
       .eq("id", agentId)
       .maybeSingle();
 
@@ -539,6 +539,91 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     }
 
     const effectiveText = [text, mediaText].filter(Boolean).join("\n\n") || "[Media message]";
+    const previewText   = effectiveText.slice(0, 75);
+
+    // ── Find or create conversation ──────────────────────────────────────────
+    // Every Telegram chat has a unique chatId. We use agentId + chatId as the
+    // key so each user gets their own conversation thread in the inbox.
+    const fromUser = update.message?.from;
+    const customerDisplay = fromUser?.username
+      ? `@${fromUser.username}`
+      : [fromUser?.first_name, fromUser?.last_name].filter(Boolean).join(" ") || `User ${chatId}`;
+    const agentName = (agent.name as string | null) ?? null;
+
+    const { data: existingConv } = await sb
+      .from("conversations")
+      .select("id, mode, unread_count")
+      .eq("agent_id", agentId)
+      .eq("channel", "telegram")
+      .eq("channel_conversation_id", String(chatId))
+      .maybeSingle();
+
+    let conversationId: string;
+    const currentMode = existingConv ? (existingConv as { mode: string }).mode : "ai";
+
+    if (existingConv) {
+      conversationId = (existingConv as { id: string }).id;
+      void sb.from("conversations").update({
+        last_message_at:      new Date().toISOString(),
+        last_message_preview: previewText,
+        unread_count:         (existingConv as { unread_count: number }).unread_count + 1,
+        status:               "active",
+      }).eq("id", conversationId);
+    } else {
+      const { data: newConv, error: convErr } = await sb
+        .from("conversations")
+        .insert({
+          agent_id:                agentId,
+          agent_name:              agentName,
+          owner_id:                ownerId,
+          channel:                 "telegram",
+          channel_conversation_id: String(chatId),
+          customer_display:        customerDisplay,
+          mode:                    "ai",
+          status:                  "active",
+          unread_count:            1,
+          last_message_at:         new Date().toISOString(),
+          last_message_preview:    previewText,
+        })
+        .select("id")
+        .single();
+      if (convErr || !newConv) {
+        logger.error({ err: convErr, agentId }, "telegram webhook: failed to create conversation");
+        return;
+      }
+      conversationId = (newConv as { id: string }).id;
+    }
+
+    // ── Save inbound customer message ────────────────────────────────────────
+    void sb.from("messages").insert({
+      conversation_id: conversationId,
+      role:            "customer",
+      content:         effectiveText,
+    });
+
+    // ── Human mode: skip AI, let the owner reply from inbox ─────────────────
+    if (currentMode === "human") {
+      logger.info({ agentId, chatId }, "telegram in human mode — AI reply suppressed");
+      return;
+    }
+
+    // ── Load conversation history (last 40 messages for context) ─────────────
+    const { data: historyRows } = await sb
+      .from("messages")
+      .select("role, content")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(40);
+
+    const conversationHistory: { role: "user" | "assistant"; content: string }[] = ((historyRows ?? []) as { role: string; content: string }[])
+      .reverse()
+      .filter((m) => m.role === "customer" || m.role === "ai")
+      .slice(0, -1) // exclude the message we just inserted
+      .map((m) => ({
+        role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant",
+        content: m.content,
+      }));
+
     // ─────────────────────────────────────────────────────────────────────────
 
     const { data: keyRow } = await sb
@@ -589,8 +674,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     let reply: string;
     try {
       reply = imageBase64 && imageMime
-        ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), [], effectiveText, imageBase64, imageMime)
-        : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), [], effectiveText);
+        ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText, imageBase64, imageMime)
+        : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText);
     } finally {
       // Always stop the typing indicator — even if the AI call throws
       clearInterval(typingInterval);
@@ -599,6 +684,17 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     // ── Execute any tool calls the AI emitted ──
     const { reply: cleanedReply } = await executeToolsInReply(reply!, agentTools, ownerId, sb);
     reply = cleanedReply;
+
+    // ── Save AI reply + update conversation preview ──────────────────────────
+    void sb.from("messages").insert({
+      conversation_id: conversationId,
+      role:            "ai",
+      content:         reply,
+    });
+    void sb.from("conversations").update({
+      last_message_at:      new Date().toISOString(),
+      last_message_preview: reply.slice(0, 75),
+    }).eq("id", conversationId);
 
     await fetch(
       `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
