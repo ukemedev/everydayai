@@ -45,9 +45,32 @@ async function sendChannelReply(channel: string, sessionKey: string, content: st
       break;
     }
 
-    case "telegram":
-      logger.warn({ channel }, "Telegram human-reply adapter not yet implemented");
+    case "telegram": {
+      const sb = getServiceClient();
+      if (!sb) { logger.warn({ agentId }, "Telegram reply: service client unavailable"); break; }
+
+      const { data: dep } = await sb
+        .from("telegram_deployments")
+        .select("bot_token")
+        .eq("agent_id", agentId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!dep) { logger.warn({ agentId }, "Telegram reply: no active deployment found"); break; }
+
+      const { decrypt: dec, isEncrypted: isEnc } = await import("../lib/encryption.js");
+      const rawToken = dep.bot_token as string;
+      const token    = isEnc(rawToken) ? dec(rawToken) : rawToken;
+
+      // sessionKey for Telegram is the chatId (stored as channel_conversation_id)
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ chat_id: sessionKey, text: content }),
+      });
+      logger.info({ agentId, chatId: sessionKey }, "Telegram human reply sent");
       break;
+    }
 
     case "messenger": {
       const sb = getServiceClient();

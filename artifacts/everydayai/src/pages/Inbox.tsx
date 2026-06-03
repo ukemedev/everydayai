@@ -105,7 +105,7 @@ export default function Inbox() {
     if (channelFilter !== "all") params.set("channel", channelFilter);
     if (modeFilter    !== "all") params.set("mode",    modeFilter);
     try {
-      const res  = await fetch(`/api/conversations?${params}`, { headers });
+      const res  = await fetch(`/api/conversations?${params}`, { headers, cache: "no-store" });
       const data = await res.json() as { conversations: Conversation[] };
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations);
@@ -123,7 +123,7 @@ export default function Inbox() {
     const headers = await getAuthHeader();
     if (!headers.Authorization) return;
     try {
-      const res  = await fetch(`/api/conversations/${convId}/messages`, { headers });
+      const res  = await fetch(`/api/conversations/${convId}/messages`, { headers, cache: "no-store" });
       const data = await res.json() as { conversation: Conversation; messages: Message[] };
       if (data.messages) {
         setMessages(data.messages);
