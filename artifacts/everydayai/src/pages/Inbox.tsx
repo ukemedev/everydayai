@@ -84,6 +84,7 @@ export default function Inbox() {
   const [selectedId,    setSelectedId]    = useState<string | null>(null);
   const [messages,      setMessages]      = useState<Message[]>([]);
   const [selectedConv,  setSelectedConv]  = useState<Conversation | null>(null);
+  const [statusFilter,  setStatusFilter]  = useState<"active" | "archived">("active");
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [modeFilter,    setModeFilter]    = useState<string>("all");
   const [loading,         setLoading]         = useState(true);
@@ -104,7 +105,7 @@ export default function Inbox() {
   const fetchConversations = useCallback(async () => {
     const headers = await getAuthHeader();
     if (!headers.Authorization) return;
-    const params = new URLSearchParams({ status: "active", limit: "50" });
+    const params = new URLSearchParams({ status: statusFilter, limit: "50" });
     if (channelFilter !== "all") params.set("channel", channelFilter);
     if (modeFilter    !== "all") params.set("mode",    modeFilter);
     try {
@@ -119,7 +120,7 @@ export default function Inbox() {
       }
     } catch { /* non-fatal */ }
     setLoading(false);
-  }, [channelFilter, modeFilter, selectedId]);
+  }, [statusFilter, channelFilter, modeFilter, selectedId]);
 
   // ── Fetch messages for selected conversation ───────────────────────────────
   const fetchMessages = useCallback(async (convId: string, isInitial = false): Promise<void> => {
@@ -262,6 +263,33 @@ export default function Inbox() {
     }
   }
 
+  // ── Unarchive conversation ─────────────────────────────────────────────────
+  async function unarchiveConversation(convId: string) {
+    const headers = await getAuthHeader();
+    await fetch(`/api/conversations/${convId}/archive`, {
+      method:  "PATCH",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body:    JSON.stringify({ archive: false }),
+    });
+    setConversations(prev => prev.filter(c => c.id !== convId));
+    if (selectedId === convId) {
+      setSelectedId(null);
+      setSelectedConv(null);
+      setMessages([]);
+      setMobileShowDetail(false);
+    }
+  }
+
+  // ── Switch status tab ──────────────────────────────────────────────────────
+  function switchStatusTab(tab: "active" | "archived") {
+    setStatusFilter(tab);
+    setSelectedId(null);
+    setSelectedConv(null);
+    setMessages([]);
+    setMobileShowDetail(false);
+    setLoading(true);
+  }
+
   const CHANNELS = ["all", "web", "whatsapp", "telegram", "messenger", "instagram"];
   const totalUnread = conversations.reduce((s, c) => s + c.unread_count, 0);
 
@@ -292,7 +320,7 @@ export default function Inbox() {
           <div className="px-4 pt-5 pb-3 border-b flex-shrink-0" style={{ borderColor: "var(--app-border)" }}>
             <div className="flex items-center gap-2 mb-3">
               <h1 className="text-base font-bold flex-1" style={{ color: "var(--app-text)" }}>Inbox</h1>
-              {totalUnread > 0 && (
+              {totalUnread > 0 && statusFilter === "active" && (
                 <span
                   className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full text-xs font-bold"
                   style={{ backgroundColor: "#3b5bfc", color: "#fff" }}
@@ -300,6 +328,22 @@ export default function Inbox() {
                   {totalUnread}
                 </span>
               )}
+            </div>
+
+            {/* Active / Archived tabs */}
+            <div className="flex gap-1 mb-3 p-0.5 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+              {(["active", "archived"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => switchStatusTab(tab)}
+                  className="flex-1 py-1.5 rounded-md text-xs font-medium transition-colors capitalize"
+                  style={statusFilter === tab
+                    ? { backgroundColor: "#3b5bfc", color: "#fff" }
+                    : { backgroundColor: "transparent", color: "var(--app-text-muted)" }}
+                >
+                  {tab === "active" ? "Active" : "Archived"}
+                </button>
+              ))}
             </div>
 
             {/* Channel filters */}
@@ -362,60 +406,81 @@ export default function Inbox() {
               conversations.map(conv => {
                 const isSelected = conv.id === selectedId;
                 return (
-                  <button
+                  <div
                     key={conv.id}
-                    onClick={() => selectConversation(conv)}
-                    className="w-full text-left px-4 py-3.5 border-b transition-colors flex gap-3 items-start active:opacity-70"
-                    style={{
-                      borderColor: "var(--app-border-subtle)",
-                      backgroundColor: isSelected ? "rgba(59,91,252,0.10)" : "transparent",
-                    }}
+                    className="border-b relative group"
+                    style={{ borderColor: "var(--app-border-subtle)" }}
                   >
-                    {/* Channel avatar */}
-                    <div
-                      className="w-10 h-10 rounded-2xl flex items-center justify-center text-base flex-shrink-0"
-                      style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+                    <button
+                      onClick={() => selectConversation(conv)}
+                      className="w-full text-left px-4 py-3.5 transition-colors flex gap-3 items-start active:opacity-70"
+                      style={{ backgroundColor: isSelected ? "rgba(59,91,252,0.10)" : "transparent" }}
                     >
-                      {CHANNEL_ICONS[conv.channel] ?? "💬"}
-                    </div>
+                      {/* Channel avatar */}
+                      <div
+                        className="w-10 h-10 rounded-2xl flex items-center justify-center text-base flex-shrink-0"
+                        style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+                      >
+                        {CHANNEL_ICONS[conv.channel] ?? "💬"}
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      {/* Name + time */}
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <span className="text-sm font-semibold truncate flex-1" style={{ color: "var(--app-text)" }}>
-                          {conv.customer_display ?? "Visitor"}
-                        </span>
-                        <span className="text-[10px] flex-shrink-0" style={{ color: "var(--app-text-faint)" }}>
-                          {timeAgo(conv.last_message_at)}
-                        </span>
-                        {conv.unread_count > 0 && (
-                          <span
-                            className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: "#3b5bfc" }}
-                          />
+                      <div className="flex-1 min-w-0 pr-6">
+                        {/* Name + time */}
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className="text-sm font-semibold truncate flex-1" style={{ color: "var(--app-text)" }}>
+                            {conv.customer_display ?? "Visitor"}
+                          </span>
+                          <span className="text-[10px] flex-shrink-0" style={{ color: "var(--app-text-faint)" }}>
+                            {timeAgo(conv.last_message_at)}
+                          </span>
+                          {conv.unread_count > 0 && statusFilter === "active" && (
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: "#3b5bfc" }}
+                            />
+                          )}
+                        </div>
+                        {/* Agent name */}
+                        <p className="text-[11px] truncate mb-0.5" style={{ color: "var(--app-text-faint)" }}>
+                          {conv.agent_name ?? conv.agent_id}
+                        </p>
+                        {/* Preview */}
+                        <p className="text-xs truncate" style={{ color: "var(--app-text-muted)" }}>
+                          {conv.last_message_preview ?? "—"}
+                        </p>
+                        {/* Mode badge */}
+                        {statusFilter === "active" && (
+                          <div className="mt-1.5">
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              style={conv.mode === "human"
+                                ? { backgroundColor: "rgba(234,179,8,0.15)", color: "#eab308" }
+                                : { backgroundColor: "rgba(59,91,252,0.12)", color: "#818cf8" }}
+                            >
+                              {conv.mode === "human" ? "👤 Human" : "🤖 AI"}
+                            </span>
+                          </div>
                         )}
                       </div>
-                      {/* Agent name */}
-                      <p className="text-[11px] truncate mb-0.5" style={{ color: "var(--app-text-faint)" }}>
-                        {conv.agent_name ?? conv.agent_id}
-                      </p>
-                      {/* Preview */}
-                      <p className="text-xs truncate" style={{ color: "var(--app-text-muted)" }}>
-                        {conv.last_message_preview ?? "—"}
-                      </p>
-                      {/* Mode badge */}
-                      <div className="mt-1.5">
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                          style={conv.mode === "human"
-                            ? { backgroundColor: "rgba(234,179,8,0.15)", color: "#eab308" }
-                            : { backgroundColor: "rgba(59,91,252,0.12)", color: "#818cf8" }}
-                        >
-                          {conv.mode === "human" ? "👤 Human" : "🤖 AI"}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+
+                    {/* Archive / Unarchive button — appears on hover */}
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (statusFilter === "archived") {
+                          void unarchiveConversation(conv.id);
+                        } else {
+                          void archiveConversation(conv.id);
+                        }
+                      }}
+                      className="absolute right-3 top-3.5 opacity-0 group-hover:opacity-100 transition-opacity px-1.5 py-0.5 rounded text-[10px] font-medium"
+                      style={{ backgroundColor: "rgba(255,255,255,0.08)", color: "var(--app-text-muted)" }}
+                      title={statusFilter === "archived" ? "Restore to Active" : "Archive"}
+                    >
+                      {statusFilter === "archived" ? "Restore" : "Archive"}
+                    </button>
+                  </div>
                 );
               })
             )}
