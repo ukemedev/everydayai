@@ -440,6 +440,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const provider = getProviderForModel(model);
     const ownerId = (agent.user_id as string) || (deployment.user_id as string);
 
+    logger.info({ agentId, chatId, ownerId, agentUserId: agent.user_id, deploymentUserId: deployment.user_id }, "telegram webhook: resolved ownerId");
+
     // Shorthand so every silent exit can tell the user why — no more black holes
     const tgSend = (msg: string) =>
       fetch(`https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`, {
@@ -566,6 +568,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
         last_message_preview: previewText,
         unread_count:         (existingConv as { unread_count: number }).unread_count + 1,
         status:               "active",
+        owner_id:             ownerId,   // self-heal if owner_id was wrong
       }).eq("id", conversationId);
     } else {
       const { data: newConv, error: convErr } = await sb
