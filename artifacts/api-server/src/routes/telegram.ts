@@ -481,7 +481,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
         body: JSON.stringify({ chat_id: chatId, text: msg }),
       }).catch(() => {});
 
-    // ── MESSAGE LIMITS (same as public chat) ──
+    // ── IP rate limit — network-level spam guard (always applies) ───────────
     const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
     const ipCheck = checkIpRateLimit(clientIp);
     if (!ipCheck.allowed) {
@@ -489,42 +489,6 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       void tgSend("⚠️ Too many requests from your network. Please wait a moment and try again.");
       return;
     }
-
-    const ownerPlan = await getUserPlan(ownerId).catch(() => "free");
-    const dailyCheck = checkAgentDailyLimit(agentId, ownerPlan);
-    if (!dailyCheck.allowed) {
-      logger.warn({ agentId, ownerPlan, dailyCount: dailyCheck.count }, "telegram agent daily limit reached");
-      void tgSend("⚠️ This agent has reached its daily message limit. Please try again tomorrow.");
-      return;
-    }
-    incrementAgentDailyCount(agentId);
-
-    // ── PER-CUSTOMER ANTI-SPAM ──
-    const customerId = String(chatId);
-    const customerDaily = checkCustomerDailyLimit(agentId, customerId, ownerPlan);
-    if (!customerDaily.allowed) {
-      logger.warn({ agentId, customerId, count: customerDaily.count }, "telegram customer daily limit reached");
-      void tgSend(CUSTOMER_DAILY_LIMIT_MESSAGE);
-      return;
-    }
-    const burstCheck = checkBurstLimit(agentId, customerId);
-    if (!burstCheck.allowed) {
-      logger.warn({ agentId, customerId, count: burstCheck.count }, "telegram burst limit hit");
-      void tgSend(BURST_LIMIT_MESSAGE);
-      return;
-    }
-    if (isDuplicateMessage(agentId, customerId, text)) {
-      logger.warn({ agentId, customerId }, "telegram duplicate message");
-      void tgSend(DUPLICATE_MESSAGE);
-      return;
-    }
-    if (isAiCooldownActive(agentId, customerId)) {
-      logger.warn({ agentId, customerId }, "telegram AI cooldown active");
-      void tgSend(COOLDOWN_MESSAGE);
-      return;
-    }
-    incrementCustomerDailyCount(agentId, customerId);
-    setAiCooldown(agentId, customerId);
 
     // ── Download and process media attachments ──────────────────────────────
     const caps: { images?: boolean; voice?: boolean; files?: boolean } = {};
@@ -573,8 +537,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const previewText   = effectiveText.slice(0, 75);
 
     // ── Find or create conversation ──────────────────────────────────────────
-    // Every Telegram chat has a unique chatId. We use agentId + chatId as the
-    // key so each user gets their own conversation thread in the inbox.
+    // Moved BEFORE AI limits — we need to know the conversation mode first.
+    // Human-mode conversations must NOT burn AI quota or set the cooldown.
     const fromUser = update.message?.from;
     const customerDisplay = fromUser?.username
       ? `@${fromUser.username}`
@@ -594,13 +558,12 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     if (existingConv) {
       conversationId = (existingConv as { id: string }).id;
-      // Awaited — metadata update must succeed so the inbox preview stays fresh
       await sb.from("conversations").update({
         last_message_at:      new Date().toISOString(),
         last_message_preview: previewText,
         unread_count:         (existingConv as { unread_count: number }).unread_count + 1,
         status:               "active",
-        owner_id:             ownerId,   // self-heal if owner_id was wrong
+        owner_id:             ownerId,
       }).eq("id", conversationId);
     } else {
       const { data: newConv, error: convErr } = await sb
@@ -643,7 +606,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       }
     }
 
-    // ── Save inbound customer message ────────────────────────────────────────
+    // ── Save inbound customer message (always, regardless of mode) ───────────
     const { error: msgInsertErr } = await sb.from("messages").insert({
       conversation_id: conversationId,
       role:            "customer",
@@ -655,17 +618,53 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       logger.info({ conversationId, agentId }, "telegram webhook: customer message saved");
     }
 
-    // ── Human mode: skip AI, let the owner reply from inbox ─────────────────
+    // ── Human mode: save message, notify customer, done — no AI limits set ──
     if (currentMode === "human") {
       logger.info({ agentId, chatId }, "telegram in human mode — AI reply suppressed");
       void tgSend("✋ Your message was received. A human agent will reply to you shortly.");
       return;
     }
 
+    // ── AI-only limits (only charged when AI actually replies) ───────────────
+    // These run AFTER the human mode check so switching to human and back
+    // never burns AI quota or leaves a cooldown that blocks the next AI reply.
+    const customerId = String(chatId);
+    const ownerPlan = await getUserPlan(ownerId).catch(() => "free");
+
+    const dailyCheck = checkAgentDailyLimit(agentId, ownerPlan);
+    if (!dailyCheck.allowed) {
+      logger.warn({ agentId, ownerPlan, dailyCount: dailyCheck.count }, "telegram agent daily limit reached");
+      void tgSend("⚠️ This agent has reached its daily message limit. Please try again tomorrow.");
+      return;
+    }
+    incrementAgentDailyCount(agentId);
+
+    const customerDaily = checkCustomerDailyLimit(agentId, customerId, ownerPlan);
+    if (!customerDaily.allowed) {
+      logger.warn({ agentId, customerId, count: customerDaily.count }, "telegram customer daily limit reached");
+      void tgSend(CUSTOMER_DAILY_LIMIT_MESSAGE);
+      return;
+    }
+    const burstCheck = checkBurstLimit(agentId, customerId);
+    if (!burstCheck.allowed) {
+      logger.warn({ agentId, customerId, count: burstCheck.count }, "telegram burst limit hit");
+      void tgSend(BURST_LIMIT_MESSAGE);
+      return;
+    }
+    if (isDuplicateMessage(agentId, customerId, text)) {
+      logger.warn({ agentId, customerId }, "telegram duplicate message");
+      void tgSend(DUPLICATE_MESSAGE);
+      return;
+    }
+    if (isAiCooldownActive(agentId, customerId)) {
+      logger.warn({ agentId, customerId }, "telegram AI cooldown active");
+      void tgSend(COOLDOWN_MESSAGE);
+      return;
+    }
+    incrementCustomerDailyCount(agentId, customerId);
+    setAiCooldown(agentId, customerId);
+
     // ── Per-customer in-flight guard ─────────────────────────────────────────
-    // If the same customer sends 3 rapid messages, only the first is processed
-    // by the AI concurrently — the rest are queued by the burst limiter above.
-    // This guard catches the edge case where burst check passes but AI is mid-call.
     const inFlightKey = `${agentId}:${String(chatId)}`;
     if (_inFlight.has(inFlightKey)) {
       logger.warn({ agentId, chatId }, "telegram webhook: AI call already in-flight for this customer — skipping duplicate");
