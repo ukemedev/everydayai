@@ -596,11 +596,16 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     }
 
     // ── Save inbound customer message ────────────────────────────────────────
-    void sb.from("messages").insert({
+    const { error: msgInsertErr } = await sb.from("messages").insert({
       conversation_id: conversationId,
       role:            "customer",
       content:         effectiveText,
     });
+    if (msgInsertErr) {
+      logger.error({ err: msgInsertErr, conversationId, agentId }, "telegram webhook: FAILED to save customer message");
+    } else {
+      logger.info({ conversationId, agentId }, "telegram webhook: customer message saved");
+    }
 
     // ── Human mode: skip AI, let the owner reply from inbox ─────────────────
     if (currentMode === "human") {
@@ -688,12 +693,17 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     reply = cleanedReply;
 
     // ── Save AI reply + update conversation preview ──────────────────────────
-    void sb.from("messages").insert({
+    const { error: aiMsgErr } = await sb.from("messages").insert({
       conversation_id: conversationId,
       role:            "ai",
       content:         reply,
     });
-    void sb.from("conversations").update({
+    if (aiMsgErr) {
+      logger.error({ err: aiMsgErr, conversationId, agentId }, "telegram webhook: FAILED to save AI reply");
+    } else {
+      logger.info({ conversationId, agentId }, "telegram webhook: AI reply saved");
+    }
+    await sb.from("conversations").update({
       last_message_at:      new Date().toISOString(),
       last_message_preview: reply.slice(0, 75),
     }).eq("id", conversationId);
