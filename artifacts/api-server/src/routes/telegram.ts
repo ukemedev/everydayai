@@ -26,6 +26,29 @@ function getWebhookSecret(agentId: string): string {
   return createHmac("sha256", secret).update(agentId).digest("hex").slice(0, 64);
 }
 
+// ── Deduplication: ignore Telegram retries ────────────────────────────────────
+// Telegram retries a webhook if it doesn't receive 200 within 60 s.
+// We respond 200 immediately but processing takes longer, so we deduplicate
+// by update_id to avoid double-processing / double-replying.
+const _processedUpdates = new Map<number, number>(); // updateId → timestamp ms
+const _DEDUP_TTL = 10 * 60 * 1000; // keep IDs for 10 min
+function _isRetry(updateId: number | undefined): boolean {
+  if (updateId === undefined) return false;
+  const now = Date.now();
+  // Purge expired entries (keep Map lean)
+  for (const [id, ts] of _processedUpdates) {
+    if (now - ts > _DEDUP_TTL) _processedUpdates.delete(id);
+  }
+  if (_processedUpdates.has(updateId)) return true;
+  _processedUpdates.set(updateId, now);
+  return false;
+}
+
+// ── Per-customer in-flight guard ──────────────────────────────────────────────
+// Prevents the same customer sending 3 messages in 2 seconds and generating
+// 3 concurrent AI calls for the same conversation.
+const _inFlight = new Set<string>(); // key: `${agentId}:${chatId}`
+
 const router = Router();
 
 const _require = createRequire(import.meta.url);
@@ -349,6 +372,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
   }
 
   const update = req.body as {
+    update_id?: number;
     message?: {
       chat?: { id?: number | string };
       text?: string;
@@ -358,7 +382,14 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     };
   };
 
+  // Always acknowledge immediately — Telegram retries if it waits >60 s for 200
   res.json({ ok: true });
+
+  // ── Deduplicate Telegram retries ─────────────────────────────────────────
+  if (_isRetry(update.update_id)) {
+    logger.warn({ agentId, updateId: update.update_id }, "telegram webhook: duplicate update_id — ignoring retry");
+    return;
+  }
 
   const chatId    = update.message?.chat?.id;
   const rawText   = update.message?.text ?? "";
@@ -563,7 +594,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     if (existingConv) {
       conversationId = (existingConv as { id: string }).id;
-      void sb.from("conversations").update({
+      // Awaited — metadata update must succeed so the inbox preview stays fresh
+      await sb.from("conversations").update({
         last_message_at:      new Date().toISOString(),
         last_message_preview: previewText,
         unread_count:         (existingConv as { unread_count: number }).unread_count + 1,
@@ -588,11 +620,27 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
         })
         .select("id")
         .single();
+
       if (convErr || !newConv) {
-        logger.error({ err: convErr, agentId }, "telegram webhook: failed to create conversation");
-        return;
+        // Race condition: two simultaneous messages from the same user both tried
+        // to INSERT — one won. Re-SELECT to find the winner's row.
+        const { data: raceConv } = await sb
+          .from("conversations")
+          .select("id")
+          .eq("agent_id", agentId)
+          .eq("channel", "telegram")
+          .eq("channel_conversation_id", String(chatId))
+          .maybeSingle();
+
+        if (!raceConv) {
+          logger.error({ err: convErr, agentId }, "telegram webhook: failed to create or find conversation");
+          return;
+        }
+        logger.info({ agentId, conversationId: raceConv.id }, "telegram webhook: race condition resolved — using existing conversation");
+        conversationId = (raceConv as { id: string }).id;
+      } else {
+        conversationId = (newConv as { id: string }).id;
       }
-      conversationId = (newConv as { id: string }).id;
     }
 
     // ── Save inbound customer message ────────────────────────────────────────
@@ -613,6 +661,18 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       void tgSend("✋ Your message was received. A human agent will reply to you shortly.");
       return;
     }
+
+    // ── Per-customer in-flight guard ─────────────────────────────────────────
+    // If the same customer sends 3 rapid messages, only the first is processed
+    // by the AI concurrently — the rest are queued by the burst limiter above.
+    // This guard catches the edge case where burst check passes but AI is mid-call.
+    const inFlightKey = `${agentId}:${String(chatId)}`;
+    if (_inFlight.has(inFlightKey)) {
+      logger.warn({ agentId, chatId }, "telegram webhook: AI call already in-flight for this customer — skipping duplicate");
+      void tgSend("⏳ Still processing your last message. Please wait a moment.");
+      return;
+    }
+    _inFlight.add(inFlightKey);
 
     // ── Load conversation history (last 40 messages for context) ─────────────
     const { data: historyRows } = await sb
@@ -683,10 +743,20 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       reply = imageBase64 && imageMime
         ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText, imageBase64, imageMime)
         : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText);
+    } catch (aiErr) {
+      // AI provider failed (rate limited, down, etc.) — tell the customer gracefully
+      clearInterval(typingInterval);
+      _inFlight.delete(inFlightKey);
+      logger.error({ err: aiErr, agentId, provider }, "telegram webhook: AI call failed");
+      void tgSend("⚠️ I'm having trouble reaching the AI right now. Please try again in a moment.");
+      return;
     } finally {
-      // Always stop the typing indicator — even if the AI call throws
+      // Always stop the typing indicator
       clearInterval(typingInterval);
     }
+
+    // Always release the in-flight lock once AI has responded
+    _inFlight.delete(inFlightKey);
 
     // ── Execute any tool calls the AI emitted ──
     const { reply: cleanedReply } = await executeToolsInReply(reply!, agentTools, ownerId, sb);
@@ -719,6 +789,9 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     logger.info({ agentId, chatId, toolCount: agentTools.length }, "telegram webhook reply sent");
   } catch (err) {
+    // Unexpected error in outer handler — release in-flight lock and log
+    const inFlightKey = `${agentId}:${String(chatId ?? "unknown")}`;
+    _inFlight.delete(inFlightKey);
     logger.error({ err, agentId }, "telegram webhook handler error");
   }
 });
