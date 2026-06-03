@@ -440,11 +440,20 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const provider = getProviderForModel(model);
     const ownerId = (agent.user_id as string) || (deployment.user_id as string);
 
+    // Shorthand so every silent exit can tell the user why — no more black holes
+    const tgSend = (msg: string) =>
+      fetch(`https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: msg }),
+      }).catch(() => {});
+
     // ── MESSAGE LIMITS (same as public chat) ──
     const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
     const ipCheck = checkIpRateLimit(clientIp);
     if (!ipCheck.allowed) {
       logger.warn({ ip: clientIp, agentId }, "telegram IP rate limit hit");
+      void tgSend("⚠️ Too many requests from your network. Please wait a moment and try again.");
       return;
     }
 
@@ -452,6 +461,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const dailyCheck = checkAgentDailyLimit(agentId, ownerPlan);
     if (!dailyCheck.allowed) {
       logger.warn({ agentId, ownerPlan, dailyCount: dailyCheck.count }, "telegram agent daily limit reached");
+      void tgSend("⚠️ This agent has reached its daily message limit. Please try again tomorrow.");
       return;
     }
     incrementAgentDailyCount(agentId);
@@ -461,35 +471,23 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const customerDaily = checkCustomerDailyLimit(agentId, customerId, ownerPlan);
     if (!customerDaily.allowed) {
       logger.warn({ agentId, customerId, count: customerDaily.count }, "telegram customer daily limit reached");
-      await fetch(
-        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: CUSTOMER_DAILY_LIMIT_MESSAGE }) },
-      );
+      void tgSend(CUSTOMER_DAILY_LIMIT_MESSAGE);
       return;
     }
     const burstCheck = checkBurstLimit(agentId, customerId);
     if (!burstCheck.allowed) {
       logger.warn({ agentId, customerId, count: burstCheck.count }, "telegram burst limit hit");
-      await fetch(
-        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: BURST_LIMIT_MESSAGE }) },
-      );
+      void tgSend(BURST_LIMIT_MESSAGE);
       return;
     }
     if (isDuplicateMessage(agentId, customerId, text)) {
       logger.warn({ agentId, customerId }, "telegram duplicate message");
-      await fetch(
-        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: DUPLICATE_MESSAGE }) },
-      );
+      void tgSend(DUPLICATE_MESSAGE);
       return;
     }
     if (isAiCooldownActive(agentId, customerId)) {
       logger.warn({ agentId, customerId }, "telegram AI cooldown active");
-      await fetch(
-        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: COOLDOWN_MESSAGE }) },
-      );
+      void tgSend(COOLDOWN_MESSAGE);
       return;
     }
     incrementCustomerDailyCount(agentId, customerId);
@@ -604,6 +602,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     // ── Human mode: skip AI, let the owner reply from inbox ─────────────────
     if (currentMode === "human") {
       logger.info({ agentId, chatId }, "telegram in human mode — AI reply suppressed");
+      void tgSend("✋ Your message was received. A human agent will reply to you shortly.");
       return;
     }
 
