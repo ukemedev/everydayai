@@ -86,10 +86,13 @@ export default function Inbox() {
   const [selectedConv,  setSelectedConv]  = useState<Conversation | null>(null);
   const [channelFilter, setChannelFilter] = useState<string>("all");
   const [modeFilter,    setModeFilter]    = useState<string>("all");
-  const [loading,       setLoading]       = useState(true);
-  const [replyText,     setReplyText]     = useState("");
-  const [sending,       setSending]       = useState(false);
-  const [togglingMode,  setTogglingMode]  = useState(false);
+  const [loading,         setLoading]         = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messagesError,   setMessagesError]   = useState<string | null>(null);
+  const [replyText,       setReplyText]       = useState("");
+  const [sending,         setSending]         = useState(false);
+  const [replyError,      setReplyError]      = useState<string | null>(null);
+  const [togglingMode,    setTogglingMode]    = useState(false);
 
   // Mobile: track whether detail panel is showing
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
@@ -119,17 +122,30 @@ export default function Inbox() {
   }, [channelFilter, modeFilter, selectedId]);
 
   // ── Fetch messages for selected conversation ───────────────────────────────
-  const fetchMessages = useCallback(async (convId: string): Promise<void> => {
+  const fetchMessages = useCallback(async (convId: string, isInitial = false): Promise<void> => {
     const headers = await getAuthHeader();
-    if (!headers.Authorization) return;
+    if (!headers.Authorization) {
+      if (isInitial) setMessagesError("Session expired — please refresh the page.");
+      return;
+    }
+    if (isInitial) setLoadingMessages(true);
     try {
       const res  = await fetch(`/api/conversations/${convId}/messages`, { headers, cache: "no-store" });
+      if (!res.ok) {
+        if (isInitial) setMessagesError(`Failed to load messages (${res.status}). Try selecting the conversation again.`);
+        return;
+      }
       const data = await res.json() as { conversation: Conversation; messages: Message[] };
       if (data.messages) {
         setMessages(data.messages);
-        setSelectedConv(data.conversation);
+        setMessagesError(null);
       }
-    } catch { /* non-fatal */ }
+      if (data.conversation) setSelectedConv(data.conversation);
+    } catch {
+      if (isInitial) setMessagesError("Network error loading messages. Check your connection.");
+    } finally {
+      if (isInitial) setLoadingMessages(false);
+    }
   }, []);
 
   // ── Initial load + polling ────────────────────────────────────────────────
@@ -141,7 +157,7 @@ export default function Inbox() {
 
   useEffect(() => {
     if (!selectedId) return;
-    void fetchMessages(selectedId);
+    void fetchMessages(selectedId, true);
     const t = setInterval(() => { void fetchMessages(selectedId); }, 5000);
     return () => clearInterval(t);
   }, [selectedId, fetchMessages]);
@@ -156,7 +172,9 @@ export default function Inbox() {
     setSelectedId(conv.id);
     setSelectedConv(conv);
     setMessages([]);
+    setMessagesError(null);
     setReplyText("");
+    setReplyError(null);
     setMobileShowDetail(true);
     setConversations(prev => prev.map(c => c.id === conv.id ? { ...c, unread_count: 0 } : c));
   }
@@ -194,6 +212,7 @@ export default function Inbox() {
     if (!selectedConv || !replyText.trim() || sending) return;
     const text = replyText.trim();
     setSending(true);
+    setReplyError(null);
     setReplyText("");
     const optimistic: Message = {
       id: crypto.randomUUID(), role: "human", content: text, created_at: new Date().toISOString(),
@@ -201,12 +220,23 @@ export default function Inbox() {
     setMessages(prev => [...prev, optimistic]);
     try {
       const headers = await getAuthHeader();
-      await fetch(`/api/conversations/${selectedConv.id}/reply`, {
+      const res = await fetch(`/api/conversations/${selectedConv.id}/reply`, {
         method:  "POST",
         headers: { ...headers, "Content-Type": "application/json" },
         body:    JSON.stringify({ content: text }),
       });
-    } catch { /* non-fatal */ } finally {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        setReplyError(err.error ?? `Failed to send (${res.status}). Try again.`);
+        // Roll back optimistic message
+        setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+        setReplyText(text);
+      }
+    } catch {
+      setReplyError("Network error. Check your connection and try again.");
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id));
+      setReplyText(text);
+    } finally {
       setSending(false);
     }
   }
@@ -484,9 +514,26 @@ export default function Inbox() {
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
-                {messages.length === 0 ? (
+                {messagesError ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                    <span className="text-3xl">⚠️</span>
+                    <p className="text-sm font-medium" style={{ color: "var(--app-text)" }}>Couldn't load messages</p>
+                    <p className="text-xs leading-relaxed" style={{ color: "var(--app-text-muted)" }}>{messagesError}</p>
+                    <button
+                      onClick={() => { if (selectedId) void fetchMessages(selectedId, true); }}
+                      className="mt-1 px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+                      style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#818cf8" }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : loadingMessages ? (
                   <div className="flex-1 flex items-center justify-center">
                     <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <p className="text-xs" style={{ color: "var(--app-text-faint)" }}>No messages yet</p>
                   </div>
                 ) : (
                   messages.map(msg => {
@@ -539,6 +586,15 @@ export default function Inbox() {
                 className="flex-shrink-0 px-4 py-3 border-t"
                 style={{ backgroundColor: "var(--app-sidebar)", borderColor: "var(--app-border)" }}
               >
+                {replyError && (
+                  <div
+                    className="mb-2 px-3 py-2 rounded-lg text-xs flex items-start gap-2"
+                    style={{ backgroundColor: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.20)", color: "#f87171" }}
+                  >
+                    <span className="flex-shrink-0">⚠️</span>
+                    <span>{replyError}</span>
+                  </div>
+                )}
                 {selectedConv.mode === "ai" ? (
                   <div
                     className="rounded-xl px-4 py-3 flex items-center gap-3"

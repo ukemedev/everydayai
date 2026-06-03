@@ -143,10 +143,11 @@ router.get("/conversations", async (req: Request, res: Response) => {
 
   const { data, error, count } = await query;
   if (error) {
-    req.log.error({ err: error }, "failed to list conversations");
+    req.log.error({ err: error, userId }, "failed to list conversations");
     res.status(500).json({ error: "Failed to load conversations" });
     return;
   }
+  req.log.info({ userId, count: count ?? 0, returned: (data ?? []).length, status, channel: channel ?? "all" }, "conversations listed");
   res.json({ conversations: data ?? [], total: count ?? 0, limit: parsedLimit, offset: parsedOffset });
 });
 
