@@ -4,27 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+// PORT and BASE_PATH are only needed at dev/preview runtime, not at build time.
+// We use safe defaults so Railway's build step never crashes.
+const port     = Number(process.env.PORT)      || 5000;
+const basePath = process.env.BASE_PATH         || "/";
 
 export default defineConfig({
   base: basePath,
@@ -50,28 +33,21 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
       "@assets": path.resolve(import.meta.dirname, "..", "..", "attached_assets"),
-      // Force every import of react / react-dom to resolve to the same copy,
-      // preventing the "Cannot read properties of null (reading 'useState')"
-      // crash caused by duplicate React instances from pre-bundled chunks.
-      "react": path.resolve(import.meta.dirname, "node_modules/react"),
+      "react":     path.resolve(import.meta.dirname, "node_modules/react"),
       "react-dom": path.resolve(import.meta.dirname, "node_modules/react-dom"),
     },
     dedupe: ["react", "react-dom"],
   },
   optimizeDeps: {
-    // Make Vite pre-bundle react/react-dom once and share that single copy
-    // across all dependencies (Radix UI, next-themes, framer-motion, etc.).
     include: ["react", "react-dom"],
-    dedupe: ["react", "react-dom"],
+    dedupe:  ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir:     path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        // Keep React in a single shared chunk so no two output chunks ever
-        // contain their own copy of React.
         manualChunks(id) {
           if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
             return "react-vendor";
@@ -85,9 +61,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
-    fs: {
-      strict: true,
-    },
+    fs: { strict: true },
     proxy: {
       "/api": {
         target: `http://localhost:${process.env.API_PORT ?? 3000}`,
