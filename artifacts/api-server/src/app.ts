@@ -140,7 +140,7 @@ app.use("/api", router);
 // file won't exist — that's fine, it just falls through to the next handler.
 const indexHtml = join(__dirname, "../public/index.html");
 if (existsSync(indexHtml)) {
-  app.get("*", (_req: Request, res: Response) => {
+  app.get("*path", (_req: Request, res: Response) => {
     res.sendFile(indexHtml);
   });
 }
