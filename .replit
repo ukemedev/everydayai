@@ -4,10 +4,6 @@ modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 router = "application"
 deploymentTarget = "autoscale"
 
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
-
 [workflows]
 runButton = "Project"
 
@@ -18,7 +14,20 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
+args = "Backend"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
 args = "Frontend"
+
+[[workflows.workflow]]
+name = "Backend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server run dev"
+waitForPort = 8080
 
 [[workflows.workflow]]
 name = "Frontend"
@@ -31,14 +40,6 @@ outputType = "webview"
 task = "shell.exec"
 args = "pnpm --filter @workspace/everydayai run dev"
 waitForPort = 5000
-
-[agent]
-stack = "BEST_EFFORT_FALLBACK"
-expertMode = true
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 20000
 
 [[ports]]
 localPort = 3000
@@ -57,36 +58,8 @@ localPort = 8081
 externalPort = 8081
 
 [[ports]]
-localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 8083
-externalPort = 3003
-
-[[ports]]
-localPort = 8084
-externalPort = 3002
-
-[[ports]]
-localPort = 8085
-externalPort = 4200
-
-[[ports]]
-localPort = 8086
-externalPort = 5173
-
-[[ports]]
-localPort = 8087
-externalPort = 6800
-
-[[ports]]
-localPort = 8088
-externalPort = 5000
-
-[[ports]]
 localPort = 25059
-externalPort = 3000
+externalPort = 3001
 
 [userenv]
 
