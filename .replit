@@ -76,3 +76,7 @@ ENCRYPTION_KEY = "6ecb6491364f6033a38c6f196029e883"
 
 [nix]
 channel = "stable-25_05"
+packages = ["psmisc"]
+
+[agent]
+expertMode = true
