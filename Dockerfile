@@ -21,7 +21,7 @@ FROM node:24-slim
 
 # corepack is Node's built-in tool for managing package managers.
 # This activates pnpm without installing it separately.
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
 
