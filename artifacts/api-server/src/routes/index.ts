@@ -29,7 +29,7 @@ import {
   publicPollingLimiter,
   publicAgentInfoLimiter,
   deployLimiter,
-} from "../middleware/rateLimiter";
+} from "../middlewares/rateLimiter";
 import { requireAuth } from "../middleware/auth";
 
 const router: IRouter = Router();
