@@ -1,0 +1,102 @@
+# ─── ci.yml ──────────────────────────────────────────────────────
+# EverydayAI — Continuous Integration Pipeline
+#
+# WHY this exists:
+# → Every push and pull request is automatically validated
+# → Broken code can NEVER reach production
+# → TypeScript errors caught before deployment
+# → All tests must pass before merge is allowed
+#
+# PIPELINE STEPS:
+# 1. Checkout code
+# 2. Setup pnpm 10.26.1 (matches packageManager in package.json)
+# 3. Cache pnpm store (60-80% faster installs on repeat runs)
+# 4. Setup Node.js 20
+# 5. Install dependencies (frozen lockfile — no surprise updates)
+# 6. TypeScript typecheck (catches type errors)
+# 7. Run all tests (65+ tests must pass)
+#
+# TRIGGERS:
+# → Every push to main
+# → Every pull request targeting main
+# ─────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs when a new push arrives
+# Saves GitHub Actions minutes
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Typecheck + Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── Step 1: Checkout code ───────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Step 2: Setup pnpm ──────────────────────────────────────
+      # Must come BEFORE setup-node for cache to work correctly
+      # Version matches packageManager field in root package.json
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.1
+
+      # ── Step 3: Get pnpm store path for caching ─────────────────
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      # ── Step 4: Cache pnpm store ────────────────────────────────
+      # Key includes pnpm-lock.yaml hash — cache busts on lock changes
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      # ── Step 5: Setup Node.js ───────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # ── Step 6: Install dependencies ────────────────────────────
+      # --frozen-lockfile ensures nobody snuck in unapproved packages
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Step 7: TypeScript typecheck ────────────────────────────
+      # Catches type errors across the entire monorepo
+      - name: TypeScript typecheck
+        run: pnpm run typecheck
+
+      # ── Step 8: Run all tests ────────────────────────────────────
+      # All 65+ tests must pass — zero failures allowed
+      # Uses .env.test for safe fake environment variables
+      - name: Run tests
+        working-directory: artifacts/api-server
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://fake-user:fake-pass@localhost:5432/fake-db
+          SESSION_SECRET: this-is-a-fake-secret-32-chars-min
+          VITE_SUPABASE_URL: https://fake.supabase.co
+          VITE_SUPABASE_ANON_KEY: fake-anon-key-for-testing-only
+          PORT: "3000"
+        run: pnpm test
