@@ -8,6 +8,7 @@ import { dirname, join } from "path";
 import { existsSync } from "fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { errorHandler } from "./middlewares/errorHandler";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -145,15 +146,10 @@ if (existsSync(indexHtml)) {
   });
 }
 
-// ── CORS error handler ────────────────────────────────────────────────────────
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
-  if (err.message === "Not allowed by CORS") {
-    logger.warn({ origin: req.headers.origin, ip: req.ip }, "CORS request blocked");
-    res.status(403).json({ error: "Origin not allowed" });
-    return;
-  }
-  logger.error({ err, url: req.url }, "Unhandled error");
-  res.status(500).json({ error: "Internal server error" });
-});
+// ── Global error handler (must be last) ──────────────────────────────────────
+// Handles ALL errors: CORS, validation, 404s, 500s, programming bugs.
+// Never exposes stack traces in production.
+// Every error is logged with requestId for tracing.
+app.use(errorHandler);
 
 export default app;
