@@ -51,7 +51,6 @@ RUN mkdir -p artifacts/api-server/public && \
 
 # Tell Railway (and any Docker host) that this container listens on port 8080.
 # Railway injects PORT automatically — the server reads process.env.PORT.
-ENV PORT=8080
 ENV NODE_ENV=production
 
 EXPOSE 8080
