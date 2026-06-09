@@ -1,60 +1,48 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # EverydayAI — production Docker image
 #
-# What Docker is doing here, step by step:
-#   1. Start from an official Node 24 image (a clean Linux machine with Node)
-#   2. Enable pnpm (the package manager this project uses)
-#   3. Copy the source code into the container
-#   4. Install all dependencies
-#   5. Build the frontend (React → static HTML/CSS/JS files)
-#   6. Build the API server (TypeScript → bundled Node.js file)
-#   7. Move the frontend files to where the server will serve them
-#   8. Tell the container: "when you start, run this command"
-#
-# Multi-stage builds (builder → runner) keep the final image small by throwing
-# away all the build tools after compilation. We use single-stage here because
-# pnpm uses symlinked node_modules — copying them across stages breaks symlinks.
-# The image is larger but guaranteed to work correctly.
+# IMPORTANT: VITE_* variables must be passed as build args because Vite
+# bakes them into the frontend bundle at build time — not runtime.
+# Pass them in Railway as:
+#   VITE_SUPABASE_URL → Build Variable
+#   VITE_SUPABASE_ANON_KEY → Build Variable
 # ─────────────────────────────────────────────────────────────────────────────
 
 FROM node:24-slim
 
 # corepack is Node's built-in tool for managing package managers.
-# This activates pnpm without installing it separately.
 RUN corepack enable && corepack prepare pnpm@9 --activate
 
 WORKDIR /app
 
+# Declare build arguments for Vite frontend
+# These must be available at BUILD TIME — not just runtime
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
+# Set them as environment variables so Vite can read them during build
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
 # Copy the entire monorepo into the container.
-# .dockerignore (sibling file) tells Docker what to SKIP — things like
-# your local node_modules, .env files, and editor configs.
 COPY . .
 
 # Install all dependencies.
-# --frozen-lockfile means "use exactly what's in pnpm-lock.yaml, don't
-# resolve anything new." This makes builds reproducible.
 RUN pnpm install --frozen-lockfile
 
 # Build the React frontend.
-# Output goes to: artifacts/everydayai/dist/public/
+# Vite will bake VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY into the bundle
 RUN pnpm --filter @workspace/everydayai run build
 
 # Build the Express API server.
-# esbuild bundles TypeScript → artifacts/api-server/dist/index.mjs (one file, 3.9MB)
 RUN pnpm --filter @workspace/api-server run build
 
 # Move the frontend static files to where Express will serve them.
-# The server looks for static files at: artifacts/api-server/public/
-# (configured in app.ts: express.static(join(__dirname, "../public")))
 RUN mkdir -p artifacts/api-server/public && \
     cp -r artifacts/everydayai/dist/public/. artifacts/api-server/public/
 
-# Tell Railway (and any Docker host) that this container listens on port 8080.
-# Railway injects PORT automatically — the server reads process.env.PORT.
 ENV NODE_ENV=production
 
 EXPOSE 8080
 
-# The command Docker runs when the container starts.
-# --enable-source-maps makes stack traces show original TypeScript line numbers.
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
