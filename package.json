@@ -15,5 +15,10 @@
     "prettier": "^3.8.1",
     "typescript": "~5.9.2"
   },
-  "packageManager": "pnpm@10.26.1"
+  "packageManager": "pnpm@10.26.1",
+  "pnpm": {
+    "overrides": {
+      "ioredis": "5.11.1"
+    }
+  }
 }

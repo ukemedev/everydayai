@@ -97,7 +97,7 @@ export function errorHandler(
   const logPayload = {
     err,
     statusCode,
-    requestId: req.id,
+    requestId: req.id?.toString(),
     method: req.method,
     url: req.url,
     ip: req.ip,
@@ -114,7 +114,7 @@ export function errorHandler(
     status: "error",
     statusCode,
     message,
-    requestId: req.id,
+    requestId: req.id?.toString(),
     // Stack trace only in development — never in production
     ...(!isProduction &&
       err instanceof Error && { stack: err.stack }),

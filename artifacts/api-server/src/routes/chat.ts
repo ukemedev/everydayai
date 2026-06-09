@@ -136,9 +136,9 @@ router.post("/chat", async (req: Request, res: Response) => {
   }
 
   const cleanMessage = sanitizeText(message ?? "");
-  const lengthCheck = validateMessageLength(cleanMessage);
-  if (!lengthCheck.ok) {
-    res.status(400).json({ error: lengthCheck.error });
+  const lengthCheck = validateMessageLength(cleanMessage, 4000);
+  if (!lengthCheck) {
+    res.status(400).json({ error: "Message is too long. Maximum 4000 characters allowed." });
     return;
   }
 
@@ -155,19 +155,19 @@ router.post("/chat", async (req: Request, res: Response) => {
     req.headers["x-forwarded-for"] as string | undefined
   )?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
 
-  if (!checkIpRateLimit(clientIp)) {
+  if (!checkIpRateLimit(clientIp).allowed) {
     res.status(429).json({ error: "TOO_MANY_REQUESTS", message: FRIENDLY_LIMIT_MESSAGE });
     return;
   }
 
   const sessionIdStr = sessionId?.trim() || clientIp;
 
-  if (agentId?.trim() && !checkSessionLimit(agentId.trim(), sessionIdStr)) {
+  if (agentId?.trim() && !checkSessionLimit("free", history.length)) {
     res.status(429).json({ error: "SESSION_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
     return;
   }
 
-  if (agentId?.trim() && !checkBurstLimit(agentId.trim(), sessionIdStr)) {
+  if (agentId?.trim() && !checkBurstLimit(agentId.trim(), sessionIdStr).allowed) {
     res.status(429).json({ error: "BURST_LIMIT_REACHED", message: BURST_LIMIT_MESSAGE });
     return;
   }
@@ -178,12 +178,12 @@ router.post("/chat", async (req: Request, res: Response) => {
   }
 
   if (isPublicChat && agentId?.trim()) {
-    if (!checkAgentDailyLimit(agentId.trim())) {
+    if (!checkAgentDailyLimit(agentId.trim(), "free").allowed) {
       res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
       return;
     }
     const customerId = sessionIdStr;
-    if (!checkCustomerDailyLimit(agentId.trim(), customerId)) {
+    if (!checkCustomerDailyLimit(agentId.trim(), customerId, "free").allowed) {
       res.status(429).json({ error: "CHAT_LIMIT_REACHED", message: CUSTOMER_DAILY_LIMIT_MESSAGE });
       return;
     }
@@ -199,8 +199,8 @@ router.post("/chat", async (req: Request, res: Response) => {
     const sb = getServiceClient();
     if (sb) {
       try {
-        const plan = await getUserPlan(verifiedUserId, sb);
-        const limitResult = await checkMessageLimit(verifiedUserId, plan, sb);
+        const plan = await getUserPlan(verifiedUserId);
+        const limitResult = await checkMessageLimit(verifiedUserId);
         if (!limitResult.allowed) {
           res.status(429).json({ error: "PLAN_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
           return;
@@ -216,8 +216,8 @@ router.post("/chat", async (req: Request, res: Response) => {
 
   if (sb) {
     const keyService = new KeyResolutionService(
-      new SupabaseKeyRepository(sb),
-      new SupabaseAgentRepository(sb)
+      new SupabaseKeyRepository(sb as any),
+      new SupabaseAgentRepository(sb as any)
     );
 
     if (verifiedUserId && agentId?.trim()) {

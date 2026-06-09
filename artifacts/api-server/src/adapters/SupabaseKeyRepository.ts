@@ -40,13 +40,13 @@ export class SupabaseKeyRepository implements IKeyRepository {
         return ""; // non-fatal — caller handles empty string
       }
 
-      if (!data?.api_key) {
+      if (!(data as { api_key?: string } | null)?.api_key) {
         // No key saved for this provider yet
         logger.info({ userId, provider }, "SupabaseKeyRepository: no key found");
         return "";
       }
 
-      const raw = data.api_key as string;
+      const raw = (data as unknown as { api_key: string }).api_key;
 
       // Step 2: Decrypt if encrypted (all keys should be encrypted)
       // isEncrypted checks: 2 parts separated by ":", first part = 32 chars

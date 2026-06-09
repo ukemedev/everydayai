@@ -787,7 +787,7 @@ function DeployModal({ agentId, agentName, userId, onClose }: DeployModalProps) 
   useEffect(() => {
     async function loadDeployments() {
       const { data: { session: deploySession } } = await supabase.auth.getSession();
-      const authHeaders = deploySession?.access_token
+      const authHeaders: Record<string, string> = deploySession?.access_token
         ? { Authorization: `Bearer ${deploySession.access_token}` }
         : {};
 

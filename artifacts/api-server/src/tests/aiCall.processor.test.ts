@@ -37,9 +37,8 @@ const { mockChat } = vi.hoisted(() => ({
 // ── Mock LLMService using class syntax — required for constructors ─
 // Source: https://vitest.dev/api/mock#class-support
 vi.mock("../services/LLMService", () => ({
-  LLMService: vi.fn().mockImplementation(class {
-    chat = mockChat;
-  }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  LLMService: vi.fn().mockImplementation(class { chat = mockChat; } as any),
 }));
 
 // ── Import processor AFTER mock is set up ─────────────────────────

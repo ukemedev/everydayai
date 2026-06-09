@@ -379,6 +379,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       photo?: Array<{ file_id: string; file_unique_id: string; width: number; height: number; file_size?: number }>;
       voice?: { file_id: string; file_unique_id: string; duration: number; mime_type?: string; file_size?: number };
       document?: { file_id: string; file_unique_id: string; file_name?: string; mime_type?: string; file_size?: number };
+      from?: { username?: string; first_name?: string; last_name?: string };
     };
   };
 
