@@ -8,12 +8,14 @@ COPY . .
 
 RUN pnpm install --frozen-lockfile
 
-# Declare VITE_ build args RIGHT BEFORE the Vite build command
-# This is the correct pattern — ARG must be after COPY for Railway to pass them
+# Declare build args
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
+# Write them to .env.production so Vite picks them up at build time
+# This is the most reliable pattern for Railway + Vite + Docker
+RUN echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" >> artifacts/everydayai/.env.production && \
+    echo "VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}" >> artifacts/everydayai/.env.production
 
 RUN pnpm --filter @workspace/everydayai run build
 
