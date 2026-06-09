@@ -20,6 +20,7 @@ node_modules
 .env
 .env.*
 !.env.example
+!artifacts/everydayai/.env.production
 
 # Editor and OS noise
 .vscode
