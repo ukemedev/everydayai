@@ -3251,10 +3251,10 @@ export default function Studio() {
                         value={instructions}
                         onChange={(e) => setInstructions(e.target.value)}
                         placeholder="Write your agent instructions here..."
-                        rows={5}
+                        rows={12}
                         autoFocus
                         className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 border border-[#3b5bfc]/50 outline-none focus:border-[#3b5bfc] transition-colors resize-none leading-relaxed"
-                        style={{ backgroundColor: "#111827" }}
+                        style={{ backgroundColor: "#111827", maxHeight: "240px", overflowY: "auto" }}
                       />
                       <div className="flex items-center gap-2">
                         <button
