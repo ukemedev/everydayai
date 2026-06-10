@@ -3,7 +3,7 @@ import path from "node:path";
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ALLOWED_EXTENSIONS = ["pdf", "txt", "docx"] as const;
-const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_SIZE_BYTES = 500 * 1024; // 500 KB
 
 // DOCX is a ZIP-based format — file-type may return either the OOXML MIME or
 // the generic zip MIME depending on the version; we accept both.
@@ -39,7 +39,7 @@ export async function validateUpload(
 ): Promise<ValidationError | null> {
   // ── 1. Size ────────────────────────────────────────────────────────────────
   if (file.size > MAX_SIZE_BYTES) {
-    return { status: 413, body: { error: "FILE_TOO_LARGE", maxSize: "10MB" } };
+    return { status: 413, body: { error: "FILE_TOO_LARGE", maxSize: "500KB" } };
   }
 
   // ── 2. Extension ───────────────────────────────────────────────────────────
@@ -81,4 +81,22 @@ export function sanitizeFilename(name: string): string {
     .replace(/\.\./g, "")                // remove remaining ..
     .replace(/[^a-zA-Z0-9._-]/g, "_")   // only safe chars
     .slice(0, 100);                      // max 100 chars
+}
+
+// ── Char count validator ──────────────────────────────────────────────
+
+const MAX_CHAR_COUNT = 50_000;
+
+/**
+ * Validates that extracted document text does not exceed 50,000 characters.
+ * Returns null on success, or a { status, body } error object on failure.
+ */
+export function validateCharCount(charCount: number): ValidationError | null {
+  if (charCount > MAX_CHAR_COUNT) {
+    return {
+      status: 413,
+      body: { error: "DOCUMENT_TOO_LONG", maxChars: MAX_CHAR_COUNT },
+    };
+  }
+  return null;
 }

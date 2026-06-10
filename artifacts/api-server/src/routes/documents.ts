@@ -2,7 +2,8 @@ import { Router } from "express";
 import type { Request, Response, RequestHandler } from "express";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
-import { validateUpload, sanitizeFilename } from "../lib/fileValidation.js";
+import { validateUpload, validateCharCount, sanitizeFilename } from "../lib/fileValidation.js";
+import { extractText } from "../lib/textExtractor.js";
 import { logAudit } from "../lib/auditLog.js";
 
 const router = Router();
@@ -10,7 +11,7 @@ const router = Router();
 // Memory storage — file bytes live in req.file.buffer (never touch disk)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // hard cap at 10 MB
+  limits: { fileSize: 500 * 1024 }, // hard cap at 500 KB
 });
 
 function getServiceClient() {
@@ -28,9 +29,10 @@ function getServiceClient() {
 // Pipeline:
 //   1. Multer parses the multipart body into req.file (in-memory buffer)
 //   2. validateUpload checks size, extension, and magic bytes
-//   3. Filename is sanitised before storage
-//   4. File is uploaded to Supabase Storage via service-role key
-//   5. A record is inserted into the documents table
+//   3. Text is extracted and char count is validated
+//   4. Filename is sanitised before storage
+//   5. File is uploaded to Supabase Storage via service-role key
+//   6. A record is inserted into the documents table
 
 router.post(
   "/documents/upload",
@@ -61,6 +63,14 @@ router.post(
         "document upload rejected by validation"
       );
       res.status(validationError.status).json(validationError.body);
+      return;
+    }
+
+    // ── Extract text & validate char count ───────────────────────────────────
+    const extractedText = await extractText(req.file.buffer, req.file.mimetype);
+    const charCountError = validateCharCount(extractedText.length);
+    if (charCountError) {
+      res.status(charCountError.status).json(charCountError.body);
       return;
     }
 
@@ -99,6 +109,7 @@ router.post(
         file_size:    req.file.size,
         file_type:    ext,
         storage_path: storagePath,
+        char_count:   extractedText.length,
       })
       .select()
       .single();
