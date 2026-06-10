@@ -26,6 +26,12 @@ import { LLMService } from "../services/LLMService.js";
 import { LLMError } from "../ports/ILLMProvider.js";
 import { SupabaseKeyRepository } from "../adapters/SupabaseKeyRepository.js";
 import { SupabaseAgentRepository } from "../adapters/SupabaseAgentRepository.js";
+import {
+  truncateToTokenBudget,
+  truncateHistory,
+  BUDGET_DOC_CONTEXT,
+  BUDGET_HISTORY,
+} from "../lib/tokenBudget.js";
 
 const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (

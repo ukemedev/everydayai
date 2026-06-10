@@ -83,18 +83,19 @@ export class GroqProvider implements ILLMProvider {
   }
 
   private mapError(err: unknown): LLMError {
-    const msg = err instanceof Error ? err.message.toLowerCase() : "";
+    const msg    = err instanceof Error ? err.message.toLowerCase() : "";
+    const status = (err as { status?: number })?.status;
 
-    if (msg.includes("api key") || msg.includes("authentication") || msg.includes("401")) {
+    if (msg.includes("api key") || msg.includes("authentication") || msg.includes("401") || status === 401) {
       return new LLMError("INVALID_KEY", "Invalid Groq API key. Check your key in Settings.", err);
     }
-    if (msg.includes("quota") || msg.includes("rate limit") || msg.includes("429")) {
-      return new LLMError("RATE_LIMIT", "Groq rate limit exceeded. Try again shortly.", err);
+    if (msg.includes("quota") || msg.includes("rate limit") || msg.includes("429") || msg.includes("413") || status === 429 || status === 413) {
+      return new LLMError("RATE_LIMIT", "Message too large or rate limit reached. Try a shorter message.", err);
     }
     if (msg.includes("timeout") || msg.includes("timed out")) {
       return new LLMError("TIMEOUT", "Groq took too long to respond. Try again.", err);
     }
-    if (msg.includes("503") || msg.includes("502") || msg.includes("unavailable")) {
+    if (msg.includes("503") || msg.includes("502") || msg.includes("unavailable") || status === 503 || status === 502) {
       return new LLMError("PROVIDER_DOWN", "Groq is temporarily unavailable.", err);
     }
 

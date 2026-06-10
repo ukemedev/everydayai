@@ -20,6 +20,10 @@ import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGua
 import { buildToolsContext, executeToolsInReply } from "../lib/toolEngine.js";
 import { decrypt, isEncrypted } from "../lib/encryption.js";
 import { transcribeAudio } from "../lib/whisper.js";
+import {
+  truncateHistory,
+  BUDGET_HISTORY,
+} from "../lib/tokenBudget.js";
 
 function getWebhookSecret(agentId: string): string {
   const secret = process.env.SESSION_SECRET ?? "everydayai-webhook-secret";
@@ -56,7 +60,7 @@ const pdfParse = _require("pdf-parse") as (buf: Buffer, opts?: object) => Promis
 const mammoth  = _require("mammoth")   as { extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }> };
 
 function getServiceClient() {
-  const url = process.env.VITE_SUPABASE_URL;
+  const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
@@ -414,7 +418,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
   const sb = getServiceClient();
   if (!sb) {
-    logger.error({ agentId }, "telegram webhook: service client unavailable — check VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+        logger.error({ agentId }, "telegram webhook: service client unavailable – check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
     return;
   }
 
@@ -682,16 +686,17 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       .order("created_at", { ascending: false })
       .limit(40);
 
-    const conversationHistory: { role: "user" | "assistant"; content: string }[] = ((historyRows ?? []) as { role: string; content: string }[])
-      .reverse()
-      .filter((m) => m.role === "customer" || m.role === "ai")
-      .slice(0, -1) // exclude the message we just inserted
-      .map((m) => ({
-        role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant",
-        content: m.content,
-      }));
-
-    // ─────────────────────────────────────────────────────────────────────────
+      const conversationHistory: { role: "user" | "assistant"; content: string }[] = truncateHistory(
+            ((historyRows ?? []) as { role: string; content: string }[])
+            .reverse()
+            .filter((m) => m.role === "customer" || m.role === "ai")
+            .slice(0, -1) // exclude the message we just inserted
+            .map((m) => ({
+                  role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant",
+                  content: m.content,
+            })),
+            BUDGET_HISTORY
+      );
 
     const { data: keyRow } = await sb
       .from("api_keys")
