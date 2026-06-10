@@ -2743,9 +2743,9 @@ export default function Studio() {
       setUploadError("Only PDF, TXT, and DOCX files are allowed.");
       return;
     }
-    const MAX_SIZE = 5 * 1024 * 1024;
+    const MAX_SIZE = 500 * 1024;
     if (file.size > MAX_SIZE) {
-      setUploadError("File is too large. Maximum size is 5 MB.");
+      setUploadError("File is too large. Maximum size is 500 KB.");
       return;
     }
     setUploadError("");
@@ -2803,7 +2803,7 @@ export default function Studio() {
       } catch { /* ignore parse errors */ }
 
       if (res.status === 413 || errorCode === "FILE_TOO_LARGE") {
-        setUploadError("File is too large. Maximum size is 10MB.");
+        setUploadError("File is too large. Maximum size is 500 KB.");
       } else if (errorCode === "FILE_TYPE_NOT_ALLOWED") {
         setUploadError("File type not allowed. Only PDF, TXT and DOCX files are accepted.");
       } else if (errorCode === "FILE_CONTENT_MISMATCH") {
