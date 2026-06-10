@@ -154,8 +154,10 @@ router.post("/chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const history: ConversationMessage[] = Array.isArray(conversationHistory)
-    ? conversationHistory : [];
+   const history: ConversationMessage[] = truncateHistory(
+      Array.isArray(conversationHistory) ? conversationHistory : [],
+      BUDGET_HISTORY
+   );
 
   const clientIp = (
     req.headers["x-forwarded-for"] as string | undefined
@@ -285,7 +287,10 @@ router.post("/chat", async (req: Request, res: Response) => {
   let docContext = "";
   if (agentId?.trim()) {
     try {
-      docContext = await buildDocumentContext(agentId.trim());
+      docContext = truncateToTokenBudget(
+         await buildDocumentContext(agentId.trim()),
+         BUDGET_DOC_CONTEXT
+      );
     } catch (err) {
       logger.error({ err, agentId }, "buildDocumentContext failed");
     }
