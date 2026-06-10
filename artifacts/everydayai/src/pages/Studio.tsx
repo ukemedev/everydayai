@@ -3288,7 +3288,7 @@ export default function Studio() {
                       style={{ backgroundColor: "#111827", color: instructions.trim() ? "rgba(255,255,255,0.75)" : undefined }}
                     >
                       {instructions.trim() ? (
-                        <span className="whitespace-pre-wrap">{instructions}</span>
+                        <span className="whitespace-pre-wrap" style={{ display: "block", maxHeight: "200px", overflowY: "auto" }}>{instructions}</span>
                       ) : (
                         <span style={{ color: "rgba(255,255,255,0.22)", fontStyle: "italic" }}>
                           No instructions yet — click to add…
