@@ -4,17 +4,30 @@ import { supabase } from "@/lib/supabase";
 
 export default function ResetPassword() {
   const [, navigate] = useLocation();
-  const [password, setPassword]       = useState("");
-  const [confirm, setConfirm]         = useState("");
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState("");
-  const [success, setSuccess]         = useState(false);
+  const [password, setPassword]         = useState("");
+  const [confirm, setConfirm]           = useState("");
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState("");
+  const [success, setSuccess]           = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [verifying, setVerifying]       = useState(true);
 
   useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setSessionReady(true);
+        setVerifying(false);
+      }
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setSessionReady(true);
+      setVerifying(false);
     });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function handleReset(e: React.FormEvent) {
@@ -68,9 +81,16 @@ export default function ResetPassword() {
           >
             Password updated! Redirecting to dashboard…
           </div>
-        ) : !sessionReady ? (
+        ) : verifying ? (
           <div className="text-center text-sm text-white/40">
-            Loading — please wait…
+            Verifying your link…
+          </div>
+        ) : !sessionReady ? (
+          <div
+            className="rounded-lg px-4 py-3 text-sm text-red-400 border border-red-500/20 text-center"
+            style={{ backgroundColor: "rgba(239,68,68,0.08)" }}
+          >
+            This reset link is invalid or has expired. Please request a new one.
           </div>
         ) : (
           <form onSubmit={handleReset} className="flex flex-col gap-4">
