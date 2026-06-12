@@ -18,6 +18,7 @@ import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGua
 import { encrypt, decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendMetaMessage } from "../lib/metaClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
+import { runAgentTools } from "../lib/toolRunner.js";
 
 const router = Router();
 
@@ -304,6 +305,8 @@ router.post("/messenger/webhook/:agentId", async (req: Request, res: Response) =
     }).eq("id", conversationId);
 
     await sendMetaMessage(accessToken, senderId, reply);
+    void runAgentTools(agentId, conversationId, text, reply, sb)
+      .catch((err: unknown) => logger.error({ err, agentId }, "runAgentTools failed"));
     logger.info({ agentId, senderId }, "Messenger AI reply sent");
 
   } catch (err) {

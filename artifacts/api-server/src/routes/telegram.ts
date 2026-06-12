@@ -18,6 +18,7 @@ import {
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
 import { decrypt, isEncrypted } from "../lib/encryption.js";
+import { runAgentTools } from "../lib/toolRunner.js";
 import { transcribeAudio } from "../lib/whisper.js";
 import {
   truncateHistory,
@@ -783,7 +784,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
         body: JSON.stringify({ chat_id: chatId, text: reply }),
       }
     );
-
+    void runAgentTools(agentId, conversationId, effectiveText, reply!, sb)
+      .catch((err: unknown) => logger.error({ err, agentId }, "runAgentTools failed"));
     logger.info({ agentId, chatId }, "telegram webhook reply sent");
   } catch (err) {
     // Unexpected error in outer handler — release in-flight lock and log

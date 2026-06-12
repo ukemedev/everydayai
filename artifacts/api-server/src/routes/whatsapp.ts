@@ -20,6 +20,7 @@ import { encrypt, decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendWhatsAppMessage } from "../lib/whatsappClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
 import { transcribeAudio } from "../lib/whisper.js";
+import { runAgentTools } from "../lib/toolRunner.js";
 
 const router = Router();
 
@@ -500,6 +501,8 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     }).eq("id", conversationId);
 
     await sendWhatsAppMessage(phoneNumberId, accessToken, from, reply);
+    void runAgentTools(agentId, conversationId, text, reply, sb)
+      .catch((err: unknown) => logger.error({ err, agentId }, "runAgentTools failed"));
     logger.info({ agentId, from }, "WhatsApp AI reply sent");
 
   } catch (err) {

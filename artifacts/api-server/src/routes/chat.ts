@@ -28,6 +28,7 @@ import {
   BUDGET_DOC_CONTEXT,
   BUDGET_HISTORY,
 } from "../lib/tokenBudget.js";
+import { runAgentTools } from "../lib/toolRunner.js";
 
 const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (
@@ -414,6 +415,8 @@ router.post("/chat", async (req: Request, res: Response) => {
             { conversation_id: conversationId, role: "customer", content: cleanMessage },
             { conversation_id: conversationId, role: "ai",       content: reply },
           ]);
+          void runAgentTools(agentId!.trim(), conversationId, cleanMessage, reply, sbInner)
+            .catch((err: unknown) => req.log.error({ err }, "runAgentTools failed"));
         } catch (persistErr) {
           req.log.error({ err: persistErr }, "failed to persist conversation — non-fatal");
         }

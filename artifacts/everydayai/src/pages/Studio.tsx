@@ -62,163 +62,56 @@ interface Agent {
   status: string;
 }
 
-interface ToolInput {
-  name: string;
-  label: string;
-  description: string;
+// ─── Tools System — dynamic connector catalogue ───────────────────────────────
+
+interface ToolField {
+  key:         string;
+  label:       string;
+  placeholder: string;
+  type:        "text" | "email" | "password" | "textarea";
 }
 
-interface ToolPreview {
-  connector: string;
-  action: string;
-  tool_name: string;
-  tool_description: string;
-  required_inputs: ToolInput[];
-  required_auth: { type: string; provider: string; description: string };
+interface CatalogueConnector {
+  id:            string;
+  name:          string;
+  category:      string;
+  description:   string;
+  initials:      string;
+  color:         string;
+  bg:            string;
+  fields:        ToolField[];
+  required_plan: string;
+  sort_order:    number;
 }
 
-const CONNECTOR_ICONS: Record<string, string> = {
-  google_sheets: "📊",
-  telegram:      "📱",
-  gmail:         "📧",
-  whatsapp:      "💬",
-  instagram:     "📸",
-};
+interface AgentToolRow {
+  id:             string;
+  agent_id:       string;
+  user_id:        string;
+  connector_id:   string;
+  credentials:    Record<string, string>;
+  trigger_type:   "always" | "keyword" | "data_collected";
+  trigger_config: { keywords?: string[]; fields?: string[] };
+  status:         string;
+}
 
-const CONNECTOR_LABELS: Record<string, string> = {
-  google_sheets: "Google Sheets",
-  telegram:      "Telegram",
-  gmail:         "Gmail",
-  whatsapp:      "WhatsApp",
-  instagram:     "Instagram",
-};
-
-// ─── Static tools catalogue ──────────────────────────────────────────────────
-
-interface ToolField { key: string; label: string; placeholder: string; type: "text" | "email" | "password" | "textarea" }
-interface StaticTool { id: string; name: string; category: string; desc: string; initials: string; color: string; bg: string; fields: ToolField[] }
-
-const STATIC_TOOLS: StaticTool[] = [
-  // ── Starter tier ────────────────────────────────────────────────────────────
-  {
-    id: "google_sheets", name: "Google Sheets", category: "📊 Save Data",
-    desc: "Save collected data directly to your spreadsheets",
-    initials: "GS", color: "#0F9D58", bg: "rgba(15,157,88,0.12)",
-    fields: [
-      { key: "sheet_url",  label: "Sheet URL",        placeholder: "https://docs.google.com/spreadsheets/d/...", type: "text" },
-      { key: "sheet_name", label: "Sheet Name (Tab)", placeholder: "Sheet1", type: "text" },
-    ],
-  },
-  {
-    id: "gmail", name: "Gmail", category: "📧 Email",
-    desc: "Send automated emails to your leads and customers",
-    initials: "Gm", color: "#EA4335", bg: "rgba(234,67,53,0.12)",
-    fields: [
-      { key: "email",        label: "Gmail Address", placeholder: "you@gmail.com",       type: "email" },
-      { key: "app_password", label: "App Password",  placeholder: "xxxx xxxx xxxx xxxx", type: "password" },
-    ],
-  },
-  {
-    id: "telegram", name: "Telegram", category: "💬 Notify Owner",
-    desc: "Get instant Telegram alerts whenever a key event happens",
-    initials: "Tg", color: "#2AABEE", bg: "rgba(42,171,238,0.12)",
-    fields: [
-      { key: "bot_token", label: "Bot Token", placeholder: "123456:ABC-DEF...", type: "password" },
-      { key: "chat_id",   label: "Chat ID",   placeholder: "-100123456789",     type: "text" },
-    ],
-  },
-  {
-    id: "termii", name: "Termii", category: "🔔 SMS",
-    desc: "Send OTPs and SMS messages to any phone number in Africa",
-    initials: "Tm", color: "#F97316", bg: "rgba(249,115,22,0.12)",
-    fields: [
-      { key: "api_key",   label: "API Key",   placeholder: "TLtest_xxxxxxxxxx", type: "password" },
-      { key: "sender_id", label: "Sender ID", placeholder: "YourBrand",         type: "text" },
-    ],
-  },
-  // ── Pro tier ────────────────────────────────────────────────────────────────
-  {
-    id: "paystack", name: "Paystack", category: "💰 Payments",
-    desc: "Accept payments and process transactions across Africa",
-    initials: "PS", color: "#00C3F7", bg: "rgba(0,195,247,0.12)",
-    fields: [
-      { key: "secret_key", label: "Secret Key", placeholder: "sk_live_xxxxxxxxxxxxxxxxxx", type: "password" },
-    ],
-  },
-  {
-    id: "hubspot", name: "HubSpot", category: "👤 Customer Memory",
-    desc: "Store and recall customer information directly from your CRM",
-    initials: "HS", color: "#FF7A59", bg: "rgba(255,122,89,0.12)",
-    fields: [
-      { key: "access_token", label: "Private App Token", placeholder: "pat-na1-xxxxxxxxxx", type: "password" },
-    ],
-  },
-  {
-    id: "web_search", name: "Web Search", category: "🔍 Intelligence",
-    desc: "Let your agent search the internet for live, up-to-date information",
-    initials: "WS", color: "#8B5CF6", bg: "rgba(139,92,246,0.12)",
-    fields: [
-      { key: "api_key", label: "Serper API Key", placeholder: "Your Serper.dev key", type: "password" },
-    ],
-  },
-  {
-    id: "google_calendar", name: "Google Calendar", category: "📅 Booking",
-    desc: "Let customers book appointments in your calendar in real time",
-    initials: "GC", color: "#4285F4", bg: "rgba(66,133,244,0.12)",
-    fields: [
-      { key: "calendar_id", label: "Calendar ID",          placeholder: "you@gmail.com",                  type: "text" },
-      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
-    ],
-  },
-  {
-    id: "google_drive", name: "Google Drive", category: "📄 Documents",
-    desc: "Create, read, and manage files and folders in your Drive",
-    initials: "GD", color: "#FBBC04", bg: "rgba(251,188,4,0.12)",
-    fields: [
-      { key: "folder_id",   label: "Target Folder ID",     placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgm...",      type: "text" },
-      { key: "service_key", label: "Service Account JSON", placeholder: '{ "type": "service_account", ... }', type: "textarea" },
-    ],
-  },
-  {
-    id: "vapi", name: "Vapi.ai", category: "📞 Voice Calls",
-    desc: "Make and receive AI-powered phone calls automatically",
-    initials: "Vi", color: "#10B981", bg: "rgba(16,185,129,0.12)",
-    fields: [
-      { key: "api_key",         label: "API Key",         placeholder: "vapi_xxxxxxxxxx",  type: "password" },
-      { key: "phone_number_id", label: "Phone Number ID", placeholder: "phnum_xxxxxxxxxx", type: "text" },
-    ],
-  },
-];
+interface ToolExecution {
+  id:             string;
+  agent_tool_id:  string;
+  trigger_type:   string;
+  status:         string;
+  error_message?: string | null;
+  executed_at:    string;
+}
 
 const PLAN_ORDER = ["free", "starter", "pro", "business"];
 
-const STARTER_TOOL_IDS = new Set(["google_sheets", "gmail", "telegram", "termii"]);
-const PRO_TOOL_IDS     = new Set(["paystack", "hubspot", "web_search", "google_calendar", "google_drive", "vapi"]);
-
-function toolRequiredPlan(connectorId: string): string | null {
-  if (STARTER_TOOL_IDS.has(connectorId)) return "Starter";
-  if (PRO_TOOL_IDS.has(connectorId))     return "Pro";
-  return null;
-}
-
 function isPlanSufficientFor(required: string | null, userPlan: string): boolean {
-  if (!required) return true;
+  if (!required || required === "free") return true;
   return PLAN_ORDER.indexOf(userPlan) >= PLAN_ORDER.indexOf(required.toLowerCase());
 }
 
-interface Tool {
-  id: string;
-  agent_id: string;
-  user_id: string;
-  tool_name: string;
-  tool_description: string | null;
-  connector: string;
-  action: string;
-  required_inputs: ToolInput[] | null;
-  required_auth: { type: string; provider: string; description: string } | null;
-  status: string;
-  created_at: string;
-}
+const DATA_COLLECTED_FIELDS = ["name", "phone", "email", "company", "address", "date", "amount"];
 
 interface Document {
   id: string;
@@ -2569,45 +2462,20 @@ export default function Studio() {
   const [agentCapabilities, setAgentCapabilities] = useState({ images: false, voice: false, files: false });
   const [savingCapability, setSavingCapability] = useState<string | null>(null);
 
-  // Tools tab — accordion
-  const [openToolId, setOpenToolId] = useState<string | null>(null);
-  const [toolFields, setToolFields] = useState<Record<string, Record<string, string>>>({});
-  const [toolSaved, setToolSaved] = useState<Record<string, boolean>>({});
-  const [toolSaving, setToolSaving] = useState<Record<string, boolean>>({});
-
-  const handleSaveToolCreds = async (toolId: string, fields: Record<string, string>) => {
-    setToolSaving((prev) => ({ ...prev, [toolId]: true }));
-    try {
-      const { error } = await supabase
-        .from("tools")
-        .update({ required_auth: fields, status: "active" })
-        .eq("id", toolId);
-      if (!error) {
-        setToolSaved((prev) => ({ ...prev, [toolId]: true }));
-      }
-    } catch (_) {
-      // silently ignore — user can retry
-    } finally {
-      setToolSaving((prev) => ({ ...prev, [toolId]: false }));
-    }
-  };
-
-  // Tools tab
-  const [toolPrompt, setToolPrompt] = useState("");
-  const [toolAnalyzing, setToolAnalyzing] = useState(false);
-  const [toolError, setToolError] = useState("");
-  const [toolPreview, setToolPreview] = useState<ToolPreview | null>(null);
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [loadingTools, setLoadingTools] = useState(false);
-  const [confirmingTool, setConfirmingTool] = useState(false);
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
-  const [deletingToolId, setDeletingToolId] = useState<string | null>(null);
+  // ─── Tools System state ──────────────────────────────────────────────────────
+  const [catalogue, setCatalogue] = useState<CatalogueConnector[]>([]);
+  const [loadingCatalogue, setLoadingCatalogue] = useState(false);
+  const [agentToolsMap, setAgentToolsMap] = useState<Record<string, AgentToolRow>>({});
+  const [activeConnectorId, setActiveConnectorId] = useState<string | null>(null);
+  const [credFields, setCredFields] = useState<Record<string, Record<string, string>>>({});
+  const [connectorTriggerType, setConnectorTriggerType] = useState<Record<string, "always" | "keyword" | "data_collected">>({});
+  const [connectorKeywords, setConnectorKeywords] = useState<Record<string, string>>({});
+  const [savingConnector, setSavingConnector] = useState<string | null>(null);
+  const [deactivatingConnector, setDeactivatingConnector] = useState<string | null>(null);
+  const [toolExecutions, setToolExecutions] = useState<ToolExecution[]>([]);
+  const [loadingExecs, setLoadingExecs] = useState(false);
+  const [activeToolsSubTab, setActiveToolsSubTab] = useState<"connectors" | "activity">("connectors");
   const [userId, setUserId] = useState("");
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [checkingGoogle, setCheckingGoogle] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
-  const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
-  const [googleDisconnectConfirm, setGoogleDisconnectConfirm] = useState(false);
 
   // Knowledge Base
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -2679,47 +2547,106 @@ export default function Studio() {
     }
   }
 
-  // Check Google connection whenever Tools tab is opened or window regains focus
-  async function checkGoogleConnection() {
-    if (!userId) return;
-    setCheckingGoogle(true);
-    const { data } = await supabase
-      .from("integrations")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("provider", "google")
-      .maybeSingle();
-    setGoogleConnected(!!data);
-    setCheckingGoogle(false);
-    if (data) {
-      supabase.auth.getUser().then(({ data: u }) => {
-        setGoogleEmail(u.user?.email ?? null);
-      });
-    } else {
-      setGoogleEmail(null);
+  async function loadCatalogueAndAgentTools() {
+    if (!agent) return;
+    setLoadingCatalogue(true);
+    const [{ data: cat }, { data: at }] = await Promise.all([
+      supabase.from("connector_catalogue").select("*").order("sort_order"),
+      supabase.from("agent_tools").select("*").eq("agent_id", agent.id),
+    ]);
+    setCatalogue((cat ?? []) as CatalogueConnector[]);
+    const map: Record<string, AgentToolRow> = {};
+    for (const row of (at ?? []) as AgentToolRow[]) {
+      map[row.connector_id] = row;
     }
+    setAgentToolsMap(map);
+    const initCreds: Record<string, Record<string, string>> = {};
+    const initTrigger: Record<string, "always" | "keyword" | "data_collected"> = {};
+    const initKeywords: Record<string, string> = {};
+    for (const row of (at ?? []) as AgentToolRow[]) {
+      if (row.credentials) initCreds[row.connector_id] = { ...row.credentials };
+      initTrigger[row.connector_id] = row.trigger_type ?? "always";
+      initKeywords[row.connector_id] = (row.trigger_config?.keywords ?? []).join(", ");
+    }
+    setCredFields((prev) => ({ ...prev, ...initCreds }));
+    setConnectorTriggerType((prev) => ({ ...prev, ...initTrigger }));
+    setConnectorKeywords((prev) => ({ ...prev, ...initKeywords }));
+    setLoadingCatalogue(false);
   }
 
-  async function handleDisconnectGoogle() {
-    setDisconnectingGoogle(true);
+  async function handleSaveConnector(connectorId: string) {
+    if (!agent) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSavingConnector(connectorId);
+    const triggerType = connectorTriggerType[connectorId] ?? "always";
+    const kwRaw = connectorKeywords[connectorId] ?? "";
+    const keywords = kwRaw.split(",").map((k) => k.trim()).filter(Boolean);
+    const triggerConfig = triggerType === "keyword" ? { keywords } : {};
+    const credentials = credFields[connectorId] ?? {};
+    const { data: upserted, error } = await supabase
+      .from("agent_tools")
+      .upsert(
+        {
+          agent_id:       agent.id,
+          user_id:        user.id,
+          connector_id:   connectorId,
+          credentials,
+          trigger_type:   triggerType,
+          trigger_config: triggerConfig,
+          status:         "active",
+        },
+        { onConflict: "agent_id,connector_id" }
+      )
+      .select()
+      .single();
+    setSavingConnector(null);
+    if (error) { showToast("Failed to save: " + error.message); return; }
+    setAgentToolsMap((prev) => ({ ...prev, [connectorId]: upserted as AgentToolRow }));
+    showToast("Connector activated!");
+  }
+
+  async function handleDeactivateConnector(connectorId: string) {
+    if (!agent) return;
+    setDeactivatingConnector(connectorId);
     await supabase
-      .from("integrations")
+      .from("agent_tools")
       .delete()
-      .eq("user_id", userId)
-      .eq("provider", "google");
-    setGoogleConnected(false);
-    setGoogleEmail(null);
-    setDisconnectingGoogle(false);
-    setGoogleDisconnectConfirm(false);
+      .eq("agent_id", agent.id)
+      .eq("connector_id", connectorId);
+    setAgentToolsMap((prev) => {
+      const next = { ...prev };
+      delete next[connectorId];
+      return next;
+    });
+    setDeactivatingConnector(null);
+    setActiveConnectorId(null);
+    showToast("Connector deactivated.");
+  }
+
+  async function loadToolExecutions() {
+    if (!agent) return;
+    setLoadingExecs(true);
+    const { data: toolRows } = await supabase
+      .from("agent_tools")
+      .select("id")
+      .eq("agent_id", agent.id);
+    const toolIds = (toolRows ?? []).map((r: { id: string }) => r.id);
+    if (toolIds.length === 0) { setToolExecutions([]); setLoadingExecs(false); return; }
+    const { data: execs } = await supabase
+      .from("tool_executions")
+      .select("*")
+      .in("agent_tool_id", toolIds)
+      .order("executed_at", { ascending: false })
+      .limit(50);
+    setToolExecutions((execs ?? []) as ToolExecution[]);
+    setLoadingExecs(false);
   }
 
   useEffect(() => {
-    if (activeTab !== "Tools" || !userId) return;
-    checkGoogleConnection();
-    const onFocus = () => checkGoogleConnection();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [activeTab, userId]);
+    if (activeTab !== "Tools" || !agent) return;
+    void loadCatalogueAndAgentTools();
+  }, [activeTab, agent]);
 
   useEffect(() => {
     if (activeTab !== "Knowledge" || !agent) return;
@@ -2823,123 +2750,6 @@ export default function Studio() {
     showToast("Document uploaded!");
   }
 
-  useEffect(() => {
-    if (activeTab !== "Tools" || !agent) return;
-    setLoadingTools(true);
-    supabase
-      .from("tools")
-      .select("*")
-      .eq("agent_id", agent.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        setTools((data as Tool[]) ?? []);
-        setLoadingTools(false);
-      });
-  }, [activeTab, agent]);
-
-  async function handleConfirmTool() {
-    if (!toolPreview || !agent) return;
-    if (toolPreview.connector === "google_sheets" && !spreadsheetUrl.trim()) {
-      setToolError("Please paste the Google Sheet URL before confirming.");
-      return;
-    }
-    setConfirmingTool(true);
-    setToolError("");
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setToolError("Not authenticated.");
-      setConfirmingTool(false);
-      return;
-    }
-
-    const requiredAuth =
-      toolPreview.connector === "google_sheets"
-        ? { ...toolPreview.required_auth, spreadsheet_url: spreadsheetUrl.trim() }
-        : toolPreview.required_auth;
-
-    const { data: saved, error } = await supabase
-      .from("tools")
-      .insert({
-        agent_id: agent.id,
-        user_id: user.id,
-        tool_name: toolPreview.tool_name,
-        tool_description: toolPreview.tool_description,
-        connector: toolPreview.connector,
-        action: toolPreview.action,
-        required_inputs: toolPreview.required_inputs,
-        required_auth: requiredAuth,
-        status: "active",
-      })
-      .select()
-      .single();
-
-    setConfirmingTool(false);
-
-    if (error) {
-      setToolError("Failed to save tool: " + error.message);
-      return;
-    }
-
-    setTools((prev) => [saved as Tool, ...prev]);
-    setToolPreview(null);
-    setToolPrompt("");
-    setSpreadsheetUrl("");
-    showToast("Tool added successfully!");
-  }
-
-  async function handleDeleteTool(id: string) {
-    setDeletingToolId(id);
-    await supabase.from("tools").delete().eq("id", id);
-    setTools((prev) => prev.filter((t) => t.id !== id));
-    setDeletingToolId(null);
-    showToast("Tool removed.");
-  }
-
-  async function handleAnalyzeTool() {
-    if (!toolPrompt.trim()) return;
-    setToolAnalyzing(true);
-    setToolError("");
-    setToolPreview(null);
-
-    // Try providers in order: groq → openai → anthropic → google
-    const providerOrder = ["groq", "openai", "anthropic", "google"];
-    let chosenKey = "";
-    let chosenProvider = "";
-    for (const p of providerOrder) {
-      const { data } = await supabase
-        .from("api_keys")
-        .select("api_key")
-        .eq("provider", p)
-        .maybeSingle();
-      if (data?.api_key) { chosenKey = data.api_key; chosenProvider = p; break; }
-    }
-
-    if (!chosenKey) {
-      setToolError("No API key found. Add a Groq or OpenAI key in Settings to use this feature.");
-      setToolAnalyzing(false);
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/tools/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: toolPrompt.trim(),
-          apiKey: chosenKey,
-          provider: chosenProvider,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Request failed");
-      setToolPreview(data.tool as ToolPreview);
-    } catch (err) {
-      setToolError(err instanceof Error ? err.message : "Analysis failed. Please try again.");
-    } finally {
-      setToolAnalyzing(false);
-    }
-  }
 
   async function handleDelete(doc: Document) {
     setDeletingId(doc.id);
@@ -3597,56 +3407,119 @@ export default function Studio() {
             {activeTab === "Tools" && (
               <div className="flex flex-col gap-3">
 
-                {/* ── Header ── */}
-                <div className="mb-2">
-                  <h2 className="text-base font-semibold text-white">Integrations</h2>
-                  <p className="text-sm text-white/40 mt-0.5">Connect tools to give your agent real capabilities</p>
+                {/* ── Header + sub-tabs ── */}
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <h2 className="text-base font-semibold text-white">Tools &amp; Connectors</h2>
+                    <p className="text-sm text-white/40 mt-0.5">Connect services to give your agent real capabilities</p>
+                  </div>
+                  <div className="flex gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.05)" }}>
+                    {(["connectors", "activity"] as const).map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => { setActiveToolsSubTab(st); if (st === "activity") void loadToolExecutions(); }}
+                        className="px-3 py-1 rounded-md text-xs font-semibold transition-all capitalize"
+                        style={activeToolsSubTab === st
+                          ? { backgroundColor: "#3b5bfc", color: "#fff" }
+                          : { color: "rgba(255,255,255,0.4)" }}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* ── Accordion list ── */}
-                {STATIC_TOOLS.map((tool, toolIdx) => {
-                  const isOpen = openToolId === tool.id;
-                  const fields = toolFields[tool.id] ?? {};
-                  const saved  = toolSaved[tool.id]  ?? false;
-                  const requiredPlan = toolRequiredPlan(tool.id);
-                  const isLocked = !isPlanSufficientFor(requiredPlan, userPlan);
+                {/* ── Activity sub-tab ── */}
+                {activeToolsSubTab === "activity" && (
+                  <div className="flex flex-col gap-2">
+                    {loadingExecs ? (
+                      <div className="flex justify-center py-8">
+                        <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+                      </div>
+                    ) : toolExecutions.length === 0 ? (
+                      <div className="flex flex-col items-center gap-2 py-10 text-center">
+                        <p className="text-sm text-white/30">No tool executions yet.</p>
+                        <p className="text-xs text-white/20">Executions appear here once your agent uses a connector.</p>
+                      </div>
+                    ) : toolExecutions.map((ex) => {
+                      const row = Object.values(agentToolsMap).find((r) => r.id === ex.agent_tool_id);
+                      const conn = catalogue.find((c) => c.id === row?.connector_id);
+                      return (
+                        <div key={ex.id} className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl" style={{ backgroundColor: "#0d1117", border: "1px solid rgba(255,255,255,0.06)" }}>
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-[10px] font-bold"
+                            style={{ backgroundColor: conn?.bg ?? "rgba(255,255,255,0.07)", color: conn?.color ?? "rgba(255,255,255,0.5)" }}>
+                            {conn?.initials ?? "?"}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-white/80 font-medium truncate">{conn?.name ?? ex.agent_tool_id}</p>
+                            <p className="text-[10px] text-white/35 mt-0.5">{ex.trigger_type} · {new Date(ex.executed_at).toLocaleString()}</p>
+                          </div>
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ex.status === "success" ? "text-green-400" : "text-red-400"}`}
+                            style={{ backgroundColor: ex.status === "success" ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)" }}>
+                            {ex.status}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── Connectors accordion ── */}
+                {activeToolsSubTab === "connectors" && loadingCatalogue && (
+                  <div className="flex justify-center py-10">
+                    <div className="w-5 h-5 rounded-full border-2 border-[#3b5bfc] border-t-transparent animate-spin" />
+                  </div>
+                )}
+
+                {activeToolsSubTab === "connectors" && !loadingCatalogue && catalogue.map((conn) => {
+                  const isOpen = activeConnectorId === conn.id;
+                  const isActive = !!agentToolsMap[conn.id];
+                  const isLocked = !isPlanSufficientFor(conn.required_plan, userPlan);
+                  const fields = credFields[conn.id] ?? {};
+                  const trigType = connectorTriggerType[conn.id] ?? "always";
+                  const isSaving = savingConnector === conn.id;
+                  const isDeactivating = deactivatingConnector === conn.id;
 
                   return (
                     <div
-                      key={tool.id}
+                      key={conn.id}
                       className="rounded-xl overflow-hidden transition-all duration-150"
                       style={{
                         border: isOpen
                           ? "1px solid rgba(59,91,252,0.4)"
-                          : "1px solid rgba(255,255,255,0.07)",
+                          : isActive
+                            ? "1px solid rgba(34,197,94,0.25)"
+                            : "1px solid rgba(255,255,255,0.07)",
                         backgroundColor: "#0d1117",
                       }}
                     >
                       {/* ── Clickable row ── */}
                       <button
                         className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
-                        onClick={() => setOpenToolId(isOpen ? null : tool.id)}
+                        onClick={() => setActiveConnectorId(isOpen ? null : conn.id)}
                       >
-                        {/* Brand icon */}
                         <div
                           className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-[11px] font-bold tracking-wide"
-                          style={{ backgroundColor: tool.bg, color: tool.color }}
+                          style={{ backgroundColor: conn.bg, color: conn.color }}
                         >
-                          {tool.initials}
+                          {conn.initials}
                         </div>
 
-                        {/* Category · Name */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[11px] text-white/35 leading-none">{tool.category}</span>
+                            <span className="text-[11px] text-white/35 leading-none">{conn.category}</span>
                             <span className="text-[10px] text-white/20">·</span>
-                            <span className="text-sm font-semibold text-white leading-none">{tool.name}</span>
+                            <span className="text-sm font-semibold text-white leading-none">{conn.name}</span>
                           </div>
+                          {isActive && (
+                            <p className="text-[10px] text-white/30 mt-0.5 leading-none">
+                              Trigger: {agentToolsMap[conn.id]?.trigger_type ?? "always"}
+                            </p>
+                          )}
                         </div>
 
-                        {/* Active badge + chevron */}
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {saved && !isLocked && (
+                          {isActive && (
                             <span
                               className="hidden sm:flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
                               style={{ backgroundColor: "rgba(34,197,94,0.15)", color: "#4ade80" }}
@@ -3654,7 +3527,12 @@ export default function Studio() {
                               ✓ Active
                             </span>
                           )}
-                          {/* Plan badges removed — upgrade prompt shown inside expanded panel */}
+                          {isLocked && !isOpen && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded capitalize"
+                              style={{ backgroundColor: "rgba(251,188,4,0.12)", color: "#fbbf24" }}>
+                              {conn.required_plan}
+                            </span>
+                          )}
                           <div
                             className="w-6 h-6 rounded-md flex items-center justify-center transition-transform duration-200"
                             style={{
@@ -3676,111 +3554,143 @@ export default function Studio() {
                           className="border-t px-4 pt-4 pb-5 flex flex-col gap-4"
                           style={{ borderColor: "rgba(59,91,252,0.2)", backgroundColor: "rgba(8,14,32,0.6)" }}
                         >
-                          {/* Tool header */}
-                          <div className="flex items-center gap-3">
+                          {/* Connector header */}
+                          <div className="flex items-start gap-3">
                             <div
                               className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold tracking-wide"
-                              style={{ backgroundColor: tool.bg, color: tool.color }}
+                              style={{ backgroundColor: conn.bg, color: conn.color }}
                             >
-                              {tool.initials}
+                              {conn.initials}
                             </div>
-                            <div>
-                              <p className="text-sm font-semibold text-white">{tool.name}</p>
-                              <p className="text-xs text-white/45 mt-0.5 leading-relaxed">{tool.desc}</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-white">{conn.name}</p>
+                              <p className="text-xs text-white/45 mt-0.5 leading-relaxed">{conn.description}</p>
                             </div>
                           </div>
 
-                          {/* Credential fields */}
-                          <div className="flex flex-col gap-3">
-                            {tool.fields.map((field) => (
-                              <div key={field.key} className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-semibold text-white/45 uppercase tracking-wider">
-                                  {field.label}
-                                </label>
-                                {field.type === "textarea" ? (
-                                  <textarea
-                                    rows={3}
-                                    value={fields[field.key] ?? ""}
-                                    onChange={(e) =>
-                                      setToolFields((prev) => ({
-                                        ...prev,
-                                        [tool.id]: { ...(prev[tool.id] ?? {}), [field.key]: e.target.value },
-                                      }))
-                                    }
-                                    placeholder={field.placeholder}
-                                    className="w-full rounded-lg px-3 py-2.5 text-xs text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none font-mono leading-relaxed"
-                                    style={{ backgroundColor: "#0a0f1e" }}
-                                  />
-                                ) : (
-                                  <input
-                                    type={field.type}
-                                    value={fields[field.key] ?? ""}
-                                    onChange={(e) =>
-                                      setToolFields((prev) => ({
-                                        ...prev,
-                                        [tool.id]: { ...(prev[tool.id] ?? {}), [field.key]: e.target.value },
-                                      }))
-                                    }
-                                    placeholder={field.placeholder}
-                                    className="w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors"
-                                    style={{ backgroundColor: "#0a0f1e" }}
-                                  />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Action buttons / Upgrade prompt */}
+                          {/* Plan lock */}
                           {isLocked ? (
-                            <div
-                              className="rounded-xl p-4 flex flex-col gap-3 border"
-                              style={{ backgroundColor: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.25)" }}
-                            >
+                            <div className="rounded-xl p-4 flex flex-col gap-3 border"
+                              style={{ backgroundColor: "rgba(251,188,4,0.06)", borderColor: "rgba(251,188,4,0.25)" }}>
                               <div className="flex items-start gap-2.5">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5">
-                                  <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2"/>
-                                  <line x1="12" y1="8" x2="12" y2="12" stroke="#f87171" strokeWidth="2" strokeLinecap="round"/>
-                                  <circle cx="12" cy="16" r="1" fill="#f87171"/>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="flex-shrink-0 mt-0.5">
+                                  <rect x="5" y="11" width="14" height="10" rx="2" stroke="#fbbf24" strokeWidth="2"/>
+                                  <path d="M8 11V7a4 4 0 018 0v4" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round"/>
                                 </svg>
                                 <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>
-                                  Your current plan doesn't include this tool. Upgrade to unlock it and connect it to your agent.
+                                  Requires <span className="font-semibold capitalize text-[#fbbf24]">{conn.required_plan}</span> plan. Upgrade to unlock this connector.
                                 </p>
                               </div>
-                              <a
-                                href="/pricing"
+                              <a href="/pricing"
                                 className="w-full py-2.5 rounded-lg text-xs font-semibold text-white text-center transition-all hover:opacity-90 active:scale-95 block"
-                                style={{ backgroundColor: "#ef4444" }}
-                              >
-                                View plans & upgrade →
+                                style={{ backgroundColor: "#d97706" }}>
+                                View plans &amp; upgrade →
                               </a>
                             </div>
                           ) : (
                             <>
+                              {/* Credential fields */}
+                              {conn.fields.length > 0 && (
+                                <div className="flex flex-col gap-3">
+                                  <p className="text-[11px] font-semibold text-white/35 uppercase tracking-wider">Credentials</p>
+                                  {conn.fields.map((field) => (
+                                    <div key={field.key} className="flex flex-col gap-1.5">
+                                      <label className="text-[11px] font-medium text-white/50">{field.label}</label>
+                                      {field.type === "textarea" ? (
+                                        <textarea
+                                          rows={3}
+                                          value={fields[field.key] ?? ""}
+                                          onChange={(e) =>
+                                            setCredFields((prev) => ({
+                                              ...prev,
+                                              [conn.id]: { ...(prev[conn.id] ?? {}), [field.key]: e.target.value },
+                                            }))
+                                          }
+                                          placeholder={field.placeholder}
+                                          className="w-full rounded-lg px-3 py-2.5 text-xs text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors resize-none font-mono leading-relaxed"
+                                          style={{ backgroundColor: "#0a0f1e" }}
+                                        />
+                                      ) : (
+                                        <input
+                                          type={field.type}
+                                          value={fields[field.key] ?? ""}
+                                          onChange={(e) =>
+                                            setCredFields((prev) => ({
+                                              ...prev,
+                                              [conn.id]: { ...(prev[conn.id] ?? {}), [field.key]: e.target.value },
+                                            }))
+                                          }
+                                          placeholder={field.placeholder}
+                                          className="w-full rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors"
+                                          style={{ backgroundColor: "#0a0f1e" }}
+                                        />
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Trigger type */}
+                              <div className="flex flex-col gap-2">
+                                <p className="text-[11px] font-semibold text-white/35 uppercase tracking-wider">When to trigger</p>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                  {(["always", "keyword", "data_collected"] as const).map((tt) => (
+                                    <button
+                                      key={tt}
+                                      onClick={() => setConnectorTriggerType((prev) => ({ ...prev, [conn.id]: tt }))}
+                                      className="py-2 px-2 rounded-lg text-[10px] font-semibold transition-all capitalize leading-tight"
+                                      style={trigType === tt
+                                        ? { backgroundColor: "rgba(59,91,252,0.25)", color: "#7c9dfc", border: "1px solid rgba(59,91,252,0.4)" }
+                                        : { backgroundColor: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.07)" }}
+                                    >
+                                      {tt === "data_collected" ? "Data Collected" : tt.charAt(0).toUpperCase() + tt.slice(1)}
+                                    </button>
+                                  ))}
+                                </div>
+                                {trigType === "keyword" && (
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. book, schedule, appointment (comma separated)"
+                                    value={connectorKeywords[conn.id] ?? ""}
+                                    onChange={(e) => setConnectorKeywords((prev) => ({ ...prev, [conn.id]: e.target.value }))}
+                                    className="w-full rounded-lg px-3 py-2 text-xs text-white placeholder-white/20 border border-white/10 outline-none focus:border-[#3b5bfc]/60 transition-colors mt-1"
+                                    style={{ backgroundColor: "#0a0f1e" }}
+                                  />
+                                )}
+                                {trigType === "data_collected" && (
+                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                    {DATA_COLLECTED_FIELDS.map((f) => (
+                                      <span key={f} className="px-2 py-0.5 rounded-full text-[10px] font-medium"
+                                        style={{ backgroundColor: "rgba(59,91,252,0.12)", color: "rgba(59,91,252,0.8)" }}>
+                                        {f}
+                                      </span>
+                                    ))}
+                                    <span className="text-[10px] text-white/25 self-center">detected automatically</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Save / Deactivate */}
                               <div className="flex gap-2.5 pt-1">
+                                {isActive && (
+                                  <button
+                                    onClick={() => void handleDeactivateConnector(conn.id)}
+                                    disabled={!!isDeactivating}
+                                    className="px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-80 active:scale-95 disabled:opacity-50 border"
+                                    style={{ color: "#f87171", borderColor: "rgba(239,68,68,0.25)", backgroundColor: "rgba(239,68,68,0.06)" }}
+                                  >
+                                    {isDeactivating ? "…" : "Deactivate"}
+                                  </button>
+                                )}
                                 <button
-                                  className="flex-1 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:opacity-80 active:scale-95 border"
-                                  style={{
-                                    color: "rgba(255,255,255,0.55)",
-                                    borderColor: "rgba(255,255,255,0.12)",
-                                    backgroundColor: "transparent",
-                                  }}
-                                >
-                                  Test Connection
-                                </button>
-                                <button
-                                  onClick={() => handleSaveToolCreds(tool.id, toolFields[tool.id] ?? {})}
-                                  disabled={toolSaving[tool.id]}
+                                  onClick={() => void handleSaveConnector(conn.id)}
+                                  disabled={!!isSaving}
                                   className="flex-1 py-2.5 rounded-lg text-xs font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-60"
                                   style={{ backgroundColor: "#3b5bfc" }}
                                 >
-                                  {toolSaving[tool.id] ? "Saving…" : saved ? "✓ Activated" : "Save & Activate"}
+                                  {isSaving ? "Saving…" : isActive ? "Update" : "Save & Activate"}
                                 </button>
                               </div>
-                              {saved && (
-                                <p className="sm:hidden text-[11px] font-semibold text-center" style={{ color: "#4ade80" }}>
-                                  ✓ This tool is active
-                                </p>
-                              )}
                             </>
                           )}
                         </div>
