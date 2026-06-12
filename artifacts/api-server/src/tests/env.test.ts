@@ -85,13 +85,10 @@ describe("validateEnv", () => {
     }
   });
 
-  it("❌ fails when VITE_SUPABASE_ANON_KEY is missing", () => {
+  it("✅ passes when VITE_SUPABASE_ANON_KEY is missing (it is optional)", () => {
     const { VITE_SUPABASE_ANON_KEY, ...rest } = validEnv;
     const result = validateEnv(rest);
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error).toContain("VITE_SUPABASE_ANON_KEY");
-    }
+    expect(result.success).toBe(true);
   });
 
 });

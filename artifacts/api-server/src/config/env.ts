@@ -20,7 +20,7 @@ const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
 
-  PORT: z.coerce.number().default(3000),
+  PORT: z.coerce.number().default(8080),
 
   DATABASE_URL: z
     .string()
@@ -30,13 +30,9 @@ const envSchema = z.object({
     .string()
     .min(32, { message: "SESSION_SECRET must be at least 32 characters" }),
 
-  VITE_SUPABASE_URL: z
-    .string()
-    .url({ message: "VITE_SUPABASE_URL must be a valid URL" }),
-
-  VITE_SUPABASE_ANON_KEY: z
-    .string()
-    .min(1, { message: "VITE_SUPABASE_ANON_KEY is required" }),
+  // Supabase — optional (used for auth and storage when configured)
+  VITE_SUPABASE_URL: z.string().url().optional(),
+  VITE_SUPABASE_ANON_KEY: z.string().optional(),
 });
 
 // ── Type ──────────────────────────────────────────────────────────
@@ -74,7 +70,7 @@ function loadEnv(): Env {
   if (!result.success) {
     console.error("\n❌ App cannot start — environment config is invalid:\n");
     console.error(result.error);
-    console.error("\nFix your .env file and restart the server.\n");
+    console.error("\nFix your environment variables and restart the server.\n");
     process.exit(1);
   }
 

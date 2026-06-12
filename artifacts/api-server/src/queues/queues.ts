@@ -7,6 +7,9 @@
 // → Redis memory stays clean — completed/failed jobs auto-removed
 // → One file = one source of truth for all queue names and config
 //
+// NOTE: Queues are null when Redis is unavailable (REDIS_URL not set).
+// Check queue availability before adding jobs.
+//
 // QUEUES:
 // → aiCallQueue       → all LLM API calls (OpenAI, Claude, Groq, Gemini)
 // → agentDeployQueue  → deploying agents to WhatsApp/Instagram/website
@@ -15,7 +18,7 @@
 //
 // HOW TO ADD A JOB FROM A ROUTE:
 // → import { aiCallQueue } from "../queues/queues"
-// → await aiCallQueue.add("chat", { agentId, message, userId })
+// → await aiCallQueue?.add("chat", { agentId, message, userId })
 // ─────────────────────────────────────────────────────────────────
 
 import { Queue } from "bullmq";
@@ -42,33 +45,41 @@ const defaultJobOptions: DefaultJobOptions = {
 // ── aiCallQueue ───────────────────────────────────────────────────
 // Every LLM API call goes here — never blocks the Express server
 // Supports: OpenAI, Anthropic, Groq, Google Gemini
-export const aiCallQueue = new Queue("ai-call", {
-  connection: producerConnection,
-  defaultJobOptions,
-});
+export const aiCallQueue = producerConnection
+  ? new Queue("ai-call", {
+      connection: producerConnection,
+      defaultJobOptions,
+    })
+  : null;
 
 // ── agentDeployQueue ──────────────────────────────────────────────
 // Handles agent deployment to social media and websites
 // Supports: WhatsApp, Instagram, Messenger, Telegram, Website widget
-export const agentDeployQueue = new Queue("agent-deploy", {
-  connection: producerConnection,
-  defaultJobOptions,
-});
+export const agentDeployQueue = producerConnection
+  ? new Queue("agent-deploy", {
+      connection: producerConnection,
+      defaultJobOptions,
+    })
+  : null;
 
 // ── webhookQueue ──────────────────────────────────────────────────
 // Outgoing webhooks to social media platforms
 // Higher retry count — webhook delivery must be reliable
-export const webhookQueue = new Queue("webhook", {
-  connection: producerConnection,
-  defaultJobOptions: {
-    ...defaultJobOptions,
-    attempts: 5, // webhooks get more retries — delivery is critical
-  },
-});
+export const webhookQueue = producerConnection
+  ? new Queue("webhook", {
+      connection: producerConnection,
+      defaultJobOptions: {
+        ...defaultJobOptions,
+        attempts: 5, // webhooks get more retries — delivery is critical
+      },
+    })
+  : null;
 
 // ── emailQueue ────────────────────────────────────────────────────
 // Transactional emails — welcome, alerts, notifications
-export const emailQueue = new Queue("email", {
-  connection: producerConnection,
-  defaultJobOptions,
-});
+export const emailQueue = producerConnection
+  ? new Queue("email", {
+      connection: producerConnection,
+      defaultJobOptions,
+    })
+  : null;

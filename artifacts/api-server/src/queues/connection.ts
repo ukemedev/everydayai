@@ -13,42 +13,56 @@
 //
 // CRITICAL: Never use keyPrefix in ioredis with BullMQ —
 // BullMQ has its own key prefixing via the prefix option
+//
+// NOTE: Redis is optional. If REDIS_URL is not set, connections
+// are null and queues will not be available. The app degrades
+// gracefully — synchronous in-process calls are used instead.
 // ─────────────────────────────────────────────────────────────────
 
 import { Redis } from "ioredis";
 import { logger } from "../lib/logger";
 
-const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
+const redisUrl = process.env.REDIS_URL;
 
-// ── Producer connection ───────────────────────────────────────────
-// Used by Queue instances to ADD jobs
-// maxRetriesPerRequest: 1 → fail fast so API can return error to user
-export const producerConnection = new Redis(redisUrl, {
-  maxRetriesPerRequest: 1,
-  enableReadyCheck: false,
-});
+let _producerConnection: Redis | null = null;
+let _workerConnection: Redis | null = null;
 
-// ── Worker connection ─────────────────────────────────────────────
-// Used by Worker instances to PROCESS jobs
-// maxRetriesPerRequest: null → wait forever — required by BullMQ
-export const workerConnection = new Redis(redisUrl, {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-});
+if (redisUrl) {
+  // ── Producer connection ─────────────────────────────────────────
+  // Used by Queue instances to ADD jobs
+  // maxRetriesPerRequest: 1 → fail fast so API can return error to user
+  _producerConnection = new Redis(redisUrl, {
+    maxRetriesPerRequest: 1,
+    enableReadyCheck: false,
+  });
 
-// ── Connection event logging ──────────────────────────────────────
-producerConnection.on("connect", () => {
-  logger.info("Redis producer connected");
-});
+  // ── Worker connection ───────────────────────────────────────────
+  // Used by Worker instances to PROCESS jobs
+  // maxRetriesPerRequest: null → wait forever — required by BullMQ
+  _workerConnection = new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+  });
 
-producerConnection.on("error", (err) => {
-  logger.error({ err }, "Redis producer error");
-});
+  // ── Connection event logging ────────────────────────────────────
+  _producerConnection.on("connect", () => {
+    logger.info("Redis producer connected");
+  });
 
-workerConnection.on("connect", () => {
-  logger.info("Redis worker connected");
-});
+  _producerConnection.on("error", (err) => {
+    logger.error({ err }, "Redis producer error");
+  });
 
-workerConnection.on("error", (err) => {
-  logger.error({ err }, "Redis worker error");
-});
+  _workerConnection.on("connect", () => {
+    logger.info("Redis worker connected");
+  });
+
+  _workerConnection.on("error", (err) => {
+    logger.error({ err }, "Redis worker error");
+  });
+} else {
+  logger.warn("REDIS_URL not set — BullMQ queues are disabled. AI calls will run synchronously.");
+}
+
+export const producerConnection = _producerConnection;
+export const workerConnection = _workerConnection;
