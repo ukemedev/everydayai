@@ -134,6 +134,8 @@ export default function Inbox() {
   const [deletingId,      setDeletingId]      = useState<string | null>(null);
   const [showClearAll,    setShowClearAll]    = useState(false);
   const [clearingAll,     setClearingAll]     = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [searchQuery,     setSearchQuery]     = useState("");
 
   // Mobile: track whether detail panel is showing
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
@@ -148,6 +150,7 @@ export default function Inbox() {
     const params = new URLSearchParams({ status: statusFilter, limit: "50" });
     if (channelFilter !== "all") params.set("channel", channelFilter);
     if (modeFilter    !== "all") params.set("mode",    modeFilter);
+    if (searchQuery.trim())      params.set("search",  searchQuery.trim());
     try {
       const res  = await fetch(`/api/conversations?${params}`, { headers, cache: "no-store" });
       const data = await res.json() as { conversations: Conversation[] };
@@ -160,7 +163,7 @@ export default function Inbox() {
       }
     } catch { /* non-fatal */ }
     setLoading(false);
-  }, [statusFilter, channelFilter, modeFilter, selectedId]);
+  }, [statusFilter, channelFilter, modeFilter, selectedId, searchQuery]);
 
   // ── Fetch messages for selected conversation ───────────────────────────────
   const fetchMessages = useCallback(async (convId: string, isInitial = false): Promise<void> => {
@@ -307,14 +310,14 @@ export default function Inbox() {
   // ── Clear all conversations ────────────────────────────────────────────────
   async function clearAllConversations() {
     setClearingAll(true);
+    setConversations([]);
+    setSelectedId(null);
+    setSelectedConv(null);
+    setMessages([]);
+    setMobileShowDetail(false);
     try {
       const headers = await getAuthHeader();
       await fetch("/api/conversations", { method: "DELETE", headers });
-      setConversations([]);
-      setSelectedId(null);
-      setSelectedConv(null);
-      setMessages([]);
-      setMobileShowDetail(false);
     } catch { /* non-fatal */ } finally {
       setClearingAll(false);
       setShowClearAll(false);
@@ -429,6 +432,28 @@ export default function Inbox() {
                   {tab === "active" ? "Active" : "Archived"}
                 </button>
               ))}
+            </div>
+
+            {/* Search */}
+            <div className="relative mb-2">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--app-text-faint)" }}>
+                <circle cx="11" cy="11" r="8"/><path strokeLinecap="round" d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setLoading(true); }}
+                placeholder="Search conversations…"
+                className="w-full pl-8 pr-7 py-1.5 rounded-lg text-xs outline-none"
+                style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--app-text)" }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => { setSearchQuery(""); setLoading(true); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
+                  style={{ color: "var(--app-text-faint)" }}
+                >✕</button>
+              )}
             </div>
 
             {/* Channel filters */}
@@ -569,7 +594,7 @@ export default function Inbox() {
                       <button
                         onClick={e => {
                           e.stopPropagation();
-                          void deleteConversation(conv.id);
+                          setConfirmDeleteId(conv.id);
                         }}
                         disabled={deletingId === conv.id}
                         className="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-red-500/20 disabled:opacity-40"
@@ -817,6 +842,50 @@ export default function Inbox() {
       </div>
 
       {/* ── Clear All confirmation modal ────────────────────────────────────── */}
+      {/* ── Single delete confirmation modal ───────────────────────────────── */}
+      {confirmDeleteId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmDeleteId(null); }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border p-6 flex flex-col gap-4"
+            style={{ backgroundColor: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
+          >
+            <div>
+              <h2 className="text-base font-bold text-white mb-1">Delete conversation?</h2>
+              <p className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>
+                This will permanently delete this conversation. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={deletingId === confirmDeleteId}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all hover:opacity-80 disabled:opacity-40"
+                style={{ backgroundColor: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.7)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmDeleteId) {
+                    void deleteConversation(confirmDeleteId).then(() => setConfirmDeleteId(null));
+                  }
+                }}
+                disabled={deletingId === confirmDeleteId}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                style={{ backgroundColor: "#dc2626" }}
+              >
+                {deletingId === confirmDeleteId && <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {deletingId === confirmDeleteId ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showClearAll && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center px-4"

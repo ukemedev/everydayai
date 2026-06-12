@@ -417,6 +417,12 @@ router.post("/chat", async (req: Request, res: Response) => {
           ]);
           void runAgentTools(agentId!.trim(), conversationId, cleanMessage, reply, sbInner)
             .catch((err: unknown) => req.log.error({ err }, "runAgentTools failed"));
+          // Enforce per-conversation message limit (fire-and-forget — non-blocking)
+          void import("../jobs/retentionJob.js").then(({ enforceMessageLimit }) =>
+            enforceMessageLimit(conversationId).catch((err: unknown) =>
+              req.log.error({ err, conversationId }, "enforceMessageLimit failed")
+            )
+          );
         } catch (persistErr) {
           req.log.error({ err: persistErr }, "failed to persist conversation — non-fatal");
         }

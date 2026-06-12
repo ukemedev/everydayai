@@ -126,7 +126,7 @@ router.get("/conversations", async (req: Request, res: Response) => {
   const sb = getServiceClient();
   if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
 
-  const { channel, mode, status = "active", limit = "50", offset = "0" } = req.query as Record<string, string>;
+  const { channel, mode, status = "active", limit = "50", offset = "0", search } = req.query as Record<string, string>;
   const parsedLimit  = Math.min(Math.max(parseInt(limit)  || 50,  1), 100);
   const parsedOffset = Math.max(parseInt(offset) || 0, 0);
 
@@ -135,11 +135,13 @@ router.get("/conversations", async (req: Request, res: Response) => {
     .select("id, agent_id, agent_name, channel, customer_display, mode, status, unread_count, last_message_at, last_message_preview, created_at", { count: "exact" })
     .eq("owner_id", userId)
     .eq("status", status)
+    .is("deleted_at", null)
     .order("last_message_at", { ascending: false })
     .range(parsedOffset, parsedOffset + parsedLimit - 1);
 
   if (channel) query = query.eq("channel", channel);
   if (mode)    query = query.eq("mode",    mode);
+  if (search?.trim()) query = query.ilike("customer_display", `%${search.trim()}%`);
 
   const { data, error, count } = await query;
   if (error) {
@@ -316,6 +318,74 @@ router.patch("/conversations/:id/archive", async (req: Request, res: Response) =
 
   if (error) { res.status(404).json({ error: "Conversation not found" }); return; }
   res.json({ ok: true });
+});
+
+// ─── PATCH /api/conversations/:id/read ───────────────────────────────────────
+// Marks all messages as read (resets unread_count to 0).
+
+router.patch("/conversations/:id/read", async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { id } = req.params as { id: string };
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  const { error } = await sb
+    .from("conversations")
+    .update({ unread_count: 0 })
+    .eq("id", id)
+    .eq("owner_id", userId);
+
+  if (error) {
+    req.log.error({ err: error, userId, conversationId: id }, "failed to mark conversation as read");
+    res.status(500).json({ error: "Failed to mark as read" });
+    return;
+  }
+
+  req.log.info({ userId, conversationId: id }, "conversation marked as read");
+  res.json({ ok: true, unread_count: 0 });
+});
+
+// ─── POST /api/conversations/:id/tags ────────────────────────────────────────
+// Set (replace) the tags array for a conversation.
+
+router.post("/conversations/:id/tags", async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { id } = req.params as { id: string };
+  const { tags } = req.body as { tags?: unknown };
+
+  if (!Array.isArray(tags)) {
+    res.status(400).json({ error: "tags must be an array of strings" });
+    return;
+  }
+
+  const cleanTags = (tags as unknown[])
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    .map(t => t.trim().toLowerCase().slice(0, 50))
+    .slice(0, 20);
+
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  const { data, error } = await sb
+    .from("conversations")
+    .update({ tags: cleanTags })
+    .eq("id", id)
+    .eq("owner_id", userId)
+    .select("id, tags")
+    .maybeSingle();
+
+  if (error || !data) {
+    req.log.error({ err: error, userId, conversationId: id }, "failed to update tags");
+    res.status(404).json({ error: "Conversation not found or unauthorized" });
+    return;
+  }
+
+  req.log.info({ userId, conversationId: id, tags: cleanTags }, "conversation tags updated");
+  res.json({ id: (data as { id: string }).id, tags: (data as { tags: string[] }).tags });
 });
 
 // ─── DELETE /api/conversations/:id ───────────────────────────────────────────

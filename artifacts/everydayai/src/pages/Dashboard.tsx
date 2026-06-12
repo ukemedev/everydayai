@@ -833,11 +833,6 @@ export default function Dashboard() {
 
       <main className="flex-1 px-4 md:px-8 py-6 md:py-8" style={{ backgroundColor: "#0a0f1e" }}>
 
-        {/* Greeting */}
-        <h1 className="text-2xl font-bold mb-6 text-white">
-          {firstName ? `Hello, ${firstName} 👋` : "Hello 👋"}
-        </h1>
-
         {/* Onboarding card */}
         <AnimatePresence>
           {showOnboarding && (

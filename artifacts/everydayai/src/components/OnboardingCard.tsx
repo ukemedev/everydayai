@@ -116,6 +116,11 @@ export default function OnboardingCard({
     }
   }
 
+  function handleRetakeChat() {
+    onRetakeChat();
+    setShowChat(true);
+  }
+
   return (
     <>
       <AnimatePresence>
@@ -150,14 +155,25 @@ export default function OnboardingCard({
                   : `${completedCount} of ${steps.length} steps done · under 3 minutes total`}
               </p>
             </div>
-            <button
-              onClick={() => void handleDismiss()}
-              disabled={dismissing}
-              className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5 disabled:opacity-40"
-              style={{ color: "rgba(255,255,255,0.30)" }}
-            >
-              {allDone ? "Dismiss" : "Skip setup"}
-            </button>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {hasTestedChat && (
+                <button
+                  onClick={handleRetakeChat}
+                  className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5"
+                  style={{ color: "rgba(255,255,255,0.30)" }}
+                >
+                  Retake chat
+                </button>
+              )}
+              <button
+                onClick={() => void handleDismiss()}
+                disabled={dismissing}
+                className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5 disabled:opacity-40"
+                style={{ color: "rgba(255,255,255,0.30)" }}
+              >
+                {allDone ? "Dismiss" : "Skip setup"}
+              </button>
+            </div>
           </div>
 
           {/* Progress bar */}
@@ -272,16 +288,6 @@ export default function OnboardingCard({
                         {step.id === 3 && "Add knowledge"}
                         {step.id === 4 && "Test now"}
                         {step.id === 5 && "Connect channel"}
-                      </button>
-                    )}
-                    {/* Retake button — only when step 4 is already done */}
-                    {step.id === 4 && hasTestedChat && step.done && (
-                      <button
-                        onClick={onRetakeChat}
-                        className="text-xs transition-colors ml-2"
-                        style={{ color: "rgba(255,255,255,0.25)" }}
-                      >
-                        Retake
                       </button>
                     )}
                   </motion.div>
