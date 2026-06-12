@@ -15,7 +15,6 @@ import {
 } from "../lib/agentLimits.js";
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
-import { buildToolsContext, executeToolsInReply } from "../lib/toolEngine.js";
 import { encrypt, decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendMetaMessage } from "../lib/metaClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
@@ -299,14 +298,7 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
       .slice(0, -1)
       .map(m => ({ role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant", content: m.content }));
 
-    // ── Load tools context ──
-    const { prompt: toolsPrompt, tools: agentTools } = await buildToolsContext(agentId, sb);
-
-    let reply = await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), history, text);
-
-    // ── Execute any tool calls the AI emitted ──
-    const { reply: cleanedReply } = await executeToolsInReply(reply, agentTools, ownerId, sb);
-    reply = cleanedReply;
+    let reply = await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions), history, text);
 
     await sb.from("messages").insert({ conversation_id: conversationId, role: "ai", content: reply });
     await sb.from("conversations").update({
@@ -314,7 +306,7 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
     }).eq("id", conversationId);
 
     await sendMetaMessage(accessToken, senderId, reply);
-    logger.info({ agentId, senderId, toolCount: agentTools.length }, "Instagram AI reply sent");
+    logger.info({ agentId, senderId }, "Instagram AI reply sent");
 
   } catch (err) {
     logger.error({ err, agentId }, "Instagram webhook handler error");

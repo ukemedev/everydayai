@@ -17,7 +17,6 @@ import {
 } from "../lib/agentLimits.js";
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
-import { buildToolsContext, executeToolsInReply } from "../lib/toolEngine.js";
 import { decrypt, isEncrypted } from "../lib/encryption.js";
 import { transcribeAudio } from "../lib/whisper.js";
 import {
@@ -740,14 +739,11 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     void sendTyping();
     const typingInterval = setInterval(() => void sendTyping(), 4000);
 
-    // ── Load tools context ──
-    const { prompt: toolsPrompt, tools: agentTools } = await buildToolsContext(agentId, sb);
-
     let reply: string;
     try {
       reply = imageBase64 && imageMime
-        ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText, imageBase64, imageMime)
-        : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText);
+        ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText, imageBase64, imageMime)
+        : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText);
     } catch (aiErr) {
       // AI provider failed (rate limited, down, etc.) — tell the customer gracefully
       clearInterval(typingInterval);
@@ -762,10 +758,6 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     // Always release the in-flight lock once AI has responded
     _inFlight.delete(inFlightKey);
-
-    // ── Execute any tool calls the AI emitted ──
-    const { reply: cleanedReply } = await executeToolsInReply(reply!, agentTools, ownerId, sb);
-    reply = cleanedReply;
 
     // ── Save AI reply + update conversation preview ──────────────────────────
     const { error: aiMsgErr } = await sb.from("messages").insert({
@@ -792,7 +784,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       }
     );
 
-    logger.info({ agentId, chatId, toolCount: agentTools.length }, "telegram webhook reply sent");
+    logger.info({ agentId, chatId }, "telegram webhook reply sent");
   } catch (err) {
     // Unexpected error in outer handler — release in-flight lock and log
     const inFlightKey = `${agentId}:${String(chatId ?? "unknown")}`;

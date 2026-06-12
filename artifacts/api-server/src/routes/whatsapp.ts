@@ -16,7 +16,6 @@ import {
 } from "../lib/agentLimits.js";
 import { getUserPlan } from "../lib/planLimits.js";
 import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGuard.js";
-import { buildToolsContext, executeToolsInReply } from "../lib/toolEngine.js";
 import { encrypt, decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendWhatsAppMessage } from "../lib/whatsappClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
@@ -484,17 +483,10 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
         content: m.content,
       }));
 
-    // ── Load tools context ──
-    const { prompt: toolsPrompt, tools: agentTools } = await buildToolsContext(agentId, sb);
-
     // ── Call AI ──
     let reply = imageBase64 && imageMime
-      ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText, imageBase64, imageMime)
-      : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions + toolsPrompt), conversationHistory, effectiveText);
-
-    // ── Execute any tool calls the AI emitted ──
-    const { reply: cleanedReply } = await executeToolsInReply(reply, agentTools, ownerId, sb);
-    reply = cleanedReply;
+      ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText, imageBase64, imageMime)
+      : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText);
 
     // ── Save + send reply ──
     await sb.from("messages").insert({
@@ -508,7 +500,7 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     }).eq("id", conversationId);
 
     await sendWhatsAppMessage(phoneNumberId, accessToken, from, reply);
-    logger.info({ agentId, from, toolCount: agentTools.length }, "WhatsApp AI reply sent");
+    logger.info({ agentId, from }, "WhatsApp AI reply sent");
 
   } catch (err) {
     logger.error({ err, agentId }, "WhatsApp webhook handler error");

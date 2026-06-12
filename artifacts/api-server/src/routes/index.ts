@@ -1,7 +1,6 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import healthRouter from "./health";
 import chatRouter from "./chat";
-import toolsRouter from "./tools";
 import googleRouter from "./google";
 import telegramRouter from "./telegram";
 import adminRouter from "./admin";
@@ -49,9 +48,6 @@ router.use("/public/agents", publicAgentInfoLimiter);
 
 // ── JWT auth — applied before routers, only to protected paths ────────────────
 
-// All tools routes
-router.use("/tools", requireAuth as RequestHandler);
-
 // All google routes
 router.use("/google", requireAuth as RequestHandler);
 
@@ -95,7 +91,6 @@ router.use("/analytics", requireAuth as RequestHandler);
 // ── Routers ───────────────────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(chatRouter);
-router.use(toolsRouter);
 router.use(googleRouter);
 router.use(telegramRouter);
 router.use(adminRouter);

@@ -17,10 +17,6 @@ import {
   detectPromptInjection, buildHardenedSystemPrompt,
 } from "../lib/sanitize.js";
 import { logAudit } from "../lib/auditLog.js";
-import {
-  buildToolsContext, executeToolsInReply,
-  type ToolRecord,
-} from "../lib/toolEngine.js";
 import { KeyResolutionService } from "../services/KeyResolutionService.js";
 import { LLMService } from "../services/LLMService.js";
 import { LLMError } from "../ports/ILLMProvider.js";
@@ -277,7 +273,6 @@ router.post("/chat", async (req: Request, res: Response) => {
   const resolvedModel    = keyResult.model;
   const resolvedProvider = keyResult.provider;
   const baseInstructions = keyResult.instructions;
-  const agentOwnerId     = keyResult.ownerId;
 
   req.log.info(
     { provider: resolvedProvider, model: resolvedModel, agentId },
@@ -296,20 +291,8 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
   }
 
-  let toolsContext = "";
-  let agentTools: ToolRecord[] = [];
-  if (agentId?.trim()) {
-    try {
-      const result = await buildToolsContext(agentId.trim(), getServiceClient());
-      toolsContext = result.prompt;
-      agentTools   = result.tools;
-    } catch (err) {
-      logger.error({ err, agentId }, "buildToolsContext failed");
-    }
-  }
-
   const systemPrompt = buildHardenedSystemPrompt(
-    baseInstructions + docContext + toolsContext
+    baseInstructions + docContext
   );
 
   const attachmentList = Array.isArray(attachments)
@@ -344,11 +327,6 @@ router.post("/chat", async (req: Request, res: Response) => {
     });
 
     let reply = llmResult.reply;
-
-    const toolOwnerId = verifiedUserId ?? agentOwnerId;
-    const { reply: cleanedReply, results: toolCallResults } =
-      await executeToolsInReply(reply, agentTools, toolOwnerId, getServiceClient());
-    reply = cleanedReply;
 
     if (isPublicChat && agentId?.trim()) {
       incrementAgentDailyCount(agentId.trim());
@@ -442,10 +420,7 @@ router.post("/chat", async (req: Request, res: Response) => {
       }
     }
 
-    res.json({
-      reply,
-      toolCalls: toolCallResults.length > 0 ? toolCallResults : null,
-    });
+    res.json({ reply });
 
   } catch (err) {
     req.log.error({ err, provider: resolvedProvider }, "chat completion failed");
