@@ -41,7 +41,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm --filter @workspace/everydayai run dev"
+args = "PORT=5000 BASE_PATH=/ pnpm --filter @workspace/everydayai run dev"
 waitForPort = 5000
 
 [[ports]]
@@ -51,10 +51,6 @@ externalPort = 3000
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
 
 [[ports]]
 localPort = 8081
@@ -70,7 +66,7 @@ externalPort = 3001
 VITE_SUPABASE_URL = "https://stgrsijraeswmxiyinzz.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0Z3JzaWpyYWVzd214aXlpbnp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxMDY3NjcsImV4cCI6MjA5MzY4Mjc2N30.iRvNM4x-isfy3ajlujCoKc9htN86sJ933Q43E39RaQc"
 ALLOWED_ORIGINS = ""
-PORT = "5000"
+PORT = "8080"
 API_PORT = "8080"
 BASE_PATH = "/"
 NODE_ENV = "development"
