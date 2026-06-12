@@ -1,14 +1,13 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
-import { LayoutDashboard, MessageSquare, LayoutTemplate, Cpu, Settings } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Cpu, Settings } from "lucide-react";
 
 const navItems = [
-  { id: "home",      icon: LayoutDashboard, label: "Home",      path: "/dashboard"  },
-  { id: "inbox",     icon: MessageSquare,   label: "Inbox",     path: "/inbox"      },
-  { id: "templates", icon: LayoutTemplate,  label: "Templates", path: "/templates"  },
-  { id: "studio",    icon: Cpu,             label: "Studio",    path: "/studio"     },
-  { id: "settings",  icon: Settings,        label: "Settings",  path: "/settings"   },
+  { id: "home",     icon: LayoutDashboard, label: "Home",     path: "/dashboard" },
+  { id: "inbox",    icon: MessageSquare,   label: "Inbox",    path: "/inbox"     },
+  { id: "studio",   icon: Cpu,             label: "Studio",   path: "/studio"    },
+  { id: "settings", icon: Settings,        label: "Settings", path: "/settings"  },
 ];
 
 interface AppLayoutProps {

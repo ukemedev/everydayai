@@ -71,6 +71,7 @@ interface Profile {
   onboarding_complete: boolean;
   has_tested_chat:     boolean;
   full_name?:          string;
+  completed_steps?:    string[];
 }
 
 // ─── Create Agent Modal ────────────────────────────────────────────────────────
@@ -728,13 +729,16 @@ export default function Dashboard() {
     if (!user) return;
     const { data } = await supabase
       .from("profiles")
-      .select("onboarding_complete, has_tested_chat, full_name")
+      .select("onboarding_complete, has_tested_chat, full_name, completed_steps")
       .eq("id", user.id)
       .single();
     if (data) {
       setProfile(data as Profile);
       setOnboardingDone((data as Profile).onboarding_complete ?? false);
-      setHasTestedChat((data as Profile).has_tested_chat ?? false);
+      const completedSteps: string[] = Array.isArray((data as Profile).completed_steps)
+        ? (data as Profile).completed_steps!
+        : [];
+      setHasTestedChat(completedSteps.includes("test_agent") || (data as Profile).has_tested_chat === true);
     }
   }, []);
 
@@ -831,7 +835,7 @@ export default function Dashboard() {
 
         {/* Greeting */}
         <h1 className="text-2xl font-bold mb-6 text-white">
-          {firstName ? `Welcome${!hasAgents ? "" : " back"}, ${firstName} 👋` : "Welcome back 👋"}
+          {firstName ? `Hello, ${firstName} 👋` : "Hello 👋"}
         </h1>
 
         {/* Onboarding card */}
@@ -846,6 +850,17 @@ export default function Dashboard() {
               firstAgentName={firstAgent?.name ?? "Your Agent"}
               onComplete={() => setOnboardingDone(true)}
               onTestedChat={() => setHasTestedChat(true)}
+              onRetakeChat={async () => {
+                setHasTestedChat(false);
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                  void fetch("/api/onboarding/remove-step", {
+                    method:  "PATCH",
+                    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+                    body:    JSON.stringify({ stepId: "test_agent" }),
+                  }).catch(() => {});
+                }
+              }}
               onCreateAgent={() => setShowCreateModal(true)}
               step3Skipped={step3Skipped}
               onSkipStep3={handleSkipStep3}

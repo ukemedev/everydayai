@@ -3737,7 +3737,10 @@ export default function Studio() {
           fabDragRef.current = null;
         }}
       >
-        🤖 Test Agent
+          <svg viewBox="0 0 24 24" fill="white" className="w-4 h-4 flex-shrink-0">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        Test Agent
       </button>
 
       {/* ── Mobile chat overlay ── */}

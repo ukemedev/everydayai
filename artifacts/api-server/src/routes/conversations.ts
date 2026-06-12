@@ -318,6 +318,70 @@ router.patch("/conversations/:id/archive", async (req: Request, res: Response) =
   res.json({ ok: true });
 });
 
+// ─── DELETE /api/conversations/:id ───────────────────────────────────────────
+// Soft-deletes a single conversation by setting deleted_at.
+
+router.delete("/conversations/:id", async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { id } = req.params as { id: string };
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  // Verify ownership first
+  const { data: conv } = await sb
+    .from("conversations")
+    .select("id, owner_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!conv || (conv as { owner_id: string }).owner_id !== userId) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const { error } = await sb
+    .from("conversations")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("owner_id", userId);
+
+  if (error) {
+    req.log.error({ err: error, userId, conversationId: id }, "failed to delete conversation");
+    res.status(500).json({ error: "Failed to delete conversation" });
+    return;
+  }
+
+  req.log.info({ userId, conversationId: id }, "conversation soft-deleted");
+  res.json({ ok: true });
+});
+
+// ─── DELETE /api/conversations ────────────────────────────────────────────────
+// Soft-deletes ALL conversations for the authenticated user.
+
+router.delete("/conversations", async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const sb = getServiceClient();
+  if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
+
+  const { error } = await sb
+    .from("conversations")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("owner_id", userId);
+
+  if (error) {
+    req.log.error({ err: error, userId }, "failed to bulk-delete conversations");
+    res.status(500).json({ error: "Failed to delete conversations" });
+    return;
+  }
+
+  req.log.info({ userId }, "all conversations soft-deleted");
+  res.json({ ok: true });
+});
+
 // ─── GET /api/public/conversations/messages ───────────────────────────────────
 // PUBLIC — no auth. Polled by Chat.tsx to receive human replies in real time.
 // Returns new messages (role: human or ai) since a given ISO timestamp.

@@ -24,6 +24,7 @@ interface Props {
   firstAgentName:  string;
   onComplete:      () => void;
   onTestedChat:    () => void;
+  onRetakeChat:    () => void;
   onCreateAgent:   () => void;
   step3Skipped:    boolean;
   onSkipStep3:     () => void;
@@ -41,7 +42,7 @@ async function getSession() {
 export default function OnboardingCard({
   hasAgents, hasDocuments, hasTestedChat, hasLiveChannel,
   firstAgentId, firstAgentName,
-  onComplete, onTestedChat, onCreateAgent,
+  onComplete, onTestedChat, onRetakeChat, onCreateAgent,
   step3Skipped, onSkipStep3,
 }: Props) {
   const [, navigate]          = useLocation();
@@ -271,6 +272,16 @@ export default function OnboardingCard({
                         {step.id === 3 && "Add knowledge"}
                         {step.id === 4 && "Test now"}
                         {step.id === 5 && "Connect channel"}
+                      </button>
+                    )}
+                    {/* Retake button — only when step 4 is already done */}
+                    {step.id === 4 && hasTestedChat && step.done && (
+                      <button
+                        onClick={onRetakeChat}
+                        className="text-xs transition-colors ml-2"
+                        style={{ color: "rgba(255,255,255,0.25)" }}
+                      >
+                        Retake
                       </button>
                     )}
                   </motion.div>

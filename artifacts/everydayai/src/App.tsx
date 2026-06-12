@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import Studio from "@/pages/Studio";
 import Settings from "@/pages/Settings";
 import Chat from "@/pages/Chat";
+import ResetPassword from "@/pages/ResetPassword";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoute from "@/components/AdminRoute";
 import Admin from "@/pages/Admin";
@@ -19,7 +20,6 @@ import AdminTemplates from "@/pages/AdminTemplates";
 import AdminAuditLog from "@/pages/AdminAuditLog";
 import Pricing from "@/pages/Pricing";
 import Billing from "@/pages/Billing";
-import Templates from "@/pages/Templates";
 import Inbox from "@/pages/Inbox";
 
 const queryClient = new QueryClient();
@@ -31,6 +31,7 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
@@ -47,7 +48,7 @@ function Router() {
         {() => <ProtectedRoute component={Billing} />}
       </Route>
       <Route path="/templates">
-        {() => <ProtectedRoute component={Templates} />}
+        {() => <Redirect to="/dashboard" />}
       </Route>
       <Route path="/inbox">
         {() => <ProtectedRoute component={Inbox} />}
