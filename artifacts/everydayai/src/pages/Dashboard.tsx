@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import AppLayout from "@/components/AppLayout";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import UpgradeModal from "@/components/UpgradeModal";
 import OnboardingCard from "@/components/OnboardingCard";
 
@@ -888,7 +889,7 @@ export default function Dashboard() {
             </div>
           ) : agents.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-              <div className="text-5xl select-none">🤖</div>
+              <AgentAvatar size={56} />
               <div>
                 <p className="text-base font-semibold text-white">No agents yet</p>
                 <p className="text-sm text-white/40 mt-1">Create your first agent to get started</p>

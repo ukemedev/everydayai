@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { marked } from "marked";
 import AppLayout from "@/components/AppLayout";
 import { supabase } from "@/lib/supabase";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -492,7 +493,9 @@ export default function Inbox() {
                     ? { backgroundColor: "rgba(59,91,252,0.15)", color: "#818cf8" }
                     : { backgroundColor: "transparent", color: "var(--app-text-muted)" }}
                 >
-                  {m === "all" ? "All" : m === "ai" ? "🤖 AI" : "👤 Human"}
+                  {m === "all" ? "All" : m === "ai" ? (
+                    <span className="flex items-center gap-1"><AgentAvatar size={12} /> AI</span>
+                  ) : "👤 Human"}
                 </button>
               ))}
             </div>
@@ -567,7 +570,9 @@ export default function Inbox() {
                                 ? { backgroundColor: "rgba(234,179,8,0.15)", color: "#eab308" }
                                 : { backgroundColor: "rgba(59,91,252,0.12)", color: "#818cf8" }}
                             >
-                              {conv.mode === "human" ? "👤 Human" : "🤖 AI"}
+                              {conv.mode === "human" ? "👤 Human" : (
+                                <span className="flex items-center gap-1"><AgentAvatar size={10} /> AI</span>
+                              )}
                             </span>
                           </div>
                         )}
@@ -686,7 +691,7 @@ export default function Inbox() {
                     </>
                   ) : (
                     <>
-                      <span>🤖</span>
+                      <AgentAvatar size={14} />
                       <span className="hidden sm:inline">Take Over</span>
                     </>
                   )}
@@ -736,7 +741,9 @@ export default function Inbox() {
                         className={`flex flex-col gap-1 ${isCustomer ? "items-start" : "items-end"}`}
                       >
                         <span className="text-[10px] px-1" style={{ color: "var(--app-text-faint)" }}>
-                          {isCustomer ? "Customer" : isHuman ? "You" : "🤖 AI"}
+                          {isCustomer ? "Customer" : isHuman ? "You" : (
+                            <span className="flex items-center gap-1"><AgentAvatar size={10} /> AI</span>
+                          )}
                         </span>
                         <div
                           className="max-w-[80%] sm:max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
@@ -791,7 +798,7 @@ export default function Inbox() {
                     className="rounded-xl px-4 py-3 flex items-center gap-3"
                     style={{ backgroundColor: "rgba(59,91,252,0.06)", border: "1px solid rgba(59,91,252,0.15)" }}
                   >
-                    <span className="text-base flex-shrink-0">🤖</span>
+                    <AgentAvatar size={18} className="flex-shrink-0" />
                     <p className="text-xs flex-1 leading-relaxed" style={{ color: "var(--app-text-muted)" }}>
                       AI is handling this. Tap{" "}
                       <button

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { marked } from "marked";
 import { useLocation, useParams } from "wouter";
 import { supabase } from "@/lib/supabase";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import UpgradeModal from "@/components/UpgradeModal";
 
 
@@ -481,10 +482,10 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
                 return (
                   <div key={msg.id} className="flex items-start gap-2">
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
+                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
                       style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
                     >
-                      🤖
+                      <AgentAvatar size={16} />
                     </div>
                     <div
                       className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed"
@@ -523,10 +524,10 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
                 >
                   {msg.role === "agent" && (
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mb-0.5"
+                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5"
                       style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
                     >
-                      🤖
+                      <AgentAvatar size={16} />
                     </div>
                   )}
                   <div
@@ -548,10 +549,10 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
             {isTyping && (
               <div className="flex items-end gap-2">
                 <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0"
+                  className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
                   style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
                 >
-                  🤖
+                  <AgentAvatar size={16} />
                 </div>
                 <div className="rounded-2xl" style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}>
                   <TypingDots />

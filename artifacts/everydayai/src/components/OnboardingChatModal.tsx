@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 interface Message {
   id:   string;
@@ -118,9 +119,9 @@ export default function OnboardingChatModal({ agentId, agentName, onClose, onTes
         >
           <div className="flex items-center gap-3">
             <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0"
+              className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
-            >🤖</div>
+            ><AgentAvatar size={20} /></div>
             <div>
               <p className="text-sm font-semibold text-white">{agentName}</p>
               <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.35)" }}>Test mode</p>

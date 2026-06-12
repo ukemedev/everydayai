@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "wouter";
 import { marked } from "marked";
+import { AgentAvatar } from "@/components/AgentAvatar";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -289,10 +290,10 @@ export default function Chat() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: "#0a0f1e", ...font }}>
         <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl"
+          className="w-16 h-16 rounded-2xl flex items-center justify-center"
           style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
         >
-          🤖
+          <AgentAvatar size={40} />
         </div>
         <p className="text-white font-semibold text-lg">This agent is not available</p>
         <p className="text-white/40 text-sm">The agent may be offline or the link may be incorrect.</p>
@@ -315,10 +316,10 @@ export default function Chat() {
         >
           <div className="flex items-center gap-3">
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0"
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
             >
-              🤖
+              <AgentAvatar size={22} />
             </div>
             <div>
               <h1 className="text-base font-bold text-white leading-tight">{agent.name}</h1>
@@ -344,10 +345,10 @@ export default function Chat() {
           {messages.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center py-16">
               <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl"
+                className="w-14 h-14 rounded-2xl flex items-center justify-center"
                 style={{ backgroundColor: "rgba(59,91,252,0.1)", border: "1px solid rgba(59,91,252,0.2)" }}
               >
-                🤖
+                <AgentAvatar size={36} />
               </div>
               <p className="text-white/60 text-sm">
                 Hi! I'm <span className="text-white font-medium">{agent.name}</span>. How can I help you?
@@ -362,10 +363,10 @@ export default function Chat() {
             >
               {msg.role === "agent" && (
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0 mb-0.5"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mb-0.5"
                   style={{ backgroundColor: msg.isLimit ? "rgba(239,68,68,0.15)" : "rgba(59,91,252,0.15)" }}
                 >
-                  {msg.isLimit ? "⚠️" : "🤖"}
+                  {msg.isLimit ? "⚠️" : <AgentAvatar size={18} />}
                 </div>
               )}
 
@@ -395,10 +396,10 @@ export default function Chat() {
           {isTyping && (
             <div className="flex items-end gap-2">
               <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
                 style={{ backgroundColor: "rgba(59,91,252,0.15)" }}
               >
-                🤖
+                <AgentAvatar size={18} />
               </div>
               <div
                 className="px-4 py-3 rounded-2xl flex items-center gap-1.5"
