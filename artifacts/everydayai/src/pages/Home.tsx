@@ -498,6 +498,7 @@ const PLANS = [
   {
     name: "Free",
     price: "₦0",
+    dollarEquiv: null as string | null,
     period: "forever",
     accent: "rgba(255,255,255,0.5)",
     accentSolid: "#ffffff",
@@ -512,7 +513,8 @@ const PLANS = [
   },
   {
     name: "Starter",
-    price: "₦15,000",
+    price: "₦10,500",
+    dollarEquiv: "~$7.75/month",
     period: "/month",
     accent: "#10b981",
     accentSolid: "#10b981",
@@ -527,7 +529,8 @@ const PLANS = [
   },
   {
     name: "Pro",
-    price: "₦39,000",
+    price: "₦22,000",
+    dollarEquiv: "~$16.25/month",
     period: "/month",
     accent: "#3b5bfc",
     accentSolid: "#3b5bfc",
@@ -540,21 +543,6 @@ const PLANS = [
     summary: "Full power — all channels, all tools.",
     highlights: ["10 AI agents", "10,000 messages / month", "All 5 channels unlocked", "Unlimited knowledge base", "Voice & image input", "10+ built-in tools"],
   },
-  {
-    name: "Business",
-    price: "₦89,000",
-    period: "/month",
-    accent: "#f59e0b",
-    accentSolid: "#f59e0b",
-    border: "rgba(245,158,11,0.35)",
-    glow: false,
-    badge: null as string | null,
-    cta: "Contact Sales",
-    ctaHref: "mailto:sales@everydayai.com",
-    ctaFilled: true,
-    summary: "Unlimited everything. Agencies & enterprises.",
-    highlights: ["Unlimited agents", "Unlimited messages", "All channels + priority support", "Custom integrations", "Dedicated account manager"],
-  },
 ];
 
 function Pricing() {
@@ -566,7 +554,7 @@ function Pricing() {
           <h2 className="text-3xl sm:text-4xl font-bold text-white">Priced for Nigerian businesses</h2>
           <p className="mt-4 text-white/50">Start free. Upgrade when you're ready. No surprises.</p>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-3 gap-4">
           {PLANS.map((plan) => (
             <div
               key={plan.name}
@@ -591,6 +579,9 @@ function Pricing() {
                   <span className="text-3xl font-bold text-white">{plan.price}</span>
                   <span className="text-white/40 text-sm pb-0.5">{plan.period}</span>
                 </div>
+                {plan.dollarEquiv && (
+                  <p className="text-white/30 text-xs mt-0.5">{plan.dollarEquiv}</p>
+                )}
                 <p className="text-white/40 text-xs mt-2">{plan.summary}</p>
               </div>
               <ul className="space-y-2.5 mb-8 flex-1">
