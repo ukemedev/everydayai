@@ -75,8 +75,10 @@ router.get("/admin/stats", async (req: Request, res: Response) => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  const [usersRes, agentsRes, messagesRes] = await Promise.all([
-    sb.from("profiles").select("*", { count: "exact", head: true }),
+  // Count from auth.users (not profiles) — profiles only exist for users who have
+  // fully onboarded; auth.users contains every registered account immediately.
+  const [authUsersRes, agentsRes, messagesRes] = await Promise.all([
+    sb.auth.admin.listUsers({ perPage: 1000 }),
     sb.from("agents").select("*", { count: "exact", head: true }),
     Promise.resolve(
       sb.from("messages")
@@ -86,7 +88,7 @@ router.get("/admin/stats", async (req: Request, res: Response) => {
   ]);
 
   const stats = {
-    totalUsers:        usersRes.count    ?? 0,
+    totalUsers:        authUsersRes.data?.users?.length ?? 0,
     totalAgents:       agentsRes.count   ?? 0,
     messagesThisMonth: messagesRes.count ?? 0,
   };

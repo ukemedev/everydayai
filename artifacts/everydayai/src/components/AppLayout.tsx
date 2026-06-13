@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { LayoutDashboard, MessageSquare, Cpu, Settings } from "lucide-react";
 
@@ -19,6 +20,7 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
   const [location, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -27,6 +29,9 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
   }, []);
 
   async function handleLogOut() {
+    // Clear all cached query data before signing out so the next user
+    // starts with a completely clean cache — no stale data bleeds over.
+    queryClient.clear();
     try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {}
     Object.keys(localStorage).forEach((k) => { if (k.startsWith('sb-')) localStorage.removeItem(k); });
     navigate("/login");

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -9,10 +9,22 @@ interface AdminRouteProps {
 export default function AdminRoute({ component: Component }: AdminRouteProps) {
   const [, navigate] = useLocation();
   const [status, setStatus] = useState<"checking" | "allowed" | "denied">("checking");
+  const resolved = useRef(false);
 
   useEffect(() => {
+    resolved.current = false;
+
     async function verify() {
-      const { data: { session } } = await supabase.auth.getSession();
+      let session = null;
+
+      try {
+        const { data } = await supabase.auth.getSession();
+        session = data.session;
+      } catch {
+        // getSession() failed — treat as unauthenticated
+        navigate("/login");
+        return;
+      }
 
       if (!session) {
         navigate("/login");
@@ -21,23 +33,7 @@ export default function AdminRoute({ component: Component }: AdminRouteProps) {
 
       try {
         const res = await fetch("/api/admin/verify", {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        });
-
-        let body: unknown = null;
-        try {
-          body = await res.clone().json();
-        } catch {
-          body = await res.clone().text();
-        }
-
-        console.log("[AdminRoute] verify response", {
-          status: res.status,
-          ok: res.ok,
-          body,
-          userId: session.user?.id,
+          headers: { Authorization: `Bearer ${session.access_token}` },
         });
 
         if (res.ok) {
@@ -46,14 +42,23 @@ export default function AdminRoute({ component: Component }: AdminRouteProps) {
           setStatus("denied");
           navigate("/dashboard");
         }
-      } catch (err) {
-        console.error("[AdminRoute] verify fetch error", err);
+      } catch {
         setStatus("denied");
         navigate("/dashboard");
       }
     }
 
     verify();
+
+    // Safety: if verify() hangs for more than 10 s, redirect to login
+    const timer = setTimeout(() => {
+      if (!resolved.current && status === "checking") {
+        navigate("/login");
+      }
+    }, 10000);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   if (status === "allowed") {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 
@@ -10,27 +10,55 @@ export default function ProtectedRoute({ component: Component }: ProtectedRouteP
   const [, navigate] = useLocation();
   const [checking, setChecking] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const resolved = useRef(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/login");
-      } else {
+    resolved.current = false;
+
+    function resolve(hasSession: boolean) {
+      if (resolved.current) return;
+      resolved.current = true;
+      if (hasSession) {
         setAuthenticated(true);
+      } else {
+        navigate("/login");
       }
       setChecking(false);
-    });
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
+    // onAuthStateChange is the single source of truth.
+    // INITIAL_SESSION fires exactly once per registration (with or without a session)
+    // and is the authoritative answer to "is the user logged in right now?".
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "INITIAL_SESSION") {
+        resolve(!!session);
+      } else if (event === "SIGNED_OUT") {
         setAuthenticated(false);
         navigate("/login");
-      } else {
+      } else if (
+        (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") &&
+        session
+      ) {
         setAuthenticated(true);
+        // Safety: if checking was never cleared (e.g. INITIAL_SESSION misfired)
+        if (!resolved.current) resolve(true);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Absolute fallback: if INITIAL_SESSION never fires within 5 s (e.g. Supabase JS bug),
+    // kick the user to login rather than show an infinite spinner.
+    const timer = setTimeout(() => {
+      if (!resolved.current) {
+        resolved.current = true;
+        setChecking(false);
+        navigate("/login");
+      }
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
   }, [navigate]);
 
   if (checking) {
