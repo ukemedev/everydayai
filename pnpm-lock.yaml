@@ -201,6 +201,9 @@ importers:
       '@types/node-cron':
         specifier: ^3.0.11
         version: 3.0.11
+      '@types/pdf-parse':
+        specifier: ^1.1.5
+        version: 1.1.5
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
@@ -418,6 +421,9 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 7.3.2(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@types/node@25.3.5)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0)(yaml@2.8.2)
       wouter:
         specifier: ^3.3.5
         version: 3.9.0(react@19.1.0)
@@ -2441,6 +2447,9 @@ packages:
 
   '@types/node@25.3.5':
     resolution: {integrity: sha512-oX8xrhvpiyRCQkG1MFchB09f+cXftgIXb3a7UUa4Y3wpmZPw5tyZGTLWhlESOLq1Rq6oDlc8npVU2/9xiCuXMA==}
+
+  '@types/pdf-parse@1.1.5':
+    resolution: {integrity: sha512-kBfrSXsloMnUJOKi25s3+hRmkycHfLK6A09eRGqF/N8BkQoPUmaCr+q8Cli5FnfohEz/rsv82zAiPz/LXtOGhA==}
 
   '@types/pg@8.18.0':
     resolution: {integrity: sha512-gT+oueVQkqnj6ajGJXblFR4iavIXWsGAFCk3dP4Kki5+a9R4NMt0JARdk6s8cUKcfUoqP5dAtDSLU8xYUTFV+Q==}
@@ -6433,6 +6442,10 @@ snapshots:
   '@types/node@25.3.5':
     dependencies:
       undici-types: 7.18.2
+
+  '@types/pdf-parse@1.1.5':
+    dependencies:
+      '@types/node': 25.3.5
 
   '@types/pg@8.18.0':
     dependencies:
