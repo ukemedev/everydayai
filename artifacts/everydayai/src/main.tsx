@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { AuthProvider } from "./context/AuthContext";
 import "./index.css";
 
 window.addEventListener("error", (event) => {
@@ -33,6 +34,8 @@ window.addEventListener("unhandledrejection", (event) => {
 
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </ErrorBoundary>
 );

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 
 interface ProtectedRouteProps {
   component: React.ComponentType;
@@ -8,60 +8,15 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ component: Component }: ProtectedRouteProps) {
   const [, navigate] = useLocation();
-  const [checking, setChecking] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
-  const resolved = useRef(false);
+  const { session, loading } = useAuth();
 
   useEffect(() => {
-    resolved.current = false;
-
-    function resolve(hasSession: boolean) {
-      if (resolved.current) return;
-      resolved.current = true;
-      if (hasSession) {
-        setAuthenticated(true);
-      } else {
-        navigate("/login");
-      }
-      setChecking(false);
+    if (!loading && !session) {
+      navigate("/login");
     }
+  }, [loading, session, navigate]);
 
-    // onAuthStateChange is the single source of truth.
-    // INITIAL_SESSION fires exactly once per registration (with or without a session)
-    // and is the authoritative answer to "is the user logged in right now?".
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "INITIAL_SESSION") {
-        resolve(!!session);
-      } else if (event === "SIGNED_OUT") {
-        setAuthenticated(false);
-        navigate("/login");
-      } else if (
-        (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") &&
-        session
-      ) {
-        setAuthenticated(true);
-        // Safety: if checking was never cleared (e.g. INITIAL_SESSION misfired)
-        if (!resolved.current) resolve(true);
-      }
-    });
-
-    // Absolute fallback: if INITIAL_SESSION never fires within 5 s (e.g. Supabase JS bug),
-    // kick the user to login rather than show an infinite spinner.
-    const timer = setTimeout(() => {
-      if (!resolved.current) {
-        resolved.current = true;
-        setChecking(false);
-        navigate("/login");
-      }
-    }, 5000);
-
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(timer);
-    };
-  }, [navigate]);
-
-  if (checking) {
+  if (loading) {
     return (
       <div
         className="min-h-screen w-full flex items-center justify-center"
@@ -72,7 +27,7 @@ export default function ProtectedRoute({ component: Component }: ProtectedRouteP
     );
   }
 
-  if (!authenticated) return null;
+  if (!session) return null;
 
   return <Component />;
 }
