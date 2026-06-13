@@ -12,7 +12,7 @@ export default function ProtectedRoute({ component: Component }: ProtectedRouteP
   const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
         navigate("/login");
       } else {
@@ -20,6 +20,7 @@ export default function ProtectedRoute({ component: Component }: ProtectedRouteP
       }
       setChecking(false);
     });
+    return () => subscription.unsubscribe();
   }, [navigate]);
 
   if (checking) {
