@@ -6,7 +6,17 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./src/index.ts"
+      ]
+    }
+  },
   "dependencies": {
     "zod": "catalog:"
+  },
+  "scripts": {
+    "build": "tsc -b"
   }
 }
