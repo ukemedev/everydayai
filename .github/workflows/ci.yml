@@ -84,6 +84,10 @@ jobs:
 
       # ── Step 7: TypeScript typecheck ────────────────────────────
       # Catches type errors across the entire monorepo
+        - name: Build api-zod
+          working-directory: lib/api-zod
+          run: pnpm build
+
       - name: TypeScript typecheck
         run: pnpm run typecheck
 
