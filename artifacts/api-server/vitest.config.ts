@@ -8,5 +8,13 @@ export default defineConfig({
     coverage: {
       reporter: ["text", "json"],
     },
+    server: {
+      deps: {
+        // Force Vite to bundle @zxcvbn-ts/* through its ESM pipeline.
+        // Without this, Node loads the CJS versions whose decompress.cjs
+        // exports { default: fn } instead of fn — crashing language-en/common.
+        inline: [/@zxcvbn-ts\//],
+      },
+    },
   },
 });

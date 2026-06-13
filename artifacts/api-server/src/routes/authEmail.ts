@@ -1,12 +1,12 @@
-// POST /api/auth/welcome
-// Called by the frontend immediately after a successful signup.
-// Sends the welcome email. Idempotent — safe to call once per user.
+// POST /api/auth/welcome          — sends welcome email after signup
+// POST /api/auth/check-password   — validates password strength (pre-flight)
 
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { sendEmail, isEmailConfigured } from "../lib/email.js";
 import { welcomeEmailHtml, welcomeEmailSubject } from "../lib/emails/welcome.js";
+import { checkPasswordStrength } from "../lib/passwordStrength.js";
 
 const router = Router();
 
@@ -72,6 +72,42 @@ router.post("/auth/welcome", async (req: Request, res: Response) => {
   }
 
   res.status(200).json({ ok: true, sent: result.ok });
+});
+
+// ─── POST /api/auth/check-password ───────────────────────────────────────────
+// Pre-flight password strength check called by the frontend before signup
+// or password-reset. No auth required — just validates the password.
+//
+// 200  { ok: true, score, suggestions, warning }  — score >= 3, acceptable
+// 422  { error: "WEAK_PASSWORD", score, suggestions, warning }  — score < 3
+// 400  { error: "MISSING_PASSWORD" }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/auth/check-password", async (req: Request, res: Response) => {
+  const { password } = req.body as { password?: unknown };
+
+  if (typeof password !== "string" || !password) {
+    res.status(400).json({ error: "MISSING_PASSWORD" });
+    return;
+  }
+
+  const result = checkPasswordStrength(password);
+
+  if (!result.isAcceptable) {
+    res.status(422).json({
+      error:       "WEAK_PASSWORD",
+      score:       result.score,
+      suggestions: result.suggestions,
+      warning:     result.warning,
+    });
+    return;
+  }
+
+  res.json({
+    ok:          true,
+    score:       result.score,
+    suggestions: result.suggestions,
+    warning:     result.warning,
+  });
 });
 
 export default router;
