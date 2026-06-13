@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { logger } from "./logger.js";
+import { getRedisClient } from "./redisClient.js";
 import { sendEmail, isEmailConfigured } from "./email.js";
 import { limitWarningEmailHtml, limitWarningEmailSubject, limitReachedEmailHtml, limitReachedEmailSubject } from "./emails/limitWarning.js";
 
@@ -8,6 +10,103 @@ export const PLAN_LIMITS: Record<string, { agents: number; messagesPerMonth: num
   pro:      { agents: 10,       messagesPerMonth: 10_000    },
   business: { agents: Infinity, messagesPerMonth: Infinity  },
 };
+
+// ─── Redis-backed plan limit gate ─────────────────────────────────────────────
+
+/** Number of messages a free-trial user gets before they must upgrade. */
+export const FREE_TRIAL_LIMIT = 20;
+
+/** Message shown to free users when they have exhausted their trial allowance. */
+export const UPGRADE_MESSAGE = "You've used your free messages. Upgrade to continue.";
+
+/** TTL applied to each Redis usage key — resets the counter every 30 days. */
+const REDIS_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+export type PlanLimitResult =
+  | { allowed: true;  current: number; limit: number }
+  | { allowed: false; current: number; limit: number; message: string };
+
+/** Returns a Supabase service client or null if env vars are missing — never throws. */
+function getServiceClientOrNull() {
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
+/**
+ * checkPlanLimit — Redis-backed pre-flight gate for every AI message.
+ *
+ * Flow:
+ *   1. Look up user plan from Supabase (fail-open → "free")
+ *   2. Unlimited plans (pro/business) skip the counter entirely
+ *   3. INCR the Redis key `usage:${userId}:messages`
+ *   4. If new key → set 30-day EXPIRE
+ *   5. If count > limit → DECR + return { allowed: false, message }
+ *   6. Redis unavailable → fail-open (never block because of infra failure)
+ */
+export async function checkPlanLimit(userId: string): Promise<PlanLimitResult> {
+  // ── Step 1: resolve plan (fail-open) ────────────────────────────
+  let plan = "free";
+  try {
+    const sb = getServiceClientOrNull();
+    if (sb) {
+      const { data, error } = await sb
+        .from("profiles")
+        .select("plan")
+        .eq("id", userId)
+        .single();
+      if (!error && data?.plan) plan = data.plan as string;
+    }
+  } catch {
+    // fail-open — unknown plan defaults to "free"
+  }
+
+  // ── Step 2: unlimited plans skip the counter entirely ────────────
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
+  if (limits.messagesPerMonth === Infinity) {
+    return { allowed: true, current: 0, limit: Infinity };
+  }
+
+  // ── Step 3: resolve the effective trial limit ────────────────────
+  const limit = plan === "free" ? FREE_TRIAL_LIMIT : limits.messagesPerMonth;
+
+  // ── Step 4: Redis counter ────────────────────────────────────────
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    // No Redis configured — fail-open
+    return { allowed: true, current: 0, limit };
+  }
+
+  try {
+    const redis = getRedisClient(redisUrl);
+    const redisKey = `usage:${userId}:messages`;
+
+    const newCount = await redis.incr(redisKey);
+
+    // Set TTL only on the very first message (new key)
+    if (newCount === 1) {
+      await redis.expire(redisKey, REDIS_TTL_SECONDS);
+    }
+
+    if (newCount > limit) {
+      // Reverse the increment — blocked requests must not consume quota
+      await redis.decr(redisKey);
+      return {
+        allowed: false,
+        current: newCount - 1,
+        limit,
+        message: UPGRADE_MESSAGE,
+      };
+    }
+
+    return { allowed: true, current: newCount, limit };
+
+  } catch (err) {
+    logger.error({ err, userId }, "Redis plan limit check failed — failing open");
+    return { allowed: true, current: 0, limit };
+  }
+}
 
 // Tools available per plan (connector IDs)
 export const PLAN_TOOLS: Record<string, string[]> = {

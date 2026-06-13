@@ -3,7 +3,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "../lib/logger.js";
-import { checkMessageLimit, getUserPlan } from "../lib/planLimits.js";
+import { checkMessageLimit, getUserPlan, checkPlanLimit } from "../lib/planLimits.js";
 import {
   checkAgentDailyLimit, incrementAgentDailyCount,
   checkSessionLimit, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE,
@@ -201,18 +201,15 @@ router.post("/chat", async (req: Request, res: Response) => {
   }
 
   if (verifiedUserId) {
-    const sb = getServiceClient();
-    if (sb) {
-      try {
-        const plan = await getUserPlan(verifiedUserId);
-        const limitResult = await checkMessageLimit(verifiedUserId);
-        if (!limitResult.allowed) {
-          res.status(429).json({ error: "PLAN_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
-          return;
-        }
-      } catch (err) {
-        logger.error({ err }, "plan limit check failed — allowing request");
-      }
+    const limitResult = await checkPlanLimit(verifiedUserId);
+    if (!limitResult.allowed) {
+      res.status(402).json({
+        error:   "MESSAGE_LIMIT_REACHED",
+        message: limitResult.message,
+        current: limitResult.current,
+        limit:   limitResult.limit,
+      });
+      return;
     }
   }
 
