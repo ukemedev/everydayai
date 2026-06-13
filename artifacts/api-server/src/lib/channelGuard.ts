@@ -1,13 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+import { getServiceClient } from "./supabaseService.js";
 
-// ─── Shared guardrails for agent-to-channel deployment ────────────────────────────
-
-function getServiceClient() {
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
+// ─── Shared guardrails for agent-to-channel deployment ───────────────────────
 
 export interface AgentOwnershipResult {
   ok: boolean;

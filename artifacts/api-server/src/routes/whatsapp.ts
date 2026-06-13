@@ -1,11 +1,6 @@
 import { createRequire } from "node:module";
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import Groq from "groq-sdk";
 import { logger } from "../lib/logger.js";
 import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import {
@@ -21,151 +16,14 @@ import { sendWhatsAppMessage } from "../lib/whatsappClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
 import { transcribeAudio } from "../lib/whisper.js";
 import { runAgentTools } from "../lib/toolRunner.js";
+import { getServiceClient } from "../lib/supabaseService.js";
+import { callAI, callAIVision, getProviderForModel, type ConversationMessage } from "../lib/aiDispatch.js";
 
 const router = Router();
 
 const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (buf: Buffer, opts?: object) => Promise<{ text: string }>;
 const mammoth  = _require("mammoth")   as { extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }> };
-
-function getServiceClient() {
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-function getProviderForModel(model: string): string {
-  if (model.startsWith("claude-")) return "anthropic";
-  if (model.startsWith("gemini-")) return "google";
-  if (model.includes("llama") || model.includes("mixtral")) return "groq";
-  return "openai";
-}
-
-interface ConversationMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-async function callAI(
-  apiKey: string,
-  provider: string,
-  model: string,
-  systemPrompt: string,
-  history: ConversationMessage[],
-  message: string
-): Promise<string> {
-  switch (provider) {
-    case "anthropic": {
-      const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: "user", content: message },
-        ],
-      });
-      const block = response.content[0];
-      return block.type === "text" ? block.text : "No response.";
-    }
-    case "google": {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
-      const chat = genModel.startChat({
-        history: history.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
-      });
-      const result = await chat.sendMessage(message);
-      return result.response.text();
-    }
-    case "groq": {
-      const client = new Groq({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message },
-        ],
-      });
-      return completion.choices[0]?.message?.content ?? "No response.";
-    }
-    case "openai":
-    default: {
-      const client = new OpenAI({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message },
-        ],
-      });
-      return completion.choices[0]?.message?.content ?? "No response.";
-    }
-  }
-}
-
-async function callAIVision(
-  apiKey: string, provider: string, model: string, systemPrompt: string,
-  history: ConversationMessage[], message: string,
-  imageBase64: string, imageMimeType: string
-): Promise<string> {
-  switch (provider) {
-    case "anthropic": {
-      const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model, max_tokens: 1024, system: systemPrompt,
-        messages: [
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          {
-            role: "user",
-            content: [
-              { type: "image" as const, source: { type: "base64" as const, media_type: imageMimeType as "image/jpeg"|"image/png"|"image/gif"|"image/webp", data: imageBase64 } },
-              { type: "text" as const, text: message },
-            ],
-          },
-        ],
-      });
-      const block = response.content[0];
-      return block.type === "text" ? block.text : "No response.";
-    }
-    case "google": {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
-      const chat = genModel.startChat({
-        history: history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-      });
-      const result = await chat.sendMessage([
-        { text: message },
-        { inlineData: { mimeType: imageMimeType, data: imageBase64 } },
-      ]);
-      return result.response.text();
-    }
-    case "groq":
-      return callAI(apiKey, provider, model, systemPrompt, history, `[User sent an image]\n\n${message}`.trim());
-    case "openai":
-    default: {
-      const client = new OpenAI({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: [
-            { type: "text" as const, text: message },
-            { type: "image_url" as const, image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
-          ]},
-        ],
-      });
-      return completion.choices[0]?.message?.content ?? "No response.";
-    }
-  }
-}
 
 async function downloadWhatsAppMedia(mediaId: string, accessToken: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
   try {
@@ -351,12 +209,14 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     setAiCooldown(agentId, customerId);
 
     // ── Download and process media attachments ──────────────────────────────
-    const caps: { images?: boolean; voice?: boolean; files?: boolean } = {};
+    // NOTE: caps object removed — media is already gated by the msgType check
+    // derived from the actual WhatsApp update. An empty caps object was
+    // previously silently discarding all voice/image/document messages.
     let mediaText    = "";
     let imageBase64: string | null = null;
     let imageMime:   string | null = null;
 
-    if (msgType === "audio" && caps.voice && inbound?.audio?.id) {
+    if (msgType === "audio" && inbound?.audio?.id) {
       const dl = await downloadWhatsAppMedia(inbound.audio.id, accessToken);
       if (dl) {
         try {
@@ -364,13 +224,13 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
           if (transcript.trim()) mediaText = `[Voice note]: "${transcript.trim()}"`;
         } catch { /* skip if Whisper not configured */ }
       }
-    } else if (msgType === "image" && caps.images && inbound?.image?.id) {
+    } else if (msgType === "image" && inbound?.image?.id) {
       const dl = await downloadWhatsAppMedia(inbound.image.id, accessToken);
       if (dl) {
         imageBase64 = dl.buffer.toString("base64");
         imageMime   = dl.mimeType.startsWith("image/") ? dl.mimeType : "image/jpeg";
       }
-    } else if (msgType === "document" && caps.files && inbound?.document?.id) {
+    } else if (msgType === "document" && inbound?.document?.id) {
       const dl = await downloadWhatsAppMedia(inbound.document.id, accessToken);
       if (dl) {
         const mt = dl.mimeType;

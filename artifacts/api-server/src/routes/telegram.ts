@@ -2,15 +2,10 @@ import { createHmac } from "node:crypto";
 import { createRequire } from "node:module";
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import Groq from "groq-sdk";
 import { logger } from "../lib/logger.js";
 import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import {
-  checkAgentDailyLimit, incrementAgentDailyCount, checkSessionLimit, checkIpRateLimit, FRIENDLY_LIMIT_MESSAGE,
+  checkAgentDailyLimit, incrementAgentDailyCount, checkIpRateLimit,
   checkCustomerDailyLimit, incrementCustomerDailyCount, checkBurstLimit,
   isDuplicateMessage, isAiCooldownActive, setAiCooldown,
   CUSTOMER_DAILY_LIMIT_MESSAGE, BURST_LIMIT_MESSAGE, DUPLICATE_MESSAGE, COOLDOWN_MESSAGE,
@@ -20,26 +15,30 @@ import { verifyAgentOwnership, checkChannelExclusivity } from "../lib/channelGua
 import { decrypt, isEncrypted } from "../lib/encryption.js";
 import { runAgentTools } from "../lib/toolRunner.js";
 import { transcribeAudio } from "../lib/whisper.js";
+import { truncateHistory, BUDGET_HISTORY } from "../lib/tokenBudget.js";
+import { getServiceClient } from "../lib/supabaseService.js";
 import {
-  truncateHistory,
-  BUDGET_HISTORY,
-} from "../lib/tokenBudget.js";
+  callAI, callAIVision, getProviderForModel,
+  truncateForTelegram,
+  type ConversationMessage,
+} from "../lib/aiDispatch.js";
 
+// ─── Webhook secret ───────────────────────────────────────────────────────────
 function getWebhookSecret(agentId: string): string {
   const secret = process.env.SESSION_SECRET ?? "everydayai-webhook-secret";
   return createHmac("sha256", secret).update(agentId).digest("hex").slice(0, 64);
 }
 
-// ── Deduplication: ignore Telegram retries ────────────────────────────────────
+// ─── Deduplication: ignore Telegram retries ───────────────────────────────────
 // Telegram retries a webhook if it doesn't receive 200 within 60 s.
 // We respond 200 immediately but processing takes longer, so we deduplicate
 // by update_id to avoid double-processing / double-replying.
 const _processedUpdates = new Map<number, number>(); // updateId → timestamp ms
-const _DEDUP_TTL = 10 * 60 * 1000; // keep IDs for 10 min
+const _DEDUP_TTL = 10 * 60 * 1000; // 10 min
+
 function _isRetry(updateId: number | undefined): boolean {
   if (updateId === undefined) return false;
   const now = Date.now();
-  // Purge expired entries (keep Map lean)
   for (const [id, ts] of _processedUpdates) {
     if (now - ts > _DEDUP_TTL) _processedUpdates.delete(id);
   }
@@ -48,7 +47,7 @@ function _isRetry(updateId: number | undefined): boolean {
   return false;
 }
 
-// ── Per-customer in-flight guard ──────────────────────────────────────────────
+// ─── Per-customer in-flight guard ─────────────────────────────────────────────
 // Prevents the same customer sending 3 messages in 2 seconds and generating
 // 3 concurrent AI calls for the same conversation.
 const _inFlight = new Set<string>(); // key: `${agentId}:${chatId}`
@@ -59,145 +58,7 @@ const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (buf: Buffer, opts?: object) => Promise<{ text: string }>;
 const mammoth  = _require("mammoth")   as { extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }> };
 
-function getServiceClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-function getProviderForModel(model: string): string {
-  if (model.startsWith("claude-")) return "anthropic";
-  if (model.startsWith("gemini-")) return "google";
-  if (model.includes("llama") || model.includes("mixtral")) return "groq";
-  return "openai";
-}
-
-interface ConversationMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-async function callAI(
-  apiKey: string,
-  provider: string,
-  model: string,
-  systemPrompt: string,
-  history: ConversationMessage[],
-  message: string
-): Promise<string> {
-  switch (provider) {
-    case "anthropic": {
-      const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: "user", content: message },
-        ],
-      });
-      const block = response.content[0];
-      return block.type === "text" ? block.text : "No response.";
-    }
-    case "google": {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
-      const chat = genModel.startChat({
-        history: history.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
-      });
-      const result = await chat.sendMessage(message);
-      return result.response.text();
-    }
-    case "groq": {
-      const client = new Groq({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message },
-        ],
-      });
-      return completion.choices[0]?.message?.content ?? "No response.";
-    }
-    case "openai":
-    default: {
-      const client = new OpenAI({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message },
-        ],
-      });
-      return completion.choices[0]?.message?.content ?? "No response.";
-    }
-  }
-}
-
-async function callAIVision(
-  apiKey: string, provider: string, model: string, systemPrompt: string,
-  history: ConversationMessage[], message: string,
-  imageBase64: string, imageMimeType: string
-): Promise<string> {
-  switch (provider) {
-    case "anthropic": {
-      const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model, max_tokens: 1024, system: systemPrompt,
-        messages: [
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          {
-            role: "user",
-            content: [
-              { type: "image" as const, source: { type: "base64" as const, media_type: imageMimeType as "image/jpeg"|"image/png"|"image/gif"|"image/webp", data: imageBase64 } },
-              { type: "text" as const, text: message },
-            ],
-          },
-        ],
-      });
-      const block = response.content[0];
-      return block.type === "text" ? block.text : "No response.";
-    }
-    case "google": {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
-      const chat = genModel.startChat({
-        history: history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-      });
-      const result = await chat.sendMessage([
-        { text: message },
-        { inlineData: { mimeType: imageMimeType, data: imageBase64 } },
-      ]);
-      return result.response.text();
-    }
-    case "groq":
-      return callAI(apiKey, provider, model, systemPrompt, history, `[User sent an image]\n\n${message}`.trim());
-    case "openai":
-    default: {
-      const client = new OpenAI({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: [
-            { type: "text" as const, text: message },
-            { type: "image_url" as const, image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } },
-          ]},
-        ],
-      });
-      return completion.choices[0]?.message?.content ?? "No response.";
-    }
-  }
-}
-
+// ─── Telegram file downloader ─────────────────────────────────────────────────
 async function downloadTelegramFile(fileId: string, botToken: string): Promise<{ buffer: Buffer } | null> {
   try {
     const infoRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
@@ -210,8 +71,7 @@ async function downloadTelegramFile(fileId: string, botToken: string): Promise<{
   } catch { return null; }
 }
 
-// ─── POST /api/telegram/setup ─────────────────────────────────────────────
-// Saves bot credentials and registers the webhook with Telegram.
+// ─── POST /api/telegram/setup ─────────────────────────────────────────────────
 
 router.post("/telegram/setup", async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -309,7 +169,7 @@ router.post("/telegram/setup", async (req: Request, res: Response) => {
   res.json({ success: true, deployment });
 });
 
-// ─── GET /api/telegram/deployment/:agentId ────────────────────────────
+// ─── GET /api/telegram/deployment/:agentId ────────────────────────────────────
 
 router.get("/telegram/deployment/:agentId", async (req: Request, res: Response) => {
   const { agentId } = req.params as { agentId: string };
@@ -327,7 +187,7 @@ router.get("/telegram/deployment/:agentId", async (req: Request, res: Response) 
   res.json({ deployment: data ?? null });
 });
 
-// ─── DELETE /api/telegram/deployment/:agentId ─────────────────────
+// ─── DELETE /api/telegram/deployment/:agentId ─────────────────────────────────
 
 router.delete("/telegram/deployment/:agentId", async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -361,13 +221,13 @@ router.delete("/telegram/deployment/:agentId", async (req: Request, res: Respons
   res.json({ success: true });
 });
 
-// ─── POST /api/telegram/webhook/:agentId ─────────────────────────
+// ─── POST /api/telegram/webhook/:agentId ──────────────────────────────────────
 // Receives updates from Telegram, calls the agent, sends a reply.
 
 router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) => {
   const { agentId } = req.params as { agentId: string };
 
-  // ── Verify that this request actually came from Telegram ──
+  // ── Verify request came from Telegram ─────────────────────────────────────
   const receivedSecret = req.headers["x-telegram-bot-api-secret-token"] as string | undefined;
   const expectedSecret = getWebhookSecret(agentId);
   if (!receivedSecret || receivedSecret !== expectedSecret) {
@@ -387,19 +247,19 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     };
   };
 
-  // Always acknowledge immediately — Telegram retries if it waits >60 s for 200
+  // Always acknowledge immediately — Telegram retries if it waits > 60 s for 200
   res.json({ ok: true });
 
-  // ── Deduplicate Telegram retries ─────────────────────────────────────────
+  // ── Deduplicate Telegram retries ──────────────────────────────────────────
   if (_isRetry(update.update_id)) {
     logger.warn({ agentId, updateId: update.update_id }, "telegram webhook: duplicate update_id — ignoring retry");
     return;
   }
 
-  const chatId    = update.message?.chat?.id;
-  const rawText   = update.message?.text ?? "";
-  const hasPhoto    = (update.message?.photo?.length ?? 0) > 0;
-  const hasVoice    = !!update.message?.voice;
+  const chatId     = update.message?.chat?.id;
+  const rawText    = update.message?.text ?? "";
+  const hasPhoto   = (update.message?.photo?.length ?? 0) > 0;
+  const hasVoice   = !!update.message?.voice;
   const hasDocument = !!update.message?.document;
 
   logger.info({ agentId, chatId, rawTextLen: rawText.length, hasPhoto, hasVoice, hasDocument }, "telegram webhook async processing started");
@@ -409,7 +269,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     return;
   }
 
-  // ── Sanitize and check for prompt injection ──
+  // ── Sanitize and check for prompt injection ────────────────────────────────
   const text = rawText.trim() ? sanitizeText(rawText.trim()) : "";
   if (rawText.trim() && (!text || detectPromptInjection(text))) {
     logger.warn({ agentId, chatId }, "Telegram message rejected (empty or prompt injection)");
@@ -418,7 +278,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
   const sb = getServiceClient();
   if (!sb) {
-        logger.error({ agentId }, "telegram webhook: service client unavailable – check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
+    logger.error({ agentId }, "telegram webhook: service client unavailable — check VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY");
     return;
   }
 
@@ -453,75 +313,71 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       logger.warn({ agentId }, "telegram webhook: agent not found in DB");
       return;
     }
-    if ((agent.status as string) !== "live") {
-      logger.warn({ agentId, status: agent.status }, "Agent not live — Telegram webhook ignored");
-      await fetch(
-        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: "⚠️ This agent hasn't been published yet. The owner needs to publish it in the EverydayAI dashboard first.",
-          }),
-        }
-      );
-      return;
-    }
 
-    logger.info({ agentId, chatId, status: agent.status, model: agent.model }, "telegram webhook: agent is live, proceeding with AI call");
+    const botToken = deployment.bot_token as string;
 
-    const model = (agent.model as string) || "gpt-4o-mini";
-    const instructions = (agent.instructions as string) || "You are a helpful assistant.";
-    const provider = getProviderForModel(model);
-    const ownerId = (agent.user_id as string) || (deployment.user_id as string);
-
-    logger.info({ agentId, chatId, ownerId, agentUserId: agent.user_id, deploymentUserId: deployment.user_id }, "telegram webhook: resolved ownerId");
-
-    // Shorthand so every silent exit can tell the user why — no more black holes
+    // Shorthand so every exit can tell the user what happened — no black holes
     const tgSend = (msg: string) =>
-      fetch(`https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`, {
+      fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: msg }),
+        body: JSON.stringify({ chat_id: chatId, text: truncateForTelegram(msg) }),
       }).catch(() => {});
 
-    // ── IP rate limit — network-level spam guard (always applies) ───────────
-    const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
-    const ipCheck = checkIpRateLimit(clientIp);
-    if (!ipCheck.allowed) {
-      logger.warn({ ip: clientIp, agentId }, "telegram IP rate limit hit");
-      void tgSend("⚠️ Too many requests from your network. Please wait a moment and try again.");
+    if ((agent.status as string) !== "live") {
+      logger.warn({ agentId, status: agent.status }, "Agent not live — Telegram webhook ignored");
+      void tgSend("This agent hasn't been published yet. The owner needs to publish it in the EverydayAI dashboard first.");
       return;
     }
 
-    // ── Download and process media attachments ──────────────────────────────
-    const caps: { images?: boolean; voice?: boolean; files?: boolean } = {};
-    const botToken = deployment.bot_token as string;
-    let mediaText   = "";
+    logger.info({ agentId, chatId, status: agent.status, model: agent.model }, "telegram webhook: agent is live, proceeding");
+
+    const model       = (agent.model as string) || "gpt-4o-mini";
+    const instructions = (agent.instructions as string) || "You are a helpful assistant.";
+    const provider    = getProviderForModel(model);
+    const ownerId     = (agent.user_id as string) || (deployment.user_id as string);
+
+    logger.info({ agentId, chatId, ownerId }, "telegram webhook: resolved ownerId");
+
+    // ── IP rate limit ──────────────────────────────────────────────────────
+    const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
+    const ipCheck  = checkIpRateLimit(clientIp);
+    if (!ipCheck.allowed) {
+      logger.warn({ ip: clientIp, agentId }, "telegram IP rate limit hit");
+      void tgSend("Too many requests from your network. Please wait a moment and try again.");
+      return;
+    }
+
+    // ── Download and process media ─────────────────────────────────────────
+    // NOTE: caps object was removed — media is already gated by hasVoice /
+    // hasPhoto / hasDocument flags derived from the actual Telegram update.
+    // An empty caps object was previously silently discarding all media.
+    let mediaText    = "";
     let imageBase64: string | null = null;
     let imageMime:   string | null = null;
 
-    if (hasVoice && caps.voice) {
+    if (hasVoice) {
       const voice = update.message!.voice!;
       const dl = await downloadTelegramFile(voice.file_id, botToken);
       if (dl) {
         try {
           const transcript = await transcribeAudio(dl.buffer, voice.mime_type ?? "audio/ogg", undefined);
           if (transcript.trim()) mediaText = `[Voice note]: "${transcript.trim()}"`;
-        } catch { /* skip if Whisper not configured */ }
+        } catch {
+          logger.warn({ agentId, chatId }, "Whisper transcription failed — skipping voice");
+        }
       }
-    } else if (hasPhoto && caps.images) {
-      const photos = update.message!.photo!;
+    } else if (hasPhoto) {
+      const photos  = update.message!.photo!;
       const largest = photos[photos.length - 1];
       const dl = await downloadTelegramFile(largest.file_id, botToken);
       if (dl) {
         imageBase64 = dl.buffer.toString("base64");
         imageMime   = "image/jpeg";
       }
-    } else if (hasDocument && caps.files) {
+    } else if (hasDocument) {
       const doc = update.message!.document!;
-      const dl = await downloadTelegramFile(doc.file_id, botToken);
+      const dl  = await downloadTelegramFile(doc.file_id, botToken);
       if (dl) {
         const mt = doc.mime_type ?? "";
         try {
@@ -534,16 +390,16 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
           } else if (mt.startsWith("text/")) {
             mediaText = `[Document: ${doc.file_name ?? "file"}]:\n${dl.buffer.toString("utf-8").slice(0, 4000)}`;
           }
-        } catch { /* skip unreadable docs */ }
+        } catch {
+          logger.warn({ agentId, chatId, mime: mt }, "document extraction failed — skipping");
+        }
       }
     }
 
     const effectiveText = [text, mediaText].filter(Boolean).join("\n\n") || "[Media message]";
     const previewText   = effectiveText.slice(0, 75);
 
-    // ── Find or create conversation ──────────────────────────────────────────
-    // Moved BEFORE AI limits — we need to know the conversation mode first.
-    // Human-mode conversations must NOT burn AI quota or set the cooldown.
+    // ── Find or create conversation ────────────────────────────────────────
     const fromUser = update.message?.from;
     const customerDisplay = fromUser?.username
       ? `@${fromUser.username}`
@@ -611,7 +467,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       }
     }
 
-    // ── Save inbound customer message (always, regardless of mode) ───────────
+    // ── Save inbound customer message ──────────────────────────────────────
     const { error: msgInsertErr } = await sb.from("messages").insert({
       conversation_id: conversationId,
       role:            "customer",
@@ -623,23 +479,21 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       logger.info({ conversationId, agentId }, "telegram webhook: customer message saved");
     }
 
-    // ── Human mode: save message, notify customer, done — no AI limits set ──
+    // ── Human mode: notify and exit — no AI quota consumed ────────────────
     if (currentMode === "human") {
       logger.info({ agentId, chatId }, "telegram in human mode — AI reply suppressed");
-      void tgSend("✋ Your message was received. A human agent will reply to you shortly.");
+      void tgSend("Your message was received. A human agent will reply to you shortly.");
       return;
     }
 
-    // ── AI-only limits (only charged when AI actually replies) ───────────────
-    // These run AFTER the human mode check so switching to human and back
-    // never burns AI quota or leaves a cooldown that blocks the next AI reply.
+    // ── AI-only limits ─────────────────────────────────────────────────────
     const customerId = String(chatId);
-    const ownerPlan = await getUserPlan(ownerId).catch(() => "free");
+    const ownerPlan  = await getUserPlan(ownerId).catch(() => "free");
 
     const dailyCheck = checkAgentDailyLimit(agentId, ownerPlan);
     if (!dailyCheck.allowed) {
       logger.warn({ agentId, ownerPlan, dailyCount: dailyCheck.count }, "telegram agent daily limit reached");
-      void tgSend("⚠️ This agent has reached its daily message limit. Please try again tomorrow.");
+      void tgSend("This agent has reached its daily message limit. Please try again tomorrow.");
       return;
     }
     incrementAgentDailyCount(agentId);
@@ -669,16 +523,16 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     incrementCustomerDailyCount(agentId, customerId);
     setAiCooldown(agentId, customerId);
 
-    // ── Per-customer in-flight guard ─────────────────────────────────────────
+    // ── Per-customer in-flight guard ───────────────────────────────────────
     const inFlightKey = `${agentId}:${String(chatId)}`;
     if (_inFlight.has(inFlightKey)) {
-      logger.warn({ agentId, chatId }, "telegram webhook: AI call already in-flight for this customer — skipping duplicate");
-      void tgSend("⏳ Still processing your last message. Please wait a moment.");
+      logger.warn({ agentId, chatId }, "telegram webhook: AI call already in-flight — skipping");
+      void tgSend("Still processing your last message. Please wait a moment.");
       return;
     }
     _inFlight.add(inFlightKey);
 
-    // ── Load conversation history (last 40 messages for context) ─────────────
+    // ── Load conversation history ──────────────────────────────────────────
     const { data: historyRows } = await sb
       .from("messages")
       .select("role, content")
@@ -686,18 +540,19 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       .order("created_at", { ascending: false })
       .limit(40);
 
-      const conversationHistory: { role: "user" | "assistant"; content: string }[] = truncateHistory(
-            ((historyRows ?? []) as { role: string; content: string }[])
-            .reverse()
-            .filter((m) => m.role === "customer" || m.role === "ai")
-            .slice(0, -1) // exclude the message we just inserted
-            .map((m) => ({
-                  role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant",
-                  content: m.content,
-            })),
-            BUDGET_HISTORY
-      );
+    const conversationHistory: ConversationMessage[] = truncateHistory(
+      ((historyRows ?? []) as { role: string; content: string }[])
+        .reverse()
+        .filter((m) => m.role === "customer" || m.role === "ai")
+        .slice(0, -1) // exclude the message we just inserted
+        .map((m) => ({
+          role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant",
+          content: m.content,
+        })),
+      BUDGET_HISTORY
+    );
 
+    // ── Resolve API key ────────────────────────────────────────────────────
     const { data: keyRow } = await sb
       .from("api_keys")
       .select("api_key")
@@ -707,17 +562,8 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
 
     if (!keyRow?.api_key) {
       logger.warn({ agentId, provider, ownerId }, "no API key found for telegram webhook agent");
-      await fetch(
-        `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text: `⚠️ This agent is missing a ${provider.toUpperCase()} API key. The owner needs to add one in the EverydayAI dashboard under Settings → API Keys.`,
-          }),
-        }
-      );
+      _inFlight.delete(inFlightKey);
+      void tgSend(`This agent is missing a ${provider.toUpperCase()} API key. The owner needs to add one in the EverydayAI dashboard under Settings → API Keys.`);
       return;
     }
 
@@ -726,10 +572,9 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     const rawApiKey = keyRow.api_key as string;
     const apiKey    = isEncrypted(rawApiKey) ? decrypt(rawApiKey) : rawApiKey;
 
-    // ── Typing indicator ─────────────────────────────────────────────────────
-    // Telegram clears the "typing…" bubble after 5 seconds automatically.
-    // AI calls can take 10-30 seconds, so we send the action immediately and
-    // then repeat every 4 seconds until we have a reply to send.
+    // ── Typing indicator ───────────────────────────────────────────────────
+    // Telegram clears the "typing…" bubble after 5 s automatically.
+    // We refresh it every 4 s so it persists for long AI calls.
     const sendTyping = () =>
       fetch(`https://api.telegram.org/bot${botToken}/sendChatAction`, {
         method: "POST",
@@ -746,21 +591,18 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
         ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText, imageBase64, imageMime)
         : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText);
     } catch (aiErr) {
-      // AI provider failed (rate limited, down, etc.) — tell the customer gracefully
       clearInterval(typingInterval);
       _inFlight.delete(inFlightKey);
       logger.error({ err: aiErr, agentId, provider }, "telegram webhook: AI call failed");
-      void tgSend("⚠️ I'm having trouble reaching the AI right now. Please try again in a moment.");
+      void tgSend("I'm having trouble reaching the AI right now. Please try again in a moment.");
       return;
     } finally {
-      // Always stop the typing indicator
       clearInterval(typingInterval);
     }
 
-    // Always release the in-flight lock once AI has responded
     _inFlight.delete(inFlightKey);
 
-    // ── Save AI reply + update conversation preview ──────────────────────────
+    // ── Save AI reply + update conversation ───────────────────────────────
     const { error: aiMsgErr } = await sb.from("messages").insert({
       conversation_id: conversationId,
       role:            "ai",
@@ -776,19 +618,21 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
       last_message_preview: reply.slice(0, 75),
     }).eq("id", conversationId);
 
-    await fetch(
-      `https://api.telegram.org/bot${deployment.bot_token as string}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text: reply }),
-      }
-    );
-    void runAgentTools(agentId, conversationId, effectiveText, reply!, sb)
+    // ── Send reply to Telegram (enforcing 4096-char limit) ────────────────
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text:    truncateForTelegram(reply),
+      }),
+    });
+
+    void runAgentTools(agentId, conversationId, effectiveText, reply, sb)
       .catch((err: unknown) => logger.error({ err, agentId }, "runAgentTools failed"));
+
     logger.info({ agentId, chatId }, "telegram webhook reply sent");
   } catch (err) {
-    // Unexpected error in outer handler — release in-flight lock and log
     const inFlightKey = `${agentId}:${String(chatId ?? "unknown")}`;
     _inFlight.delete(inFlightKey);
     logger.error({ err, agentId }, "telegram webhook handler error");

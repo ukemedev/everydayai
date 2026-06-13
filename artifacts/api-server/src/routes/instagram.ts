@@ -1,10 +1,5 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import Groq from "groq-sdk";
 import { logger } from "../lib/logger.js";
 import { sanitizeText, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
 import {
@@ -19,61 +14,10 @@ import { encrypt, decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendMetaMessage } from "../lib/metaClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
 import { runAgentTools } from "../lib/toolRunner.js";
+import { getServiceClient } from "../lib/supabaseService.js";
+import { callAI, getProviderForModel, type ConversationMessage } from "../lib/aiDispatch.js";
 
 const router = Router();
-
-function getServiceClient() {
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-function getProviderForModel(model: string): string {
-  if (model.startsWith("claude-"))  return "anthropic";
-  if (model.startsWith("gemini-"))  return "google";
-  if (model.includes("llama") || model.includes("mixtral")) return "groq";
-  return "openai";
-}
-
-interface ConversationMessage { role: "user" | "assistant"; content: string; }
-
-async function callAI(
-  apiKey: string, provider: string, model: string,
-  systemPrompt: string, history: ConversationMessage[], message: string
-): Promise<string> {
-  switch (provider) {
-    case "anthropic": {
-      const c = new Anthropic({ apiKey });
-      const r = await c.messages.create({
-        model, max_tokens: 1024, system: systemPrompt,
-        messages: [...history.map(m => ({ role: m.role, content: m.content })), { role: "user", content: message }],
-      });
-      const b = r.content[0]; return b.type === "text" ? b.text : "No response.";
-    }
-    case "google": {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
-      const chat = genModel.startChat({ history: history.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })) });
-      const result = await chat.sendMessage(message);
-      return result.response.text();
-    }
-    case "groq": {
-      const c = new Groq({ apiKey });
-      const r = await c.chat.completions.create({
-        model, messages: [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: message }],
-      });
-      return r.choices[0]?.message?.content ?? "No response.";
-    }
-    default: {
-      const c = new OpenAI({ apiKey });
-      const r = await c.chat.completions.create({
-        model, messages: [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: message }],
-      });
-      return r.choices[0]?.message?.content ?? "No response.";
-    }
-  }
-}
 
 // ─── GET /api/instagram/webhook/:agentId  (Meta webhook verification) ─────────
 

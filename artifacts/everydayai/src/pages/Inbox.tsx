@@ -17,6 +17,7 @@ interface Conversation {
   unread_count:         number;
   last_message_at:      string;
   last_message_preview: string | null;
+  tags:                 string[];
 }
 
 interface Message {
@@ -138,6 +139,12 @@ export default function Inbox() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [searchQuery,     setSearchQuery]     = useState("");
 
+  // Tags
+  const [convTags,    setConvTags]    = useState<string[]>([]);
+  const [tagInput,    setTagInput]    = useState("");
+  const [savingTags,  setSavingTags]  = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+
   // Mobile: track whether detail panel is showing
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
 
@@ -211,6 +218,48 @@ export default function Inbox() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // ── Sync tags when selected conversation changes ──────────────────────────
+  useEffect(() => {
+    setConvTags(selectedConv?.tags ?? []);
+    setTagInput("");
+  }, [selectedConv?.id]);
+
+  // ── Save tags to API ──────────────────────────────────────────────────────
+  async function saveTags(next: string[]) {
+    if (!selectedConv) return;
+    setSavingTags(true);
+    try {
+      const headers = await getAuthHeader();
+      const res = await fetch(`/api/conversations/${selectedConv.id}/tags`, {
+        method:  "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body:    JSON.stringify({ tags: next }),
+      });
+      if (res.ok) {
+        setConvTags(next);
+        setSelectedConv(prev => prev ? { ...prev, tags: next } : prev);
+        setConversations(prev => prev.map(c => c.id === selectedConv.id ? { ...c, tags: next } : c));
+      }
+    } catch { /* non-fatal */ } finally {
+      setSavingTags(false);
+    }
+  }
+
+  function commitTagInput() {
+    const raw = tagInput.trim().toLowerCase().replace(/[^a-z0-9\-_]/g, "").slice(0, 50);
+    if (!raw || convTags.includes(raw) || convTags.length >= 20) {
+      setTagInput("");
+      return;
+    }
+    const next = [...convTags, raw];
+    setTagInput("");
+    void saveTags(next);
+  }
+
+  function removeTag(tag: string) {
+    void saveTags(convTags.filter(t => t !== tag));
+  }
 
   // ── Select a conversation ─────────────────────────────────────────────────
   function selectConversation(conv: Conversation) {
@@ -706,6 +755,61 @@ export default function Inbox() {
                 >
                   🗂
                 </button>
+              </div>
+
+              {/* ── Tags strip ──────────────────────────────────────────── */}
+              <div
+                className="flex-shrink-0 px-4 py-2 border-b flex flex-wrap items-center gap-1.5 min-h-[40px]"
+                style={{ backgroundColor: "rgba(255,255,255,0.015)", borderColor: "var(--app-border)" }}
+              >
+                {convTags.map(tag => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium select-none"
+                    style={{
+                      backgroundColor: "rgba(59,91,252,0.15)",
+                      border: "1px solid rgba(59,91,252,0.25)",
+                      color: "#818cf8",
+                    }}
+                  >
+                    {tag}
+                    <button
+                      onClick={() => removeTag(tag)}
+                      disabled={savingTags}
+                      className="ml-0.5 flex items-center justify-center w-3.5 h-3.5 rounded-full transition-colors hover:bg-white/10 disabled:opacity-40"
+                      aria-label={`Remove tag ${tag}`}
+                    >
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                        <path d="M1 1L7 7M7 1L1 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+
+                {/* Add-tag input */}
+                <input
+                  ref={tagInputRef}
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault();
+                      commitTagInput();
+                    }
+                    if (e.key === "Backspace" && !tagInput && convTags.length > 0) {
+                      removeTag(convTags[convTags.length - 1]);
+                    }
+                  }}
+                  onBlur={() => { if (tagInput.trim()) commitTagInput(); }}
+                  placeholder={convTags.length === 0 ? "Add tag…" : "+tag"}
+                  disabled={savingTags || convTags.length >= 20}
+                  className="flex-1 min-w-[60px] max-w-[120px] bg-transparent text-[11px] outline-none disabled:opacity-40 placeholder:opacity-40"
+                  style={{ color: "var(--app-text-muted)" }}
+                  aria-label="Add tag"
+                />
+                {savingTags && (
+                  <span className="w-3 h-3 border border-[#818cf8] border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                )}
               </div>
 
               {/* Messages */}
