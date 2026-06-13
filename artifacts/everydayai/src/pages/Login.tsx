@@ -21,13 +21,11 @@ export default function Login() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { setError(error.message); } else { navigate("/dashboard"); }
+    } finally {
       setLoading(false);
-    } else {
-      navigate("/dashboard");
     }
   }
 

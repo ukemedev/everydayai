@@ -27,7 +27,8 @@ export default function AppLayout({ children, activeItemId }: AppLayoutProps) {
   }, []);
 
   async function handleLogOut() {
-    await supabase.auth.signOut();
+    try { await supabase.auth.signOut({ scope: 'local' }); } catch (_) {}
+    Object.keys(localStorage).forEach((k) => { if (k.startsWith('sb-')) localStorage.removeItem(k); });
     navigate("/login");
   }
 
