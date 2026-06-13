@@ -16,7 +16,6 @@ import Admin from "@/pages/Admin";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminAgents from "@/pages/AdminAgents";
 import AdminRevenue from "@/pages/AdminRevenue";
-import AdminTemplates from "@/pages/AdminTemplates";
 import AdminAuditLog from "@/pages/AdminAuditLog";
 import Pricing from "@/pages/Pricing";
 import Billing from "@/pages/Billing";
@@ -62,9 +61,6 @@ function Router() {
       </Route>
       <Route path="/admin/agents">
         {() => <AdminRoute component={AdminAgents} />}
-      </Route>
-      <Route path="/admin/templates">
-        {() => <AdminRoute component={AdminTemplates} />}
       </Route>
       <Route path="/admin/revenue">
         {() => <AdminRoute component={AdminRevenue} />}

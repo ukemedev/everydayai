@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Users, Bot, Zap, MessageSquare } from "lucide-react";
+import { Users, Bot, MessageSquare } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
 
@@ -8,22 +8,19 @@ import { supabase } from "@/lib/supabase";
 interface Stats {
   totalUsers: number;
   totalAgents: number;
-  totalAutomations: number;
   messagesThisMonth: number;
 }
 
 const EMPTY_STATS: Stats = {
   totalUsers: 0,
   totalAgents: 0,
-  totalAutomations: 0,
   messagesThisMonth: 0,
 };
 
 const statCards = [
-  { key: "totalUsers"        as keyof Stats, label: "Total Users",           icon: Users,         iconColor: "#3b5bfc", iconBg: "rgba(59,91,252,0.12)"  },
-  { key: "totalAgents"       as keyof Stats, label: "Total Agents",          icon: Bot,           iconColor: "#10b981", iconBg: "rgba(16,185,129,0.12)" },
-  { key: "totalAutomations"  as keyof Stats, label: "Total Automations",     icon: Zap,           iconColor: "#f59e0b", iconBg: "rgba(245,158,11,0.12)" },
-  { key: "messagesThisMonth" as keyof Stats, label: "Messages This Month",   icon: MessageSquare, iconColor: "#a855f7", iconBg: "rgba(168,85,247,0.12)" },
+  { key: "totalUsers"        as keyof Stats, label: "Total Users",         icon: Users,         iconColor: "#3b5bfc", iconBg: "rgba(59,91,252,0.12)"  },
+  { key: "totalAgents"       as keyof Stats, label: "Total Agents",        icon: Bot,           iconColor: "#10b981", iconBg: "rgba(16,185,129,0.12)" },
+  { key: "messagesThisMonth" as keyof Stats, label: "Messages This Month", icon: MessageSquare, iconColor: "#a855f7", iconBg: "rgba(168,85,247,0.12)" },
 ];
 
 // ─── Toast ────────────────────────────────────────────────────────────────────

@@ -6,60 +6,49 @@ import { supabase } from "@/lib/supabase";
 
 const plans = [
   {
-    id:       "free",
-    name:     "Free",
-    price:    "₦0",
-    period:   "forever",
-    accent:   "rgba(255,255,255,0.45)",
-    border:   "rgba(255,255,255,0.10)",
-    glow:     false,
-    badge:    null,
-    cta:      "Get Started Free",
-    ctaHref:  "/signup",
-    ctaStyle: "outline" as const,
-    summary:  "Try it out. No card needed.",
+    id:          "free",
+    name:        "Free",
+    price:       "₦0",
+    dollarEquiv: null as string | null,
+    period:      "forever",
+    accent:      "rgba(255,255,255,0.45)",
+    border:      "rgba(255,255,255,0.10)",
+    glow:        false,
+    badge:       null as string | null,
+    cta:         "Get Started Free",
+    ctaHref:     "/signup",
+    ctaStyle:    "outline" as const,
+    summary:     "Try it out. No card needed.",
   },
   {
-    id:       "starter",
-    name:     "Starter",
-    price:    "₦15,000",
-    period:   "/month",
-    accent:   "#10b981",
-    border:   "rgba(16,185,129,0.35)",
-    glow:     false,
-    badge:    null,
-    cta:      "Upgrade to Starter",
-    ctaHref:  "/signup",
-    ctaStyle: "filled" as const,
-    summary:  "For small businesses going live on their first channel.",
+    id:          "starter",
+    name:        "Starter",
+    price:       "₦10,500",
+    dollarEquiv: "~$7.75/month",
+    period:      "/month",
+    accent:      "#10b981",
+    border:      "rgba(16,185,129,0.35)",
+    glow:        false,
+    badge:       null as string | null,
+    cta:         "Upgrade to Starter",
+    ctaHref:     "/signup",
+    ctaStyle:    "filled" as const,
+    summary:     "For small businesses going live on their first channel.",
   },
   {
-    id:       "pro",
-    name:     "Pro",
-    price:    "₦39,000",
-    period:   "/month",
-    accent:   "#3b5bfc",
-    border:   "rgba(59,91,252,0.50)",
-    glow:     true,
-    badge:    "Most Popular",
-    cta:      "Upgrade to Pro",
-    ctaHref:  "/signup",
-    ctaStyle: "filled" as const,
-    summary:  "Full power — all channels, all tools, all input types.",
-  },
-  {
-    id:       "business",
-    name:     "Business",
-    price:    "₦89,000",
-    period:   "/month",
-    accent:   "#f59e0b",
-    border:   "rgba(245,158,11,0.40)",
-    glow:     false,
-    badge:    null,
-    cta:      "Contact Sales",
-    ctaHref:  "mailto:sales@everydayai.com",
-    ctaStyle: "filled" as const,
-    summary:  "Unlimited everything. For agencies and enterprises.",
+    id:          "pro",
+    name:        "Pro",
+    price:       "₦22,000",
+    dollarEquiv: "~$16.25/month",
+    period:      "/month",
+    accent:      "#3b5bfc",
+    border:      "rgba(59,91,252,0.50)",
+    glow:        true,
+    badge:       "Most Popular",
+    cta:         "Upgrade to Pro",
+    ctaHref:     "/signup",
+    ctaStyle:    "filled" as const,
+    summary:     "Full power — all channels, all tools, all input types.",
   },
 ] as const;
 
@@ -73,7 +62,6 @@ interface FeatureRow {
   free:      CellValue;
   starter:   CellValue;
   pro:       CellValue;
-  business:  CellValue;
 }
 
 interface FeatureSection {
@@ -91,7 +79,6 @@ const featureTable: FeatureSection[] = [
         free:     "1 agent",
         starter:  "3 agents",
         pro:      "10 agents",
-        business: "Unlimited",
       },
       {
         label:    "Messages per Month",
@@ -99,7 +86,6 @@ const featureTable: FeatureSection[] = [
         free:     "200",
         starter:  "2,000",
         pro:      "10,000",
-        business: "Unlimited",
       },
       {
         label:    "Agent Templates",
@@ -107,7 +93,6 @@ const featureTable: FeatureSection[] = [
         free:     "Free templates",
         starter:  "Starter templates",
         pro:      "All templates",
-        business: "All templates",
       },
       {
         label:    "Knowledge Base",
@@ -115,7 +100,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  "Up to 10 docs",
         pro:      "Unlimited",
-        business: "Unlimited",
       },
     ],
   },
@@ -128,7 +112,6 @@ const featureTable: FeatureSection[] = [
         free:     true,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "WhatsApp",
@@ -136,7 +119,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  "1 channel",
         pro:      true,
-        business: true,
       },
       {
         label:    "Telegram",
@@ -144,7 +126,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  "1 channel",
         pro:      true,
-        business: true,
       },
       {
         label:    "Messenger & Instagram",
@@ -152,7 +133,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
     ],
   },
@@ -165,7 +145,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "Gmail",
@@ -173,7 +152,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "Telegram Notifications",
@@ -181,7 +159,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "Termii SMS",
@@ -189,7 +166,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "Paystack",
@@ -197,7 +173,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "HubSpot CRM",
@@ -205,7 +180,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "Web Search",
@@ -213,7 +187,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "Google Calendar",
@@ -221,7 +194,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "Google Drive",
@@ -229,7 +201,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "Vapi.ai Voice Calls",
@@ -237,7 +208,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
     ],
   },
@@ -250,7 +220,6 @@ const featureTable: FeatureSection[] = [
         free:     true,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "File Uploads",
@@ -258,7 +227,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  true,
         pro:      true,
-        business: true,
       },
       {
         label:    "Image Input",
@@ -266,7 +234,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "Voice Notes",
@@ -274,7 +241,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
     ],
   },
@@ -286,7 +252,6 @@ const featureTable: FeatureSection[] = [
         free:    "Community",
         starter: "Email",
         pro:     "Priority email",
-        business:"Dedicated manager",
       },
       {
         label:    "Usage Analytics",
@@ -294,7 +259,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      true,
-        business: true,
       },
       {
         label:    "White-label",
@@ -302,15 +266,6 @@ const featureTable: FeatureSection[] = [
         free:     false,
         starter:  false,
         pro:      false,
-        business: true,
-      },
-      {
-        label:    "Custom Integrations",
-        sublabel: "We build connectors for your stack",
-        free:     false,
-        starter:  false,
-        pro:      false,
-        business: true,
       },
     ],
   },
@@ -378,14 +333,13 @@ const faqs = [
 
 export default function Pricing() {
   const accents: Record<string, string> = {
-    free:     "rgba(255,255,255,0.45)",
-    starter:  "#10b981",
-    pro:      "#3b5bfc",
-    business: "#f59e0b",
+    free:    "rgba(255,255,255,0.45)",
+    starter: "#10b981",
+    pro:     "#3b5bfc",
   };
 
-  const [loggedIn,     setLoggedIn]     = useState(false);
-  const [authChecked,  setAuthChecked]  = useState(false);
+  const [loggedIn,    setLoggedIn]    = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -449,7 +403,7 @@ export default function Pricing() {
         </div>
 
         {/* ── Plan cards ──────────────────────────────────────────────────── */}
-        <div className="w-full max-w-5xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-14">
+        <div className="w-full max-w-3xl grid grid-cols-1 sm:grid-cols-3 gap-4 mb-14">
           {plans.map((plan) => (
             <div
               key={plan.id}
@@ -475,59 +429,54 @@ export default function Pricing() {
                 {plan.name}
               </p>
 
-              <div className="flex items-end gap-1 mb-1">
+              <div className="flex items-end gap-1 mb-0.5">
                 <span className="text-3xl font-bold text-white leading-none">{plan.price}</span>
                 <span className="text-xs mb-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
                   {plan.period}
                 </span>
               </div>
 
+              {plan.dollarEquiv && (
+                <p className="text-xs mb-1" style={{ color: "rgba(255,255,255,0.30)" }}>
+                  {plan.dollarEquiv}
+                </p>
+              )}
+
               <p className="text-xs mb-6 mt-1 leading-snug" style={{ color: "rgba(255,255,255,0.40)" }}>
                 {plan.summary}
               </p>
 
-              {plan.id === "business" ? (
-                <a href="mailto:sales@everydayai.com">
-                  <button
-                    className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 mt-auto"
-                    style={{ backgroundColor: plan.accent, color: "#000", border: "none" }}
-                  >
-                    {plan.cta}
-                  </button>
-                </a>
-              ) : (
-                <Link href={
-                  plan.id === "free"
-                    ? (loggedIn ? "/dashboard" : "/signup")
-                    : (loggedIn ? "/billing" : "/signup")
-                }>
-                  <button
-                    className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 mt-auto"
-                    style={
-                      plan.ctaStyle === "outline"
-                        ? {
-                            backgroundColor: "transparent",
-                            border: `1px solid ${plan.border}`,
-                            color: "rgba(255,255,255,0.65)",
-                          }
-                        : {
-                            backgroundColor: plan.accent,
-                            color: "#fff",
-                            border: "none",
-                          }
-                    }
-                  >
-                    {plan.id !== "free" && loggedIn ? `Upgrade to ${plan.name}` : plan.cta}
-                  </button>
-                </Link>
-              )}
+              <Link href={
+                plan.id === "free"
+                  ? (loggedIn ? "/dashboard" : "/signup")
+                  : (loggedIn ? "/billing" : "/signup")
+              }>
+                <button
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 hover:opacity-90 active:scale-95 mt-auto"
+                  style={
+                    plan.ctaStyle === "outline"
+                      ? {
+                          backgroundColor: "transparent",
+                          border: `1px solid ${plan.border}`,
+                          color: "rgba(255,255,255,0.65)",
+                        }
+                      : {
+                          backgroundColor: plan.accent,
+                          color: "#fff",
+                          border: "none",
+                        }
+                  }
+                >
+                  {plan.id !== "free" && loggedIn ? `Upgrade to ${plan.name}` : plan.cta}
+                </button>
+              </Link>
             </div>
           ))}
         </div>
 
         {/* ── Annual discount nudge ───────────────────────────────────────── */}
         <div
-          className="w-full max-w-5xl rounded-xl px-5 py-3 mb-10 flex items-center gap-3"
+          className="w-full max-w-3xl rounded-xl px-5 py-3 mb-10 flex items-center gap-3"
           style={{ backgroundColor: "rgba(59,91,252,0.08)", border: "1px solid rgba(59,91,252,0.20)" }}
         >
           <span className="text-sm">💡</span>
@@ -540,7 +489,7 @@ export default function Pricing() {
         </div>
 
         {/* ── Feature comparison table ─────────────────────────────────────── */}
-        <div className="w-full max-w-5xl">
+        <div className="w-full max-w-3xl">
 
           <h2 className="text-base font-semibold text-white mb-4">
             What's included in each plan
@@ -552,7 +501,7 @@ export default function Pricing() {
           >
             {/* Table header */}
             <div
-              className="grid grid-cols-5 gap-0 px-5 py-3 border-b"
+              className="grid grid-cols-4 gap-0 px-5 py-3 border-b"
               style={{ borderColor: "rgba(255,255,255,0.07)" }}
             >
               <div />
@@ -585,7 +534,7 @@ export default function Pricing() {
                   return (
                     <div
                       key={row.label}
-                      className="grid grid-cols-5 gap-0 items-center px-5 py-3.5"
+                      className="grid grid-cols-4 gap-0 items-center px-5 py-3.5"
                       style={{
                         borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.04)",
                       }}
@@ -598,10 +547,9 @@ export default function Pricing() {
                           </p>
                         )}
                       </div>
-                      <Cell value={row.free}     accent={accents.free} />
-                      <Cell value={row.starter}  accent={accents.starter} />
-                      <Cell value={row.pro}      accent={accents.pro} />
-                      <Cell value={row.business} accent={accents.business} />
+                      <Cell value={row.free}    accent={accents.free} />
+                      <Cell value={row.starter} accent={accents.starter} />
+                      <Cell value={row.pro}     accent={accents.pro} />
                     </div>
                   );
                 })}
@@ -644,7 +592,7 @@ export default function Pricing() {
             className="text-sm font-semibold underline underline-offset-4 transition-opacity hover:opacity-70"
             style={{ color: "#3b5bfc" }}
           >
-            Talk to us about Business →
+            Talk to us about enterprise pricing →
           </a>
         </div>
 

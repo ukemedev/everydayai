@@ -4,7 +4,6 @@ import {
   LayoutGrid,
   Users,
   Bot,
-  LayoutTemplate,
   BarChart2,
   Shield,
   ArrowLeft,
@@ -13,12 +12,11 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { id: "overview",   icon: LayoutGrid,     label: "Overview",   path: "/admin" },
-  { id: "users",      icon: Users,          label: "Users",      path: "/admin/users" },
-  { id: "agents",     icon: Bot,            label: "Agents",     path: "/admin/agents" },
-  { id: "templates",  icon: LayoutTemplate, label: "Templates",  path: "/admin/templates" },
-  { id: "revenue",    icon: BarChart2,      label: "Revenue",    path: "/admin/revenue" },
-  { id: "audit",      icon: Shield,         label: "Audit Log",  path: "/admin/audit" },
+  { id: "overview", icon: LayoutGrid, label: "Overview",  path: "/admin" },
+  { id: "users",    icon: Users,      label: "Users",     path: "/admin/users" },
+  { id: "agents",   icon: Bot,        label: "Agents",    path: "/admin/agents" },
+  { id: "revenue",  icon: BarChart2,  label: "Revenue",   path: "/admin/revenue" },
+  { id: "audit",    icon: Shield,     label: "Audit Log", path: "/admin/audit" },
 ];
 
 interface AdminLayoutProps {
