@@ -19,6 +19,10 @@ import { callAI, getProviderForModel, type ConversationMessage } from "../lib/ai
 
 const router = Router();
 
+// Per-conversation in-flight guard — prevents concurrent AI calls for the same
+// customer conversation. Key: `${agentId}:${senderId}`.
+const _inFlight = new Set<string>();
+
 // ─── GET /api/instagram/webhook/:agentId  (Meta webhook verification) ─────────
 
 router.get("/instagram/webhook/:agentId", async (req: Request, res: Response) => {
@@ -89,6 +93,9 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
 
   const sb = getServiceClient();
   if (!sb) return;
+
+  // Declared outside try so the finally block can always clean up.
+  let inFlightKey = "";
 
   try {
     const { data: dep } = await sb
@@ -220,6 +227,14 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
       logger.info({ agentId }, "Instagram DM in human mode — AI reply suppressed"); return;
     }
 
+    // ── Per-customer in-flight guard ─────────────────────────────────────────
+    inFlightKey = `${agentId}:${senderId}`;
+    if (_inFlight.has(inFlightKey)) {
+      logger.warn({ agentId, senderId }, "Instagram AI call already in-flight — skipping");
+      return;
+    }
+    _inFlight.add(inFlightKey);
+
     const { data: keyRow } = await sb
       .from("api_keys")
       .select("api_key")
@@ -262,6 +277,8 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
 
   } catch (err) {
     logger.error({ err, agentId }, "Instagram webhook handler error");
+  } finally {
+    if (inFlightKey) _inFlight.delete(inFlightKey);
   }
 });
 

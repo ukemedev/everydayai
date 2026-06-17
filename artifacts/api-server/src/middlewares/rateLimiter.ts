@@ -97,6 +97,41 @@ export const deployLimiterConfig: Partial<Options> = {
   handler: makeHandler("Too many deployment attempts. Please wait an hour."),
 };
 
+// ── Webhook limiter factory — one instance per channel ────────────────────────
+//
+// CRITICAL: do NOT use a single IP-keyed limiter for webhook endpoints.
+// Meta (WhatsApp, Messenger, Instagram) and Telegram deliver ALL webhooks from
+// a small pool of their own server IPs. A shared IP bucket means every agent
+// on the platform competes for the same 120 req/min allowance — a moderate
+// platform load (20 agents × 8 msg/min = 160 req/min) starts silently dropping
+// legitimate customer messages.
+//
+// Fix: key by agentId extracted from the URL path so each deployed agent gets
+// its own independent 120 req/min bucket regardless of the source IP.
+//
+// Usage: call makeWebhookLimiter() once per channel at router setup time so
+// each channel has its own MemoryStore — a single instance shared across all
+// four channels would re-introduce cross-channel key collisions for the same
+// agentId.
+
+export function makeWebhookLimiter(): ReturnType<typeof rateLimit> {
+  return rateLimit({
+    ...base,
+    windowMs: 60 * 1000,
+    limit: 120,
+    keyGenerator: (req: Request): string => {
+      // req.path here is the sub-path AFTER the mount point (e.g. "/abc123-...")
+      // because the limiter is mounted with router.use("/whatsapp/webhook", ...).
+      // We intentionally do NOT fall back to req.ip — webhook buckets are
+      // per-agent, not per-IP, so there is no valid IP fallback here.
+      const agentId = req.path.replace(/^\//, "").split("/")[0];
+      return `webhook:${agentId || "unknown"}`;
+    },
+    validate: { keyGeneratorIpFallback: false },
+    handler: makeHandler("Too many requests."),
+  });
+}
+
 // ── Actual middleware limiters ────────────────────────────────────
 export const generalLimiter = rateLimit(generalLimiterConfig);
 export const chatLimiter = rateLimit(chatLimiterConfig);

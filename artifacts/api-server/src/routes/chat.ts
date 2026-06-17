@@ -167,7 +167,11 @@ router.post("/chat", async (req: Request, res: Response) => {
 
   const sessionIdStr = sessionId?.trim() || clientIp;
 
-  if (agentId?.trim() && !checkSessionLimit("free", history.length)) {
+  // Session limit is a public-chat guard only — it prevents a single visitor
+  // from running a very long (expensive) conversation on someone else's free
+  // agent. Authenticated owners testing their own agents in Studio get Infinity
+  // regardless of plan so they are never blocked by their own session cap.
+  if (isPublicChat && agentId?.trim() && !checkSessionLimit("free", history.length)) {
     res.status(429).json({ error: "SESSION_LIMIT_REACHED", message: FRIENDLY_LIMIT_MESSAGE });
     return;
   }
@@ -414,12 +418,18 @@ router.post("/chat", async (req: Request, res: Response) => {
           ]);
           void runAgentTools(agentId!.trim(), conversationId, cleanMessage, reply, sbInner)
             .catch((err: unknown) => req.log.error({ err }, "runAgentTools failed"));
-          // Enforce per-conversation message limit (fire-and-forget — non-blocking)
-          void import("../jobs/retentionJob.js").then(({ enforceMessageLimit }) =>
-            enforceMessageLimit(conversationId).catch((err: unknown) =>
-              req.log.error({ err, conversationId }, "enforceMessageLimit failed")
-            )
-          );
+          // Enforce per-conversation message limit (fire-and-forget — non-blocking).
+          // Called probabilistically (1-in-20) rather than on every message to avoid
+          // adding a DB read+delete to every single chat request. The nightly
+          // retention job handles the bulk cleanup; this is just a safety net for
+          // very active conversations between nightly runs.
+          if (Math.random() < 0.05) {
+            void import("../jobs/retentionJob.js").then(({ enforceMessageLimit }) =>
+              enforceMessageLimit(conversationId).catch((err: unknown) =>
+                req.log.error({ err, conversationId }, "enforceMessageLimit failed")
+              )
+            );
+          }
         } catch (persistErr) {
           req.log.error({ err: persistErr }, "failed to persist conversation — non-fatal");
         }

@@ -24,7 +24,7 @@ import {
   chatLimiter,
   authLimiter,
   uploadLimiter,
-  webhookLimiter,
+  makeWebhookLimiter,
   publicPollingLimiter,
   publicAgentInfoLimiter,
   deployLimiter,
@@ -42,7 +42,7 @@ router.use("/admin", authLimiter);
 router.use("/auth/google", authLimiter);
 router.use("/documents", uploadLimiter);
 router.use("/upload", uploadLimiter);
-router.use("/telegram/webhook", webhookLimiter);
+router.use("/telegram/webhook", makeWebhookLimiter());
 router.use("/public/conversations/messages", publicPollingLimiter);
 router.use("/public/agents", publicAgentInfoLimiter);
 
@@ -56,17 +56,17 @@ router.use("/telegram/setup", requireAuth as RequestHandler, deployLimiter);
 router.use("/telegram/deployment", requireAuth as RequestHandler, deployLimiter);
 
 // WhatsApp setup/deployment routes (webhook is public — do not protect it)
-router.use("/whatsapp/webhook", webhookLimiter);
+router.use("/whatsapp/webhook", makeWebhookLimiter());
 router.use("/whatsapp/setup", requireAuth as RequestHandler, deployLimiter);
 router.use("/whatsapp/deployment", requireAuth as RequestHandler, deployLimiter);
 
 // Messenger setup/deployment routes (webhook is public — do not protect it)
-router.use("/messenger/webhook", webhookLimiter);
+router.use("/messenger/webhook", makeWebhookLimiter());
 router.use("/messenger/setup", requireAuth as RequestHandler, deployLimiter);
 router.use("/messenger/deployment", requireAuth as RequestHandler, deployLimiter);
 
 // Instagram setup/deployment routes (webhook is public — do not protect it)
-router.use("/instagram/webhook", webhookLimiter);
+router.use("/instagram/webhook", makeWebhookLimiter());
 router.use("/instagram/setup", requireAuth as RequestHandler, deployLimiter);
 router.use("/instagram/deployment", requireAuth as RequestHandler, deployLimiter);
 

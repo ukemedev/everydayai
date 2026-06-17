@@ -21,6 +21,11 @@ import { callAI, callAIVision, getProviderForModel, type ConversationMessage } f
 
 const router = Router();
 
+// Per-conversation in-flight guard — prevents concurrent AI calls for the same
+// customer conversation. Key: `${agentId}:${from}` (phone number).
+// Only Telegram had this originally; adding it to all channel handlers.
+const _inFlight = new Set<string>();
+
 const _require = createRequire(import.meta.url);
 const pdfParse = _require("pdf-parse") as (buf: Buffer, opts?: object) => Promise<{ text: string }>;
 const mammoth  = _require("mammoth")   as { extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }> };
@@ -116,6 +121,10 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
 
   const sb = getServiceClient();
   if (!sb) return;
+
+  // Declared outside try so the finally block can always clean up,
+  // regardless of which branch inside the try caused the exit.
+  let inFlightKey = "";
 
   try {
     // ── Load deployment ──
@@ -311,6 +320,19 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
       return;
     }
 
+    // ── Per-customer in-flight guard ─────────────────────────────────────────
+    // Prevents concurrent AI calls for the same conversation. Without this,
+    // a customer sending 3 messages quickly triggers 3 simultaneous AI calls
+    // → 3 DB writes + 3 WhatsApp replies for the same conversation window.
+    // The finally block clears this key on all exit paths (normal, early return,
+    // and exception), so it can never leak.
+    inFlightKey = `${agentId}:${from}`;
+    if (_inFlight.has(inFlightKey)) {
+      logger.warn({ agentId, from }, "WhatsApp AI call already in-flight — skipping");
+      return;
+    }
+    _inFlight.add(inFlightKey);
+
     // ── Load API key ──
     const { data: keyRow } = await sb
       .from("api_keys")
@@ -371,6 +393,11 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
 
   } catch (err) {
     logger.error({ err, agentId }, "WhatsApp webhook handler error");
+  } finally {
+    // Always release the in-flight lock — covers normal completion, early
+    // returns inside try, and uncaught exceptions. The empty-string check
+    // guards against exits that happen before inFlightKey was set.
+    if (inFlightKey) _inFlight.delete(inFlightKey);
   }
 });
 

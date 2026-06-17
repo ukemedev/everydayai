@@ -3,6 +3,32 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 
+// ── AI call timeout ────────────────────────────────────────────────────────────
+// Hard ceiling on every provider call. If the provider does not respond within
+// this window (network hang, provider outage, overload), we reject rather than
+// holding a Node.js event-loop slot open indefinitely. Accumulated hung promises
+// exhaust the event loop and eventually make the server unresponsive.
+const AI_CALL_TIMEOUT_MS = 30_000; // 30 seconds
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} call timed out after ${AI_CALL_TIMEOUT_MS}ms`)),
+        AI_CALL_TIMEOUT_MS
+      )
+    ),
+  ]);
+}
+
+// ── Max tokens per reply ───────────────────────────────────────────────────────
+// Caps every provider at the same ceiling. Without this, OpenAI/Groq/Google can
+// return 4K–16K token replies which consume memory, inflate latency, and drive
+// unpredictable provider costs. 1024 tokens ≈ 750 words — sufficient for
+// conversational AI replies. Anthropic was already capped at 1024.
+const MAX_REPLY_TOKENS = 1_024;
+
 /**
  * Shared AI dispatch utilities used by every channel webhook handler.
  *
@@ -34,53 +60,68 @@ export async function callAI(
   switch (provider) {
     case "anthropic": {
       const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          { role: "user", content: message },
-        ],
-      });
+      const response = await withTimeout(
+        client.messages.create({
+          model,
+          max_tokens: MAX_REPLY_TOKENS,
+          system: systemPrompt,
+          messages: [
+            ...history.map((m) => ({ role: m.role, content: m.content })),
+            { role: "user", content: message },
+          ],
+        }),
+        "Anthropic"
+      );
       const block = response.content[0];
       return block.type === "text" ? block.text : "No response.";
     }
     case "google": {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
+      const genModel = genAI.getGenerativeModel({
+        model,
+        systemInstruction: systemPrompt,
+        generationConfig: { maxOutputTokens: MAX_REPLY_TOKENS },
+      });
       const chat = genModel.startChat({
         history: history.map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.content }],
         })),
       });
-      const result = await chat.sendMessage(message);
+      const result = await withTimeout(chat.sendMessage(message), "Google");
       return result.response.text();
     }
     case "groq": {
       const client = new Groq({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message },
-        ],
-      });
+      const completion = await withTimeout(
+        client.chat.completions.create({
+          model,
+          max_tokens: MAX_REPLY_TOKENS,
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...history,
+            { role: "user", content: message },
+          ],
+        }),
+        "Groq"
+      );
       return completion.choices[0]?.message?.content ?? "No response.";
     }
     case "openai":
     default: {
       const client = new OpenAI({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          { role: "user", content: message },
-        ],
-      });
+      const completion = await withTimeout(
+        client.chat.completions.create({
+          model,
+          max_tokens: MAX_REPLY_TOKENS,
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...history,
+            { role: "user", content: message },
+          ],
+        }),
+        "OpenAI"
+      );
       return completion.choices[0]?.message?.content ?? "No response.";
     }
   }
@@ -99,44 +140,54 @@ export async function callAIVision(
   switch (provider) {
     case "anthropic": {
       const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-          {
-            role: "user",
-            content: [
-              {
-                type: "image" as const,
-                source: {
-                  type: "base64" as const,
-                  media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                  data: imageBase64,
+      const response = await withTimeout(
+        client.messages.create({
+          model,
+          max_tokens: MAX_REPLY_TOKENS,
+          system: systemPrompt,
+          messages: [
+            ...history.map((m) => ({ role: m.role, content: m.content })),
+            {
+              role: "user",
+              content: [
+                {
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                    data: imageBase64,
+                  },
                 },
-              },
-              { type: "text" as const, text: message },
-            ],
-          },
-        ],
-      });
+                { type: "text" as const, text: message },
+              ],
+            },
+          ],
+        }),
+        "Anthropic"
+      );
       const block = response.content[0];
       return block.type === "text" ? block.text : "No response.";
     }
     case "google": {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({ model, systemInstruction: systemPrompt });
+      const genModel = genAI.getGenerativeModel({
+        model,
+        systemInstruction: systemPrompt,
+        generationConfig: { maxOutputTokens: MAX_REPLY_TOKENS },
+      });
       const chat = genModel.startChat({
         history: history.map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.content }],
         })),
       });
-      const result = await chat.sendMessage([
-        { text: message },
-        { inlineData: { mimeType: imageMimeType, data: imageBase64 } },
-      ]);
+      const result = await withTimeout(
+        chat.sendMessage([
+          { text: message },
+          { inlineData: { mimeType: imageMimeType, data: imageBase64 } },
+        ]),
+        "Google"
+      );
       return result.response.text();
     }
     case "groq":
@@ -147,23 +198,27 @@ export async function callAIVision(
     case "openai":
     default: {
       const client = new OpenAI({ apiKey });
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...history,
-          {
-            role: "user",
-            content: [
-              { type: "text" as const, text: message },
-              {
-                type: "image_url" as const,
-                image_url: { url: `data:${imageMimeType};base64,${imageBase64}` },
-              },
-            ],
-          },
-        ],
-      });
+      const completion = await withTimeout(
+        client.chat.completions.create({
+          model,
+          max_tokens: MAX_REPLY_TOKENS,
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...history,
+            {
+              role: "user",
+              content: [
+                { type: "text" as const, text: message },
+                {
+                  type: "image_url" as const,
+                  image_url: { url: `data:${imageMimeType};base64,${imageBase64}` },
+                },
+              ],
+            },
+          ],
+        }),
+        "OpenAI"
+      );
       return completion.choices[0]?.message?.content ?? "No response.";
     }
   }
