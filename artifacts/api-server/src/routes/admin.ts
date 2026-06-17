@@ -1,3 +1,5 @@
+// backend/src/routes/admin.ts
+
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
@@ -24,7 +26,7 @@ async function requireAdmin(
 ): Promise<{ sb: NonNullable<ReturnType<typeof getServiceClient>>; adminUserId: string } | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "Authentication required" });
     return null;
   }
 
@@ -38,7 +40,7 @@ async function requireAdmin(
 
   const { data: { user }, error } = await sb.auth.getUser(token);
   if (error || !user) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "Invalid or expired token" });
     return null;
   }
 
@@ -49,14 +51,12 @@ async function requireAdmin(
     .maybeSingle();
 
   if (profileError || profile?.is_admin !== true) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(403).json({ error: "Forbidden – admin access required" });
     return null;
   }
 
   return { sb, adminUserId: user.id };
 }
-
-// ─── GET /api/admin/verify ────────────────────────────────────────────────────
 
 router.get("/admin/verify", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
@@ -64,8 +64,6 @@ router.get("/admin/verify", async (req: Request, res: Response) => {
   req.log.info("admin verified");
   res.json({ isAdmin: true });
 });
-
-// ─── GET /api/admin/stats ─────────────────────────────────────────────────────
 
 router.get("/admin/stats", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
@@ -75,8 +73,6 @@ router.get("/admin/stats", async (req: Request, res: Response) => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-  // Count from auth.users (not profiles) — profiles only exist for users who have
-  // fully onboarded; auth.users contains every registered account immediately.
   const [authUsersRes, agentsRes, messagesRes] = await Promise.all([
     sb.auth.admin.listUsers({ perPage: 1000 }),
     sb.from("agents").select("*", { count: "exact", head: true }),
@@ -97,15 +93,12 @@ router.get("/admin/stats", async (req: Request, res: Response) => {
   res.json(stats);
 });
 
-// ─── GET /api/admin/users ─────────────────────────────────────────────────────
-
 router.get("/admin/users", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
 
   const { sb } = result;
 
-  // Fetch all auth users (up to 1000), all profiles, and all agents in parallel
   const [authRes, profilesRes, agentsRes] = await Promise.all([
     sb.auth.admin.listUsers({ perPage: 1000 }),
     sb.from("profiles").select("id, is_admin, suspended, created_at, plan"),
@@ -114,7 +107,6 @@ router.get("/admin/users", async (req: Request, res: Response) => {
 
   const authUsers = authRes.data?.users ?? [];
 
-  // Build profile lookup map
   type ProfileRow = {
     id: string;
     is_admin: boolean | null;
@@ -127,7 +119,6 @@ router.get("/admin/users", async (req: Request, res: Response) => {
     profileMap.set(p.id, p);
   }
 
-  // Build agent count lookup map
   const agentCountMap = new Map<string, number>();
   for (const a of (agentsRes.data ?? []) as { user_id: string }[]) {
     agentCountMap.set(a.user_id, (agentCountMap.get(a.user_id) ?? 0) + 1);
@@ -150,8 +141,6 @@ router.get("/admin/users", async (req: Request, res: Response) => {
   res.json({ users });
 });
 
-// ─── PATCH /api/admin/users/:id/suspend ──────────────────────────────────────
-
 router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -164,7 +153,6 @@ router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => 
     return;
   }
 
-  // Get current state
   const { data: profile, error: fetchErr } = await sb
     .from("profiles")
     .select("suspended")
@@ -203,15 +191,12 @@ router.patch("/admin/users/:id/suspend", async (req: Request, res: Response) => 
   res.json({ suspended: newSuspended });
 });
 
-// ─── GET /api/admin/agents ────────────────────────────────────────────────────
-
 router.get("/admin/agents", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
 
   const { sb } = result;
 
-  // Fetch all agents and all auth users in parallel
   const [agentsRes, authRes] = await Promise.all([
     sb.from("agents").select("id, name, description, model, status, user_id, created_at").order("created_at", { ascending: false }),
     sb.auth.admin.listUsers({ perPage: 1000 }),
@@ -223,7 +208,6 @@ router.get("/admin/agents", async (req: Request, res: Response) => {
     return;
   }
 
-  // Build email lookup map
   const emailMap = new Map<string, string>();
   for (const u of authRes.data?.users ?? []) {
     emailMap.set(u.id, u.email ?? "");
@@ -253,8 +237,6 @@ router.get("/admin/agents", async (req: Request, res: Response) => {
   res.json({ agents });
 });
 
-// ─── GET /api/admin/revenue ───────────────────────────────────────────────────
-
 router.get("/admin/revenue", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -266,9 +248,7 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
 
   const [profilesRes, paymentsRes, recentRes, authRes] = await Promise.all([
     sb.from("profiles").select("plan"),
-    // All successful payments (amount + created_at for totals)
     sb.from("payments").select("amount, created_at").eq("status", "success"),
-    // Last 5 successful payments for the table
     sb.from("payments")
       .select("id, user_id, plan, amount, created_at")
       .eq("status", "success")
@@ -283,7 +263,6 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
     return;
   }
 
-  // ── Plan counts ────────────────────────────────────────────────────────────
   type ProfileRow = { plan: string | null };
   const rows = (profilesRes.data as ProfileRow[]) ?? [];
 
@@ -292,21 +271,17 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
   const proUsers      = rows.filter((r) => r.plan === "pro").length;
   const businessUsers = rows.filter((r) => r.plan === "business").length;
 
-  // MRR estimate in Naira based on current subscriptions
   const monthlyRevenue = starterUsers * 8000 + proUsers * 24000 + businessUsers * 56000;
 
-  // ── Actual payment totals ──────────────────────────────────────────────────
   type PaymentRow = { amount: number; created_at: string };
   const allPayments = (paymentsRes.data as PaymentRow[]) ?? [];
 
-  // Amounts stored in kobo — convert to naira
   const totalRevenue = allPayments.reduce((sum, p) => sum + p.amount, 0) / 100;
   const revenueThisMonth = allPayments
     .filter((p) => p.created_at >= startOfMonth)
     .reduce((sum, p) => sum + p.amount, 0) / 100;
   const totalTransactions = allPayments.length;
 
-  // ── Recent payments with email lookup ─────────────────────────────────────
   type RecentRow = { id: string; user_id: string; plan: string; amount: number; created_at: string };
   const recentRows = (recentRes.data as RecentRow[]) ?? [];
 
@@ -319,7 +294,7 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
     id:         p.id,
     email:      emailMap.get(p.user_id) ?? "unknown",
     plan:       p.plan,
-    amount:     p.amount / 100,   // naira
+    amount:     p.amount / 100,
     created_at: p.created_at,
   }));
 
@@ -341,8 +316,6 @@ router.get("/admin/revenue", async (req: Request, res: Response) => {
   });
 });
 
-// ─── PATCH /api/admin/users/:id/plan ─────────────────────────────────────────
-
 router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -362,7 +335,6 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
     return;
   }
 
-  // Fetch current plan before update (for audit metadata)
   const { data: currentProfile } = await sb
     .from("profiles")
     .select("plan")
@@ -372,9 +344,6 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
   const oldPlan = (currentProfile as { plan?: string } | null)?.plan ?? "free";
 
   const updatePayload: Record<string, unknown> = { plan };
-  // When upgrading to an unlimited plan, reset the monthly message counter
-  // so the user can immediately use their new allowance without hitting a
-  // stale count from a lower-tier plan.
   if (plan === "business" || plan === "pro") {
     updatePayload.message_count = 0;
     updatePayload.message_count_reset_at = new Date().toISOString();
@@ -405,8 +374,6 @@ router.patch("/admin/users/:id/plan", async (req: Request, res: Response) => {
   res.json({ plan });
 });
 
-// ─── GET /api/admin/settings ─────────────────────────────────────────────────
-
 router.get("/admin/settings", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -427,8 +394,6 @@ router.get("/admin/settings", async (req: Request, res: Response) => {
   req.log.info({ pricingEnabled: data.pricing_enabled }, "platform settings fetched");
   res.json({ pricingEnabled: data.pricing_enabled ?? false });
 });
-
-// ─── PATCH /api/admin/settings ────────────────────────────────────────────────
 
 router.patch("/admin/settings", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
@@ -458,8 +423,6 @@ router.patch("/admin/settings", async (req: Request, res: Response) => {
   res.json({ pricingEnabled: data.pricing_enabled });
 });
 
-// ─── GET /api/admin/audit ─────────────────────────────────────────────────────
-
 router.get("/admin/audit", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -477,7 +440,6 @@ router.get("/admin/audit", async (req: Request, res: Response) => {
     return;
   }
 
-  // Build email map from auth users for all distinct user_ids in these logs
   type AuditRow = {
     id: string;
     user_id: string | null;
@@ -517,8 +479,6 @@ router.get("/admin/audit", async (req: Request, res: Response) => {
   res.json({ logs: enrichedLogs });
 });
 
-// ─── GET /api/admin/templates ─────────────────────────────────────────────────
-
 router.get("/admin/templates", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -537,8 +497,6 @@ router.get("/admin/templates", async (req: Request, res: Response) => {
 
   res.json({ templates: data ?? [] });
 });
-
-// ─── POST /api/admin/templates ────────────────────────────────────────────────
 
 router.post("/admin/templates", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
@@ -592,8 +550,6 @@ router.post("/admin/templates", async (req: Request, res: Response) => {
   res.json({ template: data });
 });
 
-// ─── PATCH /api/admin/templates/:id ───────────────────────────────────────────
-
 router.patch("/admin/templates/:id", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
   if (!result) return;
@@ -643,8 +599,6 @@ router.patch("/admin/templates/:id", async (req: Request, res: Response) => {
   req.log.info({ templateId: id }, "template updated");
   res.json({ template: data });
 });
-
-// ─── DELETE /api/admin/templates/:id ──────────────────────────────────────────
 
 router.delete("/admin/templates/:id", async (req: Request, res: Response) => {
   const result = await requireAdmin(req, res);
