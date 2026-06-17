@@ -14,5 +14,5 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS config_updated_at TIMESTAMPTZ;
 
 -- Initialise existing agents so they don't start with a null cutoff
 UPDATE agents
-SET config_updated_at = COALESCE(updated_at, created_at, NOW())
+SET config_updated_at = COALESCE(created_at, NOW())
 WHERE config_updated_at IS NULL;
