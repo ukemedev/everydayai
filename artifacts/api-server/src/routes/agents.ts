@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getUserPlan, PLAN_LIMITS } from "../lib/planLimits.js";
 import { logAudit } from "../lib/auditLog.js";
 import { sanitizeText } from "../lib/sanitize.js";
+import { bumpAgentConfigVersion } from "../lib/configVersion.js";
 
 const router = Router();
 
@@ -128,6 +129,75 @@ router.post("/agents", async (req: Request, res: Response) => {
   });
 
   res.status(201).json({ agent: data });
+});
+
+// ─── PATCH /api/agents/:id/prompt ─────────────────────────────────────────────
+// Updates the agent's instructions + model and bumps config_updated_at so that
+// all external channels drop stale conversation history from before this save.
+
+router.patch("/agents/:id/prompt", async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const token = authHeader.slice(7);
+  const sb = getServiceClient();
+  if (!sb) {
+    res.status(503).json({ error: "Service unavailable" });
+    return;
+  }
+
+  const { data: { user }, error: authErr } = await sb.auth.getUser(token);
+  if (authErr || !user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const agentId = req.params.id as string;
+  const { instructions, model } = req.body as { instructions?: string; model?: string };
+
+  if (model !== undefined && !VALID_MODELS.has(model)) {
+    res.status(400).json({ error: "Unsupported model" });
+    return;
+  }
+
+  // Verify ownership
+  const { data: agent, error: fetchErr } = await sb
+    .from("agents")
+    .select("id, user_id")
+    .eq("id", agentId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (fetchErr || !agent) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {
+    config_updated_at: new Date().toISOString(),
+  };
+  if (instructions !== undefined) updates.instructions = instructions;
+  if (model !== undefined) {
+    updates.model = model;
+    updates.prompt_model = model;
+  }
+
+  const { error: updateErr } = await sb
+    .from("agents")
+    .update(updates)
+    .eq("id", agentId);
+
+  if (updateErr) {
+    req.log.error({ err: updateErr, agentId }, "failed to update agent prompt");
+    res.status(500).json({ error: "Failed to update agent" });
+    return;
+  }
+
+  req.log.info({ agentId, userId: user.id }, "agent prompt updated, config version bumped");
+  res.status(200).json({ ok: true });
 });
 
 export default router;

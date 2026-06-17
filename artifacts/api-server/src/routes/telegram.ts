@@ -532,13 +532,17 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
     }
     _inFlight.add(inFlightKey);
 
-    // ── Load conversation history ──────────────────────────────────────────
-    const { data: historyRows } = await sb
-      .from("messages")
-      .select("role, content")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: false })
-      .limit(40);
+    // ── Load conversation history (scoped to current config version) ──────
+    const { data: agentCfg } = await sb
+      .from("agents")
+      .select("config_updated_at")
+      .eq("id", agentId)
+      .maybeSingle();
+    const configCutoff = (agentCfg as { config_updated_at?: string | null } | null)?.config_updated_at ?? null;
+
+    const { data: historyRows } = configCutoff
+      ? await sb.from("messages").select("role, content").eq("conversation_id", conversationId).gte("created_at", configCutoff).order("created_at", { ascending: false }).limit(40)
+      : await sb.from("messages").select("role, content").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(40);
 
     const conversationHistory: ConversationMessage[] = truncateHistory(
       ((historyRows ?? []) as { role: string; content: string }[])

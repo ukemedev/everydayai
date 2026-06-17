@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { validateUpload, validateCharCount, sanitizeFilename } from "../lib/fileValidation.js";
 import { extractText } from "../lib/textExtractor.js";
 import { logAudit } from "../lib/auditLog.js";
+import { bumpAgentConfigVersion } from "../lib/configVersion.js";
 
 const router = Router();
 
@@ -136,8 +137,72 @@ router.post(
       req,
     });
 
+    // Bump config version so external channels drop stale history
+    void bumpAgentConfigVersion(sb, agentId.trim());
+
     res.status(201).json({ document: docRecord });
   }
 );
+
+// ─── DELETE /api/documents/:id ────────────────────────────────────────────────
+// Deletes the document record + storage object and bumps the agent's
+// config_updated_at so that conversation history resets on the next AI reply.
+
+router.delete("/documents/:id", async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const docId = req.params.id as string;
+
+  const sb = getServiceClient();
+  if (!sb) {
+    res.status(503).json({ error: "Service unavailable" });
+    return;
+  }
+
+  // Fetch the document — verify it belongs to this user
+  const { data: doc, error: fetchErr } = await sb
+    .from("documents")
+    .select("id, agent_id, storage_path, user_id")
+    .eq("id", docId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fetchErr || !doc) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+
+  const { agent_id: agentId, storage_path: storagePath } = doc as {
+    agent_id: string;
+    storage_path: string | null;
+  };
+
+  // Remove from storage (best-effort)
+  if (storagePath) {
+    await sb.storage.from("documents").remove([storagePath]);
+  }
+
+  // Delete the DB record
+  const { error: deleteErr } = await sb
+    .from("documents")
+    .delete()
+    .eq("id", docId);
+
+  if (deleteErr) {
+    req.log.error({ err: deleteErr, docId }, "failed to delete document record");
+    res.status(500).json({ error: "Failed to delete document" });
+    return;
+  }
+
+  // Bump config version so the AI picks up the new knowledge base state
+  void bumpAgentConfigVersion(sb, agentId);
+
+  req.log.info({ userId, docId, agentId }, "document deleted, config version bumped");
+  res.status(200).json({ ok: true });
+});
 
 export default router;

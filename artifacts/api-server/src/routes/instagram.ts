@@ -230,12 +230,17 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
     if (!keyRow?.api_key) { logger.warn({ agentId, provider }, "No API key"); return; }
     const apiKey = isEncrypted(keyRow.api_key as string) ? decrypt(keyRow.api_key as string) : keyRow.api_key as string;
 
-    const { data: historyRows } = await sb
-      .from("messages")
-      .select("role, content")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: false })
-      .limit(40);
+    // Scope history to messages created after the last config change
+    const { data: agentCfg } = await sb
+      .from("agents")
+      .select("config_updated_at")
+      .eq("id", agentId)
+      .maybeSingle();
+    const configCutoff = (agentCfg as { config_updated_at?: string | null } | null)?.config_updated_at ?? null;
+
+    const { data: historyRows } = configCutoff
+      ? await sb.from("messages").select("role, content").eq("conversation_id", conversationId).gte("created_at", configCutoff).order("created_at", { ascending: false }).limit(40)
+      : await sb.from("messages").select("role, content").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(40);
 
     const history: ConversationMessage[] = ((historyRows ?? []) as { role: string; content: string }[])
       .reverse()

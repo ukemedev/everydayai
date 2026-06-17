@@ -327,13 +327,17 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     const rawKey = keyRow.api_key as string;
     const apiKey = isEncrypted(rawKey) ? decrypt(rawKey) : rawKey;
 
-    // ── Load history ──
-    const { data: historyRows } = await sb
-      .from("messages")
-      .select("role, content")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: false })
-      .limit(40);
+    // ── Load history (scoped to current config version) ──
+    const { data: agentCfg } = await sb
+      .from("agents")
+      .select("config_updated_at")
+      .eq("id", agentId)
+      .maybeSingle();
+    const configCutoff = (agentCfg as { config_updated_at?: string | null } | null)?.config_updated_at ?? null;
+
+    const { data: historyRows } = configCutoff
+      ? await sb.from("messages").select("role, content").eq("conversation_id", conversationId).gte("created_at", configCutoff).order("created_at", { ascending: false }).limit(40)
+      : await sb.from("messages").select("role, content").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(40);
 
     const conversationHistory: ConversationMessage[] = ((historyRows ?? []) as { role: string; content: string }[])
       .reverse()

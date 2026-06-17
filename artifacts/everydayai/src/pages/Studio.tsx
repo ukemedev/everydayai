@@ -261,6 +261,23 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const prevConfigRef = useRef<{ instructions: string; docCount: number } | null>(null);
+
+  // Clear local chat history whenever the agent's config changes so the test
+  // panel always starts fresh under the new prompt / knowledge base.
+  useEffect(() => {
+    if (prevConfigRef.current === null) {
+      prevConfigRef.current = { instructions, docCount };
+      return;
+    }
+    if (
+      prevConfigRef.current.instructions !== instructions ||
+      prevConfigRef.current.docCount !== docCount
+    ) {
+      prevConfigRef.current = { instructions, docCount };
+      setMessages([]);
+    }
+  }, [instructions, docCount]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2755,11 +2772,18 @@ export default function Studio() {
   async function handleDelete(doc: Document) {
     setDeletingId(doc.id);
 
-    if (doc.storage_path) {
-      await supabase.storage.from("documents").remove([doc.storage_path]);
+    const { data: { session: delSession } } = await supabase.auth.getSession();
+    if (delSession?.access_token) {
+      await fetch(`/api/documents/${doc.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${delSession.access_token}` },
+      });
+    } else {
+      if (doc.storage_path) {
+        await supabase.storage.from("documents").remove([doc.storage_path]);
+      }
+      await supabase.from("documents").delete().eq("id", doc.id);
     }
-
-    await supabase.from("documents").delete().eq("id", doc.id);
 
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     setDeletingId(null);
@@ -2769,7 +2793,19 @@ export default function Studio() {
   async function handleSave() {
     if (!agent) return;
     setSaving(true);
-    await supabase.from("agents").update({ model, instructions, prompt_model: model }).eq("id", agent.id);
+    const { data: { session: saveSession } } = await supabase.auth.getSession();
+    if (saveSession?.access_token) {
+      await fetch(`/api/agents/${agent.id}/prompt`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${saveSession.access_token}`,
+        },
+        body: JSON.stringify({ model, instructions }),
+      });
+    } else {
+      await supabase.from("agents").update({ model, instructions, prompt_model: model }).eq("id", agent.id);
+    }
     setSaving(false);
     setSavedMsg(true);
     setEditingInstructions(false);
