@@ -1,14 +1,20 @@
 // ─── index.ts ────────────────────────────────────────────────────
 // App entry point
 //
-// CRITICAL: env import must come FIRST — before everything else.
-// This validates all secrets on startup.
-// If any secret is missing → app exits with a clear error message.
+// CRITICAL: WebSocket polyfill must run BEFORE any Supabase import.
+// Node.js 20 has no native WebSocket; Supabase Realtime needs it.
+// Using a dynamic import bootstrap so polyfill executes first.
 // ─────────────────────────────────────────────────────────────────
-import { env } from "./config/env";
-import app from "./app";
-import { logger } from "./lib/logger";
-import { migrateUnencryptedKeys } from "./routes/keys";
+
+import { WebSocket } from "ws";
+if (typeof globalThis.WebSocket === "undefined") {
+  (globalThis as unknown as Record<string, unknown>).WebSocket = WebSocket;
+}
+
+import { env } from "./config/env.js";
+import app from "./app.js";
+import { logger } from "./lib/logger.js";
+import { migrateUnencryptedKeys } from "./routes/keys.js";
 
 app.listen(env.PORT, () => {
   logger.info(
