@@ -132,7 +132,7 @@ router.get("/conversations", async (req: Request, res: Response) => {
 
   let query = sb
     .from("conversations")
-    .select("id, agent_id, agent_name, channel, customer_display, mode, status, unread_count, last_message_at, last_message_preview, created_at", { count: "exact" })
+    .select("id, agent_id, agent_name, channel, customer_display, mode, status, unread_count, last_message_at, last_message_preview, tags, created_at", { count: "exact" })
     .eq("owner_id", userId)
     .eq("status", status)
     .is("deleted_at", null)

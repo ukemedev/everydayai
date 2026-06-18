@@ -40,10 +40,23 @@ const base = {
 
 // ── Config objects (exported for testing) ─────────────────────────
 
+// ── General limiter — why 600 not 100 ────────────────────────────────────────
+//
+// The Inbox page polls two endpoints every 5 seconds while it is open:
+//   GET /api/conversations         → 12 req/min
+//   GET /api/conversations/:id/messages → 12 req/min (conversation selected)
+// Total: 24 req/min × 15 min = 360 requests per 15-min window per user.
+//
+// The previous limit of 100/15 min caused users to be blocked after ~4 minutes
+// of inbox use, making all inbox updates silently 429 until the window reset.
+// This is why the "inbox stops receiving messages" problem was recurring.
+//
+// 600/15 min = 40 req/min provides comfortable headroom above the 24-req/min
+// inbox polling baseline while still protecting against scripted abuse.
 export const generalLimiterConfig: Partial<Options> = {
   ...base,
   windowMs: 15 * 60 * 1000,
-  limit: 100,
+  limit: 600,
   handler: makeHandler("Too many requests. Please try again later."),
 };
 

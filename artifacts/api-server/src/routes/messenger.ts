@@ -229,6 +229,7 @@ router.post("/messenger/webhook/:agentId", async (req: Request, res: Response) =
     inFlightKey = `${agentId}:${senderId}`;
     if (_inFlight.has(inFlightKey)) {
       logger.warn({ agentId, senderId }, "Messenger AI call already in-flight — skipping");
+      inFlightKey = ""; // clear so finally doesn't delete the other request's lock
       return;
     }
     _inFlight.add(inFlightKey);

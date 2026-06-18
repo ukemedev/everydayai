@@ -329,6 +329,7 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
     inFlightKey = `${agentId}:${from}`;
     if (_inFlight.has(inFlightKey)) {
       logger.warn({ agentId, from }, "WhatsApp AI call already in-flight — skipping");
+      inFlightKey = ""; // clear so finally doesn't delete the other request's lock
       return;
     }
     _inFlight.add(inFlightKey);

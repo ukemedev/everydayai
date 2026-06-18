@@ -231,6 +231,7 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
     inFlightKey = `${agentId}:${senderId}`;
     if (_inFlight.has(inFlightKey)) {
       logger.warn({ agentId, senderId }, "Instagram AI call already in-flight — skipping");
+      inFlightKey = ""; // clear so finally doesn't delete the other request's lock
       return;
     }
     _inFlight.add(inFlightKey);
