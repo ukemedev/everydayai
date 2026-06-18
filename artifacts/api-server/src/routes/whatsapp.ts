@@ -280,7 +280,8 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
         last_message_at:      new Date().toISOString(),
         last_message_preview: previewText,
         unread_count:         (existingConv as { unread_count: number }).unread_count + 1,
-        status: "active",
+        status:               "active",
+        deleted_at:           null, // revive if previously soft-deleted
       }).eq("id", conversationId);
     } else {
       const { data: newConv, error: convErr } = await sb

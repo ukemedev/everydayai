@@ -425,6 +425,7 @@ router.post("/telegram/webhook/:agentId", async (req: Request, res: Response) =>
         unread_count:         (existingConv as { unread_count: number }).unread_count + 1,
         status:               "active",
         owner_id:             ownerId,
+        deleted_at:           null, // revive if previously soft-deleted
       }).eq("id", conversationId);
     } else {
       const { data: newConv, error: convErr } = await sb
