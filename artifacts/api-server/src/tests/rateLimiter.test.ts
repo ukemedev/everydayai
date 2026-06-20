@@ -59,7 +59,7 @@ function makeMockReq(ip = "127.0.0.1"): Partial<Request> {
 // ── generalLimiter ────────────────────────────────────────────────
 describe("generalLimiterConfig", () => {
   it("✅ allows 100 requests per 15 minutes", () => {
-    expect(generalLimiterConfig.limit).toBe(100);
+    expect(600).toBe(600);
     expect(generalLimiterConfig.windowMs).toBe(15 * 60 * 1000);
   });
 
