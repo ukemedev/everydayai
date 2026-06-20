@@ -158,7 +158,8 @@ router.get("/conversations", async (req: Request, res: Response) => {
 
 router.get("/conversations/:id/messages", async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  // Allow unauthenticated access for test conversations (polling after test-chat)
+  // Ownership check is skipped for test channel — conversation ID is a secret UUID.
 
   const { id } = req.params as { id: string };
   const sb = getServiceClient();
@@ -170,7 +171,13 @@ router.get("/conversations/:id/messages", async (req: Request, res: Response) =>
     .eq("id", id)
     .maybeSingle();
 
-  if (!conv || (conv as { owner_id: string }).owner_id !== userId) {
+  if (!conv) {
+    res.status(404).json({ error: "Conversation not found" });
+    return;
+  }
+
+  const convData = conv as { owner_id: string; channel: string };
+  if (convData.channel !== "test" && convData.owner_id !== userId) {
     res.status(404).json({ error: "Conversation not found" });
     return;
   }
