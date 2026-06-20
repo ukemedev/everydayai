@@ -13,12 +13,7 @@ import { enqueueMessage } from "../lib/queue.js";
 const router = Router();
 
 router.post("/test-chat", async (req: Request, res: Response) => {
-  const verifiedUserId = req.user?.id;
-  if (!verifiedUserId) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
+  const verifiedUserId = req.user?.id ?? null;
   const { message, agentId } = req.body as {
     message?: string;
     agentId?: string;
@@ -41,15 +36,18 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     return;
   }
 
-  const limitResult = await checkPlanLimit(verifiedUserId);
-  if (!limitResult.allowed) {
-    res.status(402).json({
-      error: "MESSAGE_LIMIT_REACHED",
-      message: limitResult.message,
-      current: limitResult.current,
-      limit: limitResult.limit,
-    });
-    return;
+  // If user is authenticated, check their plan limit
+  if (verifiedUserId) {
+    const limitResult = await checkPlanLimit(verifiedUserId);
+    if (!limitResult.allowed) {
+      res.status(402).json({
+        error: "MESSAGE_LIMIT_REACHED",
+        message: limitResult.message,
+        current: limitResult.current,
+        limit: limitResult.limit,
+      });
+      return;
+    }
   }
 
   const sb = getServiceClient();
@@ -58,15 +56,24 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     return;
   }
 
-  // Key resolution using the owner's key (resolveForStudio)
   const keyService = new KeyResolutionService(
     new SupabaseKeyRepository(sb as any),
     new SupabaseAgentRepository(sb as any)
   );
 
-  const keyResult = await keyService.resolveForStudio(
-    verifiedUserId, agentId.trim(), "", "gpt-4o-mini", ""
-  );
+  let keyResult;
+  if (verifiedUserId) {
+    // Authenticated: use the user's own key for the agent they own
+    keyResult = await keyService.resolveForStudio(
+      verifiedUserId, agentId.trim(), "", "gpt-4o-mini", ""
+    );
+  } else {
+    // Unauthenticated (mobile fallback): resolve using the agent owner's key
+    req.log.warn({ agentId }, "test-chat: no auth – resolving API key via public path");
+    keyResult = await keyService.resolveForPublic(
+      agentId.trim(), "", "gpt-4o-mini", ""
+    );
+  }
 
   if (!keyResult.ok) {
     if (keyResult.reason === "NO_API_KEY") {
@@ -79,10 +86,9 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     return;
   }
 
-  // Create a new conversation for this test session
+  // Create a new conversation
   const conversationId = uuidv4();
 
-  // Get agent owner info
   const { data: agentRow } = await sb
     .from("agents")
     .select("user_id, name")
@@ -91,7 +97,6 @@ router.post("/test-chat", async (req: Request, res: Response) => {
   const ownerId = agentRow ? (agentRow as { user_id: string }).user_id : "";
   const agentName = agentRow ? (agentRow as { name: string }).name : null;
 
-  // Create conversation record
   await sb.from("conversations").insert({
     id: conversationId,
     agent_id: agentId.trim(),
@@ -121,7 +126,7 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     channel: "test",
     message: cleanMessage,
     timestamp: new Date().toISOString(),
-    ownerUserId: verifiedUserId,
+    ownerUserId: verifiedUserId ?? ownerId,
   });
 
   logger.info({ agentId, conversationId, verifiedUserId }, "Test chat message enqueued");
