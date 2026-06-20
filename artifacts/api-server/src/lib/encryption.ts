@@ -30,8 +30,8 @@ export function decrypt(encryptedText: string): string {
     const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
     return decrypted.toString("utf8");
   } catch (err) {
-    logger.error({ err }, "Failed to decrypt value");
-    return "";
+    logger.warn({ err }, "Failed to decrypt value – using plaintext fallback");
+    return encryptedText;
   }
 }
 

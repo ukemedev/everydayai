@@ -24,26 +24,22 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
   const sb = getServiceClient();
   if (!sb) throw new Error("No Supabase client");
 
-  // ── 1. Determine credentials ──────────────────────────
   let apiKey: string;
   let model: string;
   let instructions: string;
   let provider: string;
 
-  // If the enqueuer already resolved everything, use that directly
   if (job.resolvedApiKey && job.resolvedProvider && job.resolvedModel) {
     apiKey = job.resolvedApiKey;
     provider = job.resolvedProvider;
     model = job.resolvedModel;
     instructions = job.resolvedInstructions || "";
-    logger.info({ agentId, channel }, "Using pre‑resolved credentials from job");
+    logger.info({ agentId, channel }, "Using pre-resolved credentials from job");
   } else {
-    // Fallback: resolve via KeyResolutionService (for channels that don't pre‑resolve)
     const keyService = new KeyResolutionService(
       new SupabaseKeyRepository(sb as any),
       new SupabaseAgentRepository(sb as any)
     );
-
     let keyResult;
     if (channel === "test") {
       if (!ownerUserId) throw new Error("ownerUserId required for test channel");
@@ -51,19 +47,16 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
     } else {
       keyResult = await keyService.resolveForPublic(agentId, "", "gpt-4o-mini", "");
     }
-
     if (!keyResult.ok) {
       logger.warn({ agentId, channel, reason: keyResult.reason }, "Key resolution failed");
       return;
     }
-
     apiKey = keyResult.apiKey;
     model = keyResult.model;
     instructions = keyResult.instructions;
     provider = keyResult.provider;
   }
 
-  // ── 2. Fetch conversation history ─────────────────────
   const { data: messages } = await sb
     .from("messages")
     .select("role, content")
@@ -80,14 +73,12 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
       content: m.content,
     }));
 
-  // ── 3. Save incoming message ──────────────────────────
   await sb.from("messages").insert({
     conversation_id: conversationId,
     role: "customer",
     content: message,
   });
 
-  // ── 4. Call AI ────────────────────────────────────────
   const systemPrompt = buildHardenedSystemPrompt(instructions);
   const llmResult = await llmService.chat(provider, {
     apiKey,
@@ -99,7 +90,6 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
 
   const reply = llmResult.reply;
 
-  // ── 5. Save AI reply ──────────────────────────────────
   await sb.from("messages").insert({
     conversation_id: conversationId,
     role: "ai",
@@ -111,11 +101,9 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
     last_message_preview: reply.slice(0, 75),
   }).eq("id", conversationId);
 
-  // ── 6. Run agent tools ────────────────────────────────
   void runAgentTools(agentId, conversationId, message, reply, sb)
     .catch(err => logger.error({ err, agentId }, "runAgentTools failed"));
 
-  // ── 7. Deliver reply to channel ───────────────────────
   await sendChannelReply(channel, agentId, conversationId, reply);
 
   logger.info({ agentId, channel, conversationId }, "AI reply processed and delivered");
