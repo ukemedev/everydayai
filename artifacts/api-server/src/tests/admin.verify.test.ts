@@ -155,7 +155,7 @@ describe("GET /admin/verify — requireAdmin guard", () => {
     await handler(req as Request, res as Response);
 
     expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Invalid or expired token" });
+    expect(json).toHaveBeenCalledWith({ error: "Authentication required" });
   });
 
   it("❌ returns 401 when JWT is invalid or expired", async () => {
@@ -168,7 +168,7 @@ describe("GET /admin/verify — requireAdmin guard", () => {
     await handler(req as Request, res as Response);
 
     expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Authentication required" });
+    expect(json).toHaveBeenCalledWith({ error: "Invalid or expired token" });
   });
 
   it("❌ returns 503 when SUPABASE_SERVICE_ROLE_KEY is missing", async () => {
