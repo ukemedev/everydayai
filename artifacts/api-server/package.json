@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "worker": "tsx src/workers/agentWorker.ts",
     "dev": "export NODE_ENV=development && tsx src/index.ts",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",

@@ -16,6 +16,7 @@ import { sendWhatsAppMessage } from "../lib/whatsappClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
 import { transcribeAudio } from "../lib/whisper.js";
 import { runAgentTools } from "../lib/toolRunner.js";
+import { enqueueMessage } from "../lib/queue.js";
 import { getServiceClient } from "../lib/supabaseService.js";
 import { callAI, callAIVision, getProviderForModel, type ConversationMessage } from "../lib/aiDispatch.js";
 
@@ -122,9 +123,6 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
   const sb = getServiceClient();
   if (!sb) return;
 
-  // Declared outside try so the finally block can always clean up,
-  // regardless of which branch inside the try caused the exit.
-  let inFlightKey = "";
 
   try {
     // ── Load deployment ──
@@ -321,87 +319,18 @@ router.post("/whatsapp/webhook/:agentId", async (req: Request, res: Response) =>
       return;
     }
 
-    // ── Per-customer in-flight guard ─────────────────────────────────────────
-    // Prevents concurrent AI calls for the same conversation. Without this,
-    // a customer sending 3 messages quickly triggers 3 simultaneous AI calls
-    // → 3 DB writes + 3 WhatsApp replies for the same conversation window.
-    // The finally block clears this key on all exit paths (normal, early return,
-    // and exception), so it can never leak.
-    inFlightKey = `${agentId}:${from}`;
-    if (_inFlight.has(inFlightKey)) {
-      logger.warn({ agentId, from }, "WhatsApp AI call already in-flight — skipping");
-      inFlightKey = ""; // clear so finally doesn't delete the other request's lock
-      return;
-    }
-    _inFlight.add(inFlightKey);
-
-    // ── Load API key ──
-    const { data: keyRow } = await sb
-      .from("api_keys")
-      .select("api_key")
-      .eq("user_id", ownerId)
-      .eq("provider", provider)
-      .maybeSingle();
-
-    if (!keyRow?.api_key) {
-      logger.warn({ agentId, provider }, "No API key found for WhatsApp agent — cannot reply");
-      return;
-    }
-
-    const rawKey = keyRow.api_key as string;
-    const apiKey = isEncrypted(rawKey) ? decrypt(rawKey) : rawKey;
-
-    // ── Load history (scoped to current config version) ──
-    const { data: agentCfg } = await sb
-      .from("agents")
-      .select("config_updated_at")
-      .eq("id", agentId)
-      .maybeSingle();
-    const configCutoff = (agentCfg as { config_updated_at?: string | null } | null)?.config_updated_at ?? null;
-
-    const { data: historyRows } = configCutoff
-      ? await sb.from("messages").select("role, content").eq("conversation_id", conversationId).gte("created_at", configCutoff).order("created_at", { ascending: false }).limit(40)
-      : await sb.from("messages").select("role, content").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(40);
-
-    const conversationHistory: ConversationMessage[] = ((historyRows ?? []) as { role: string; content: string }[])
-      .reverse()
-      .filter((m) => m.role === "customer" || m.role === "ai")
-      .slice(0, -1)
-      .map((m) => ({
-        role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant",
-        content: m.content,
-      }));
-
-    // ── Call AI ──
-    let reply = imageBase64 && imageMime
-      ? await callAIVision(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText, imageBase64, imageMime)
-      : await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions), conversationHistory, effectiveText);
-
-    // ── Save + send reply ──
-    await sb.from("messages").insert({
-      conversation_id: conversationId,
-      role:            "ai",
-      content:         reply,
+        // ── Enqueue to worker ─────────────────────────────────────────────────
+    await enqueueMessage({
+      agentId,
+      conversationId,
+      channel: "whatsapp",
+      message: effectiveText,
+      timestamp: new Date().toISOString(),
     });
-    await sb.from("conversations").update({
-      last_message_at:      new Date().toISOString(),
-      last_message_preview: reply.slice(0, 75),
-    }).eq("id", conversationId);
-
-    await sendWhatsAppMessage(phoneNumberId, accessToken, from, reply);
-    void runAgentTools(agentId, conversationId, text, reply, sb)
-      .catch((err: unknown) => logger.error({ err, agentId }, "runAgentTools failed"));
-    logger.info({ agentId, from }, "WhatsApp AI reply sent");
-
+    logger.info({ agentId, from, conversationId }, "WhatsApp message enqueued");
   } catch (err) {
     logger.error({ err, agentId }, "WhatsApp webhook handler error");
-  } finally {
-    // Always release the in-flight lock — covers normal completion, early
-    // returns inside try, and uncaught exceptions. The empty-string check
-    // guards against exits that happen before inFlightKey was set.
-    if (inFlightKey) _inFlight.delete(inFlightKey);
-  }
-});
+  }});
 
 // ─── POST /api/whatsapp/setup ──────────────────────────────────────────
 

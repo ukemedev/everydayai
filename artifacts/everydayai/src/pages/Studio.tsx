@@ -289,113 +289,76 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
     inputRef.current?.focus();
   }
 
+  
   async function sendMessage() {
-    const text = input.trim();
-    if (!text || isTyping) return;
 
-    const userMsg: Message = { id: crypto.randomUUID(), role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
+    const tempId = crypto.randomUUID();
+    setMessages(prev => [...prev, { id: tempId, role: 'user', text: text.trim() }]);
+    const sentText = text.trim();
+    setText('');
     setIsTyping(true);
 
-    const provider = getProviderForModel(model);
-
-    // Build conversation history in OpenAI format (all previous messages)
-    const conversationHistory = messages.map((m) => ({
-      role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
-      content: m.text,
-    }));
-
-    // Do NOT fetch or send the API key from the frontend — the backend looks it up
-    // server-side and decrypts it. We send the JWT so the backend can verify who
-    // is making the request before looking up their stored API key.
-    const { data: { session: chatSession } } = await supabase.auth.getSession();
-    const chatHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (chatSession?.access_token) {
-      chatHeaders["Authorization"] = `Bearer ${chatSession.access_token}`;
-    }
-
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: chatHeaders,
-        body: JSON.stringify({
-          message: text,
-          instructions: instructions.trim() || "You are a helpful assistant.",
-          model,
-          provider,
-          conversationHistory,
-          agentId,
-          userId,
-        }),
+      const { data: { session: chatSession } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (chatSession?.access_token) headers['Authorization'] = 'Bearer ' + chatSession.access_token;
+
+      const res = await fetch('/api/test-chat', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message: sentText, agentId }),
       });
 
-      const data = await res.json() as {
-        reply?: string;
-        toolCalls?: ToolCallDebug[];
-        error?: string;
-        current?: number;
-        limit?: number;
-      };
+      const data = await res.json() as { conversationId?: string; error?: string; current?: number; limit?: number };
 
-      if (!res.ok) {
-        if (data.error === "NO_API_KEY") {
-          setMessages((prev) => [
-            ...prev,
-            { id: crypto.randomUUID(), role: "agent", type: "no-key", provider, model, text: "" },
-          ]);
-          setIsTyping(false);
-          return;
+        if (data.error === 'NO_API_KEY') {
+          setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'agent', type: 'no-key', provider, model, text: '' }]);
+          setIsTyping(false); return;
         }
-        if (data.error === "MESSAGE_LIMIT_REACHED") {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              role: "agent",
-              type: "limit-reached",
-              text: "",
-              limitData: { current: data.current ?? 0, limit: data.limit ?? 50 },
-            },
-          ]);
-          setIsTyping(false);
-          return;
+        if (data.error === 'MESSAGE_LIMIT_REACHED') {
+          setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'agent', type: 'limit-reached', text: '', limitData: { current: data.current ?? 0, limit: data.limit ?? 50 } }]);
+          setIsTyping(false); return;
         }
-        throw new Error(data.error ?? "Request failed");
+        throw new Error(data.error ?? 'Request failed');
       }
 
-      const newMessages: Message[] = [];
-
-      const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls as ToolCallDebug[] : [];
-      for (const tc of toolCalls) {
-        newMessages.push({
-          id: crypto.randomUUID(),
-          role: "agent",
-          type: "tool-debug",
-          text: "",
-          toolCall: tc,
-        });
+      if (data.conversationId) {
+        setActiveConversationId(data.conversationId);
+        pollForReply(data.conversationId, tempId);
+      } else {
+        throw new Error('No conversation ID returned');
       }
-
-      newMessages.push({
-        id: crypto.randomUUID(),
-        role: "agent",
-        text: data.reply ?? "No response.",
-      });
-
-      setMessages((prev) => [...prev, ...newMessages]);
     } catch (err) {
-      const errText = err instanceof Error ? err.message : "Error connecting to agent.";
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: "agent", text: errText },
-      ]);
-    } finally {
+      const errText = err instanceof Error ? err.message : 'Error connecting to agent.';
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'agent', text: errText }]);
       setIsTyping(false);
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+  async function pollForReply(conversationId: string, userMessageId: string) {
+    const maxAttempts = 15;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      try {
+            const { data: { session: pollSession } } = await supabase.auth.getSession();
+            const pollHeaders: Record<string, string> = {};
+            if (pollSession?.access_token) pollHeaders["Authorization"] = "Bearer " + pollSession.access_token;
+            const res = await fetch("/api/conversations/" + conversationId + "/messages?limit=10", { headers: pollHeaders });
+        const { messages: msgs } = await res.json() as { messages: { role: string; content: string }[] };
+        const replyMsg = msgs.find(m => m.role === 'ai');
+        if (replyMsg) {
+          setMessages(prev => prev.map(p => p.id === userMessageId ? { ...p } : p).concat({ id: crypto.randomUUID(), role: 'agent', text: replyMsg.content }));
+          setIsTyping(false);
+          setActiveConversationId(null);
+          return;
+        }
+      } catch { /* polling error, retry */ }
+    }
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'agent', text: 'AI did not respond in time.' }]);
+    setIsTyping(false);
+    setActiveConversationId(null);
+  }
+function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 

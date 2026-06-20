@@ -1,6 +1,7 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import healthRouter from "./health";
 import chatRouter from "./chat";
+import testChatRouter from "./testChat";
 import googleRouter from "./google";
 import adminRouter from "./admin";
 import blogRouter from "./blog";
@@ -13,6 +14,7 @@ import conversationsRouter from "./conversations";
 import whatsappRouter from "./whatsapp";
 import messengerRouter from "./messenger";
 import instagramRouter from "./instagram";
+import telegramRouter from "./telegram";
 import uploadRouter from "./upload";
 import authEmailRouter from "./authEmail";
 import onboardingRouter from "./onboarding";
@@ -89,6 +91,7 @@ router.use("/analytics", requireAuth as RequestHandler);
 // ── Routers ───────────────────────────────────────────────────────────────────
 router.use(healthRouter);
 router.use(chatRouter);
+router.use(testChatRouter);
 router.use(googleRouter);
 router.use(adminRouter);
 router.use(blogRouter);
@@ -105,5 +108,6 @@ router.use(conversationsRouter);
 router.use(whatsappRouter);
 router.use(messengerRouter);
 router.use(instagramRouter);
+router.use(telegramRouter);
 
 export default router;

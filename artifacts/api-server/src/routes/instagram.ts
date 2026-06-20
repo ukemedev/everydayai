@@ -14,6 +14,7 @@ import { encrypt, decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendMetaMessage } from "../lib/metaClient.js";
 import { verifyMetaSignature } from "../lib/metaSignature.js";
 import { runAgentTools } from "../lib/toolRunner.js";
+import { enqueueMessage } from "../lib/queue.js";
 import { getServiceClient } from "../lib/supabaseService.js";
 import { callAI, getProviderForModel, type ConversationMessage } from "../lib/aiDispatch.js";
 
@@ -94,8 +95,7 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
   const sb = getServiceClient();
   if (!sb) return;
 
-  // Declared outside try so the finally block can always clean up.
-  let inFlightKey = "";
+  // in-flight guard removed — worker handles per-conversation ordering
 
   try {
     const { data: dep } = await sb
@@ -227,62 +227,19 @@ router.post("/instagram/webhook/:agentId", async (req: Request, res: Response) =
     if (currentMode === "human") {
       logger.info({ agentId }, "Instagram DM in human mode — AI reply suppressed"); return;
     }
-
-    // ── Per-customer in-flight guard ─────────────────────────────────────────
-    inFlightKey = `${agentId}:${senderId}`;
-    if (_inFlight.has(inFlightKey)) {
-      logger.warn({ agentId, senderId }, "Instagram AI call already in-flight — skipping");
-      inFlightKey = ""; // clear so finally doesn't delete the other request's lock
-      return;
-    }
-    _inFlight.add(inFlightKey);
-
-    const { data: keyRow } = await sb
-      .from("api_keys")
-      .select("api_key")
-      .eq("user_id", ownerId)
-      .eq("provider", provider)
-      .maybeSingle();
-
-    if (!keyRow?.api_key) { logger.warn({ agentId, provider }, "No API key"); return; }
-    const apiKey = isEncrypted(keyRow.api_key as string) ? decrypt(keyRow.api_key as string) : keyRow.api_key as string;
-
-    // Scope history to messages created after the last config change
-    const { data: agentCfg } = await sb
-      .from("agents")
-      .select("config_updated_at")
-      .eq("id", agentId)
-      .maybeSingle();
-    const configCutoff = (agentCfg as { config_updated_at?: string | null } | null)?.config_updated_at ?? null;
-
-    const { data: historyRows } = configCutoff
-      ? await sb.from("messages").select("role, content").eq("conversation_id", conversationId).gte("created_at", configCutoff).order("created_at", { ascending: false }).limit(40)
-      : await sb.from("messages").select("role, content").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(40);
-
-    const history: ConversationMessage[] = ((historyRows ?? []) as { role: string; content: string }[])
-      .reverse()
-      .filter(m => m.role === "customer" || m.role === "ai")
-      .slice(0, -1)
-      .map(m => ({ role: (m.role === "customer" ? "user" : "assistant") as "user" | "assistant", content: m.content }));
-
-    let reply = await callAI(apiKey, provider, model, buildHardenedSystemPrompt(instructions), history, text);
-
-    await sb.from("messages").insert({ conversation_id: conversationId, role: "ai", content: reply });
-    await sb.from("conversations").update({
-      last_message_at: new Date().toISOString(), last_message_preview: reply.slice(0, 75),
-    }).eq("id", conversationId);
-
-    await sendMetaMessage(accessToken, senderId, reply);
-    void runAgentTools(agentId, conversationId, text, reply, sb)
-      .catch((err: unknown) => logger.error({ err, agentId }, "runAgentTools failed"));
-    logger.info({ agentId, senderId }, "Instagram AI reply sent");
+    // — Enqueue to worker —————————————————————————————————————————————————
+    await enqueueMessage({
+      agentId,
+      conversationId,
+      channel: "instagram",
+      message: text,
+      timestamp: new Date().toISOString(),
+    });
+    logger.info({ agentId, senderId, conversationId }, "Instagram message enqueued");
 
   } catch (err) {
     logger.error({ err, agentId }, "Instagram webhook handler error");
-  } finally {
-    if (inFlightKey) _inFlight.delete(inFlightKey);
-  }
-});
+  }});
 
 // ─── POST /api/instagram/setup ────────────────────────────────────────────────
 
