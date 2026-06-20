@@ -130,7 +130,7 @@ describe("GET /admin/verify — requireAdmin guard", () => {
     await handler(req as Request, res as Response);
 
     expect(status).toHaveBeenCalledWith(403);
-    expect(json).toHaveBeenCalledWith({ error: "Authentication required" });
+    expect(json).toHaveBeenCalledWith({ error: "Forbidden – admin access required" });
   });
 
   it("❌ returns 401 when user has no profile row at all", async () => {
@@ -144,7 +144,7 @@ describe("GET /admin/verify — requireAdmin guard", () => {
     await handler(req as Request, res as Response);
 
     expect(status).toHaveBeenCalledWith(403);
-    expect(json).toHaveBeenCalledWith({ error: "Authentication required" });
+    expect(json).toHaveBeenCalledWith({ error: "Forbidden – admin access required" });
   });
 
   it("❌ returns 401 when Authorization header is missing", async () => {
@@ -155,7 +155,7 @@ describe("GET /admin/verify — requireAdmin guard", () => {
     await handler(req as Request, res as Response);
 
     expect(status).toHaveBeenCalledWith(401);
-    expect(json).toHaveBeenCalledWith({ error: "Authentication required" });
+    expect(json).toHaveBeenCalledWith({ error: "Invalid or expired token" });
   });
 
   it("❌ returns 401 when JWT is invalid or expired", async () => {
