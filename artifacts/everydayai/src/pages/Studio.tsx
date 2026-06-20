@@ -19,24 +19,8 @@ const modelGroups = [
     ],
   },
   {
-    provider: "anthropic",
-    label: "Anthropic",
-    models: [
-      { value: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-      { value: "claude-3-haiku-20240307", label: "Claude 3 Haiku" },
-    ],
-  },
-  {
-    provider: "google",
-    label: "Google",
-    models: [
-      { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
-      { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-    ],
-  },
-  {
     provider: "groq",
-    label: "Groq (Free)",
+    label: "Groq (Testing)",
     models: [
       { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (Fast)" },
       { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },

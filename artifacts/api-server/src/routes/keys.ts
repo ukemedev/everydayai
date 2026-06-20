@@ -12,7 +12,6 @@ function getServiceClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-// POST /api/keys/save — encrypt and upsert an API key
 router.post("/keys/save", async (req: Request, res: Response) => {
   const user = req.user;
   if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
@@ -23,6 +22,12 @@ router.post("/keys/save", async (req: Request, res: Response) => {
 
   try {
     const encrypted = encrypt(apiKey.trim());
+    if (!encrypted || !isEncrypted(encrypted)) {
+      logger.error({ provider, userId: user.id }, "Encryption failed – key not stored");
+      res.status(500).json({ error: "Encryption failed" });
+      return;
+    }
+
     const sb = getServiceClient();
     const { error } = await sb.from("api_keys").upsert(
       { user_id: user.id, provider: provider.trim(), api_key: encrypted },
@@ -40,7 +45,6 @@ router.post("/keys/save", async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/keys/delete — remove a provider's key
 router.delete("/keys/delete", async (req: Request, res: Response) => {
   const user = req.user;
   if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
@@ -67,7 +71,6 @@ router.delete("/keys/delete", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/keys/list — return providers with keys saved (masked, never raw)
 router.get("/keys/list", async (req: Request, res: Response) => {
   const user = req.user;
   if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
@@ -104,7 +107,6 @@ router.get("/keys/list", async (req: Request, res: Response) => {
   }
 });
 
-// ── Startup migration: encrypt any plaintext keys in the db ──────────────────
 export async function migrateUnencryptedKeys(): Promise<void> {
   try {
     const url = process.env.VITE_SUPABASE_URL;
