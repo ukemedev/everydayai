@@ -334,7 +334,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
         const pollHeaders: Record<string, string> = {};
         if (pollSession?.access_token) pollHeaders['Authorization'] = 'Bearer ' + pollSession.access_token;
 
-        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=10`, { headers: pollHeaders });
+        const res = await fetch(`/api/public/conversations/${conversationId}/messages?limit=10`, { headers: pollHeaders });
         if (!res.ok) continue;
 
         const { messages: msgs } = await res.json() as { messages: { role: string; content: string }[] };

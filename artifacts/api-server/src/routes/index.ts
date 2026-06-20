@@ -14,6 +14,7 @@ import conversationsRouter from "./conversations";
 import whatsappRouter from "./whatsapp";
 import messengerRouter from "./messenger";
 import instagramRouter from "./instagram";
+import publicMessagesRouter from "./publicMessages";
 import telegramRouter from "./telegram";
 import uploadRouter from "./upload";
 import authEmailRouter from "./authEmail";
@@ -108,6 +109,7 @@ router.use(conversationsRouter);
 router.use(whatsappRouter);
 router.use(messengerRouter);
 router.use(instagramRouter);
+router.use(publicMessagesRouter);
 router.use(telegramRouter);
 
 export default router;
