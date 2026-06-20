@@ -24,32 +24,57 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
   const sb = getServiceClient();
   if (!sb) throw new Error("No Supabase client");
 
-  // ── 1. Key resolution ──────────────────────────────────
-  const keyService = new KeyResolutionService(
-    new SupabaseKeyRepository(sb as any),
-    new SupabaseAgentRepository(sb as any)
-  );
+  let apiKey: string;
+  let model: string;
+  let instructions: string;
+  let provider: string;
 
-  let keyResult;
-  if (channel === "test") {
-    // Test chat uses the owner's key (resolveForStudio)
-    if (!ownerUserId) throw new Error("ownerUserId required for test channel");
-    keyResult = await keyService.resolveForStudio(
-      ownerUserId, agentId, "", "gpt-4o-mini", ""
+  // If the job already contains a resolved provider/model (e.g., from test-chat), use those directly
+  if (job.resolvedProvider && job.resolvedModel) {
+    const keyService = new KeyResolutionService(
+      new SupabaseKeyRepository(sb as any),
+      new SupabaseAgentRepository(sb as any)
     );
+    const keyResult = channel === "test"
+      ? await keyService.resolveForStudio(
+          ownerUserId || "", agentId, job.resolvedProvider, job.resolvedModel, ""
+        )
+      : await keyService.resolveForPublic(
+          agentId, job.resolvedProvider, job.resolvedModel, ""
+        );
+    if (!keyResult.ok) {
+      logger.warn({ agentId, channel, reason: keyResult.reason }, "Key resolution failed");
+      return;
+    }
+    apiKey = keyResult.apiKey;
+    model = keyResult.model;
+    instructions = keyResult.instructions;
+    provider = keyResult.provider;
   } else {
-    // Public channels use the agent owner's key (resolveForPublic)
-    keyResult = await keyService.resolveForPublic(
-      agentId, "", "gpt-4o-mini", ""
+    const keyService = new KeyResolutionService(
+      new SupabaseKeyRepository(sb as any),
+      new SupabaseAgentRepository(sb as any)
     );
+    let keyResult;
+    if (channel === "test") {
+      if (!ownerUserId) throw new Error("ownerUserId required for test channel");
+      keyResult = await keyService.resolveForStudio(
+        ownerUserId, agentId, "", "gpt-4o-mini", ""
+      );
+    } else {
+      keyResult = await keyService.resolveForPublic(
+        agentId, "", "gpt-4o-mini", ""
+      );
+    }
+    if (!keyResult.ok) {
+      logger.warn({ agentId, channel, reason: keyResult.reason }, "Key resolution failed");
+      return;
+    }
+    apiKey = keyResult.apiKey;
+    model = keyResult.model;
+    instructions = keyResult.instructions;
+    provider = keyResult.provider;
   }
-
-  if (!keyResult.ok) {
-    logger.warn({ agentId, channel, reason: keyResult.reason }, "Key resolution failed");
-    return;
-  }
-
-  const { apiKey, model, instructions, provider } = keyResult;
 
   // ── 2. Fetch conversation history ─────────────────────
   const { data: messages } = await sb

@@ -127,6 +127,8 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     message: cleanMessage,
     timestamp: new Date().toISOString(),
     ownerUserId: verifiedUserId ?? ownerId,
+    resolvedProvider: keyResult.provider,
+    resolvedModel: keyResult.model,
   });
 
   logger.info({ agentId, conversationId, verifiedUserId }, "Test chat message enqueued");

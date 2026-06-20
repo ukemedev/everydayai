@@ -19,6 +19,12 @@ export const messageQueue = new Queue("incoming-messages", {
 });
 
 export interface IncomingMessageJob {
+  /** Optional: skip key resolution and use this provider/model (already resolved) */
+  resolvedProvider?: string;
+  resolvedModel?: string;
+  /** Optional: skip key resolution and use this provider/model (already resolved) */
+  resolvedProvider?: string;
+  resolvedModel?: string;
   agentId: string;
   conversationId: string;
   channel: "telegram" | "whatsapp" | "messenger" | "instagram" | "web_widget" | "test";
