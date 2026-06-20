@@ -259,12 +259,11 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevConfigRef = useRef<{ instructions: string; docCount: number } | null>(null);
 
-  // Clear local chat history whenever the agent's config changes so the test
-  // panel always starts fresh under the new prompt / knowledge base.
   useEffect(() => {
     if (prevConfigRef.current === null) {
       prevConfigRef.current = { instructions, docCount };
@@ -289,13 +288,19 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
     inputRef.current?.focus();
   }
 
-  
+  const provider = getProviderForModel(model);
+
   async function sendMessage() {
+    if (!input.trim() || isTyping) return;
+    if (!agentId) {
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'agent', text: 'No agent selected.' }]);
+      return;
+    }
 
     const tempId = crypto.randomUUID();
-    setMessages(prev => [...prev, { id: tempId, role: 'user', text: text.trim() }]);
-    const sentText = text.trim();
-    setText('');
+    const sentText = input.trim();
+    setMessages(prev => [...prev, { id: tempId, role: 'user', text: sentText }]);
+    setInput('');
     setIsTyping(true);
 
     try {
@@ -311,6 +316,7 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
 
       const data = await res.json() as { conversationId?: string; error?: string; current?: number; limit?: number };
 
+      if (!res.ok) {
         if (data.error === 'NO_API_KEY') {
           setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'agent', type: 'no-key', provider, model, text: '' }]);
           setIsTyping(false); return;
@@ -340,14 +346,23 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(resolve => setTimeout(resolve, 2000));
       try {
-            const { data: { session: pollSession } } = await supabase.auth.getSession();
-            const pollHeaders: Record<string, string> = {};
-            if (pollSession?.access_token) pollHeaders["Authorization"] = "Bearer " + pollSession.access_token;
-            const res = await fetch("/api/conversations/" + conversationId + "/messages?limit=10", { headers: pollHeaders });
+        const { data: { session: pollSession } } = await supabase.auth.getSession();
+        const pollHeaders: Record<string, string> = {};
+        if (pollSession?.access_token) pollHeaders['Authorization'] = 'Bearer ' + pollSession.access_token;
+
+        const res = await fetch(`/api/conversations/${conversationId}/messages?limit=10`, { headers: pollHeaders });
+        if (!res.ok) continue;
+
         const { messages: msgs } = await res.json() as { messages: { role: string; content: string }[] };
         const replyMsg = msgs.find(m => m.role === 'ai');
         if (replyMsg) {
-          setMessages(prev => prev.map(p => p.id === userMessageId ? { ...p } : p).concat({ id: crypto.randomUUID(), role: 'agent', text: replyMsg.content }));
+          setMessages(prev =>
+            prev.map(p => p.id === userMessageId ? { ...p } : p).concat({
+              id: crypto.randomUUID(),
+              role: 'agent',
+              text: replyMsg.content,
+            })
+          );
           setIsTyping(false);
           setActiveConversationId(null);
           return;
@@ -358,7 +373,8 @@ function ChatPanel({ agentId, instructions, model, docCount, userId, onSwitchTab
     setIsTyping(false);
     setActiveConversationId(null);
   }
-function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
@@ -366,214 +382,86 @@ function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
 
   return (
     <>
-    <UpgradeModal
-      isOpen={showUpgradeModal}
-      onClose={() => setShowUpgradeModal(false)}
-      reason="message_limit"
-    />
-    <div
-      className="flex-1 flex flex-col min-h-0 border-l border-white/5"
-      style={{ backgroundColor: "#0d1117" }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 flex-shrink-0">
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs font-medium text-white/40 uppercase tracking-wider">
-            Test Your Agent
-          </span>
-          {docCount > 0 && (
-            <span
-              className="text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1"
-              style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#7b93ff" }}
-            >
-              📚 {docCount} {docCount === 1 ? "document" : "documents"} loaded
-            </span>
-          )}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        reason="message_limit"
+      />
+      <div
+        className="flex-1 flex flex-col min-h-0 border-l border-white/5"
+        style={{ backgroundColor: "#0d1117" }}
+      >
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/5 flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-medium text-white/40 uppercase tracking-wider">Test Your Agent</span>
+            {docCount > 0 && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1" style={{ backgroundColor: "rgba(59,91,252,0.15)", color: "#7b93ff" }}>
+                📚 {docCount} {docCount === 1 ? "document" : "documents"} loaded
+              </span>
+            )}
+          </div>
+          <button onClick={clearChat} className="text-xs text-white/35 hover:text-white/65 border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-all duration-150">New Chat</button>
         </div>
-        <button
-          onClick={clearChat}
-          className="text-xs text-white/35 hover:text-white/65 border border-white/10 hover:border-white/20 px-2.5 py-1 rounded-md transition-all duration-150"
-        >
-          New Chat
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 flex flex-col gap-3">
-        {noInstructions ? (
-          <div className="flex-1 flex items-center justify-center text-center px-4">
-            <p className="text-xs text-white/25 leading-relaxed">
-              Add instructions in the Prompt tab and save before testing.
-            </p>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-xs text-white/20 text-center">Send a message to test your agent…</p>
-          </div>
-        ) : (
-          <>
-            {messages.map((msg) => {
-              // Tool debug card
-              if (msg.type === "tool-debug" && msg.toolCall) {
-                return (
-                  <div key={msg.id} className="px-1">
-                    <ToolDebugCard toolCall={msg.toolCall} />
-                  </div>
-                );
-              }
-
-              // Message limit reached banner
-              if (msg.type === "limit-reached") {
-                return (
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 py-4 flex flex-col gap-3">
+          {noInstructions ? (
+            <div className="flex-1 flex items-center justify-center text-center px-4"><p className="text-xs text-white/25 leading-relaxed">Add instructions in the Prompt tab and save before testing.</p></div>
+          ) : messages.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center"><p className="text-xs text-white/20 text-center">Send a message to test your agent…</p></div>
+          ) : (
+            <>
+              {messages.map((msg) => {
+                if (msg.type === "tool-debug" && msg.toolCall) return <div key={msg.id} className="px-1"><ToolDebugCard toolCall={msg.toolCall} /></div>;
+                if (msg.type === "limit-reached") return (
                   <div key={msg.id} className="flex items-start gap-2">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
-                      style={{ backgroundColor: "rgba(251,191,36,0.2)" }}
-                    >
-                      ⚠️
-                    </div>
-                    <div
-                      className="max-w-[85%] px-3.5 py-3 rounded-2xl text-sm leading-relaxed flex flex-col gap-2.5"
-                      style={{
-                        backgroundColor: "rgba(251,191,36,0.12)",
-                        border: "1px solid rgba(251,191,36,0.25)",
-                        borderBottomLeftRadius: "4px",
-                      }}
-                    >
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5" style={{ backgroundColor: "rgba(251,191,36,0.2)" }}>⚠️</div>
+                    <div className="max-w-[85%] px-3.5 py-3 rounded-2xl text-sm leading-relaxed flex flex-col gap-2.5" style={{ backgroundColor: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.25)", borderBottomLeftRadius: "4px" }}>
                       <p className="text-amber-400 text-xs font-semibold">Monthly limit reached</p>
-                      <p className="text-amber-200/80 text-xs leading-relaxed">
-                        You have reached your {msg.limitData?.limit ?? 50} message limit for this month.
-                        Upgrade your plan to continue chatting.
-                      </p>
-                      <button
-                        onClick={() => setShowUpgradeModal(true)}
-                        className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90 active:scale-95"
-                        style={{ backgroundColor: "rgba(251,191,36,0.25)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.35)" }}
-                      >
-                        Upgrade Plan →
-                      </button>
+                      <p className="text-amber-200/80 text-xs leading-relaxed">You have reached your {msg.limitData?.limit ?? 50} message limit for this month. Upgrade your plan to continue chatting.</p>
+                      <button onClick={() => setShowUpgradeModal(true)} className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90 active:scale-95" style={{ backgroundColor: "rgba(251,191,36,0.25)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.35)" }}>Upgrade Plan →</button>
                     </div>
                   </div>
                 );
-              }
-
-              // Special "no API key" system message
-              if (msg.type === "no-key") {
-                return (
+                if (msg.type === "no-key") return (
                   <div key={msg.id} className="flex items-start gap-2">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
-                    >
-                      <AgentAvatar size={16} />
-                    </div>
-                    <div
-                      className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed"
-                      style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}
-                    >
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: "rgba(59,91,252,0.2)" }}><AgentAvatar size={16} /></div>
+                    <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed" style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}>
                       <p className="text-amber-400/90 text-xs mb-1 font-medium">No API key found</p>
-                      <p className="text-white/60 text-xs leading-relaxed">
-                        <span className="text-white/80">{msg.model ? getModelLabel(msg.model) : "This model"}</span>
-                        {" "}requires a{" "}
-                        <span className="text-white/80 capitalize">{msg.provider}</span>
-                        {" "}API key, but you haven't added one yet.
-                      </p>
+                      <p className="text-white/60 text-xs leading-relaxed"><span className="text-white/80">{msg.model ? getModelLabel(msg.model) : "This model"}</span> requires a <span className="text-white/80 capitalize">{msg.provider}</span> API key, but you haven't added one yet.</p>
                       <div className="mt-2.5 flex flex-col gap-1.5">
-                        <button
-                          onClick={() => navigate("/settings")}
-                          className="text-xs text-[#3b5bfc] hover:underline text-left"
-                        >
-                          → Add {msg.provider} key in Settings
-                        </button>
-                        <button
-                          onClick={() => onSwitchTab("Prompt")}
-                          className="text-xs text-white/40 hover:text-white/70 transition-colors text-left"
-                        >
-                          → Or switch to a different model in the Prompt tab
-                        </button>
+                        <button onClick={() => navigate("/settings")} className="text-xs text-[#3b5bfc] hover:underline text-left">→ Add {msg.provider} key in Settings</button>
+                        <button onClick={() => onSwitchTab("Prompt")} className="text-xs text-white/40 hover:text-white/70 transition-colors text-left">→ Or switch to a different model in the Prompt tab</button>
                       </div>
                     </div>
                   </div>
                 );
-              }
-
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex items-end gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-                >
-                  {msg.role === "agent" && (
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5"
-                      style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
-                    >
-                      <AgentAvatar size={16} />
+                return (
+                  <div key={msg.id} className={`flex items-end gap-2 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    {msg.role === "agent" && <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5" style={{ backgroundColor: "rgba(59,91,252,0.2)" }}><AgentAvatar size={16} /></div>}
+                    <div className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${msg.role === "user" ? "whitespace-pre-wrap" : ""}`} style={msg.role === "user" ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" } : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }}>
+                      {msg.role === "agent" ? <span className="md-content" dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }} /> : msg.text}
                     </div>
-                  )}
-                  <div
-                    className={`max-w-[78%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words ${msg.role === "user" ? "whitespace-pre-wrap" : ""}`}
-                    style={
-                      msg.role === "user"
-                        ? { backgroundColor: "#3b5bfc", color: "#fff", borderBottomRightRadius: "4px" }
-                        : { backgroundColor: "#1a2235", color: "rgba(255,255,255,0.85)", borderBottomLeftRadius: "4px" }
-                    }
-                  >
-                    {msg.role === "agent"
-                      ? <span className="md-content" dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }} />
-                      : msg.text}
                   </div>
+                );
+              })}
+              {isTyping && (
+                <div className="flex items-end gap-2">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(59,91,252,0.2)" }}><AgentAvatar size={16} /></div>
+                  <div className="rounded-2xl" style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}><TypingDots /></div>
                 </div>
-              );
-            })}
-
-            {isTyping && (
-              <div className="flex items-end gap-2">
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: "rgba(59,91,252,0.2)" }}
-                >
-                  <AgentAvatar size={16} />
-                </div>
-                <div className="rounded-2xl" style={{ backgroundColor: "#1a2235", borderBottomLeftRadius: "4px" }}>
-                  <TypingDots />
-                </div>
-              </div>
-            )}
-          </>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="px-4 pb-4 pt-2 flex-shrink-0 border-t border-white/5">
-        <div
-          className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 focus-within:border-[#3b5bfc]/50 transition-colors"
-          style={{ backgroundColor: "#111827" }}
-        >
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Send a message..."
-            disabled={noInstructions || isTyping}
-            className="flex-1 bg-transparent text-sm text-white placeholder-white/20 outline-none disabled:opacity-40"
-          />
-          <button
-            onClick={sendMessage}
-            disabled={!input.trim() || isTyping || noInstructions}
-            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-150 disabled:opacity-30"
-            style={{ backgroundColor: input.trim() && !noInstructions ? "#3b5bfc" : "rgba(59,91,252,0.3)" }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-              <path d="M22 2L11 13" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+              )}
+            </>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        <div className="px-4 pb-4 pt-2 flex-shrink-0 border-t border-white/5">
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 focus-within:border-[#3b5bfc]/50 transition-colors" style={{ backgroundColor: "#111827" }}>
+            <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Send a message..." disabled={noInstructions || isTyping} className="flex-1 bg-transparent text-sm text-white placeholder-white/20 outline-none disabled:opacity-40" />
+            <button onClick={sendMessage} disabled={!input.trim() || isTyping || noInstructions} className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-150 disabled:opacity-30" style={{ backgroundColor: input.trim() && !noInstructions ? "#3b5bfc" : "rgba(59,91,252,0.3)" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </>
   );
 }
