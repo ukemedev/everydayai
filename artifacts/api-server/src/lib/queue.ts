@@ -19,19 +19,18 @@ export const messageQueue = new Queue("incoming-messages", {
 });
 
 export interface IncomingMessageJob {
-  /** Optional: skip key resolution and use this provider/model (already resolved) */
-  resolvedProvider?: string;
-  resolvedModel?: string;
-  /** Optional: skip key resolution and use this provider/model (already resolved) */
-  resolvedProvider?: string;
-  resolvedModel?: string;
   agentId: string;
   conversationId: string;
   channel: "telegram" | "whatsapp" | "messenger" | "instagram" | "web_widget" | "test";
   message: string;
   timestamp: string;
-  /** Required when channel === 'test' – the agent owner's user ID */
   ownerUserId?: string;
+
+  // Pre‑resolved credentials (prevents re‑resolution in worker)
+  resolvedApiKey?: string;
+  resolvedProvider?: string;
+  resolvedModel?: string;
+  resolvedInstructions?: string;
 }
 
 export async function enqueueMessage(job: IncomingMessageJob) {

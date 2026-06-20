@@ -24,52 +24,39 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
   const sb = getServiceClient();
   if (!sb) throw new Error("No Supabase client");
 
+  // ── 1. Determine credentials ──────────────────────────
   let apiKey: string;
   let model: string;
   let instructions: string;
   let provider: string;
 
-  // If the job already contains a resolved provider/model (e.g., from test-chat), use those directly
-  if (job.resolvedProvider && job.resolvedModel) {
-    const keyService = new KeyResolutionService(
-      new SupabaseKeyRepository(sb as any),
-      new SupabaseAgentRepository(sb as any)
-    );
-    const keyResult = channel === "test"
-      ? await keyService.resolveForStudio(
-          ownerUserId || "", agentId, job.resolvedProvider, job.resolvedModel, ""
-        )
-      : await keyService.resolveForPublic(
-          agentId, job.resolvedProvider, job.resolvedModel, ""
-        );
-    if (!keyResult.ok) {
-      logger.warn({ agentId, channel, reason: keyResult.reason }, "Key resolution failed");
-      return;
-    }
-    apiKey = keyResult.apiKey;
-    model = keyResult.model;
-    instructions = keyResult.instructions;
-    provider = keyResult.provider;
+  // If the enqueuer already resolved everything, use that directly
+  if (job.resolvedApiKey && job.resolvedProvider && job.resolvedModel) {
+    apiKey = job.resolvedApiKey;
+    provider = job.resolvedProvider;
+    model = job.resolvedModel;
+    instructions = job.resolvedInstructions || "";
+    logger.info({ agentId, channel }, "Using pre‑resolved credentials from job");
   } else {
+    // Fallback: resolve via KeyResolutionService (for channels that don't pre‑resolve)
     const keyService = new KeyResolutionService(
       new SupabaseKeyRepository(sb as any),
       new SupabaseAgentRepository(sb as any)
     );
+
     let keyResult;
     if (channel === "test") {
       if (!ownerUserId) throw new Error("ownerUserId required for test channel");
-      keyResult = await keyService.resolveForStudio(
-        ownerUserId, agentId, "", "gpt-4o-mini", ""
-      );
+      keyResult = await keyService.resolveForStudio(ownerUserId, agentId, "", "gpt-4o-mini", "");
     } else {
-      keyResult = await keyService.resolveForPublic(
-        agentId, "", "gpt-4o-mini", ""
-      );
+      keyResult = await keyService.resolveForPublic(agentId, "", "gpt-4o-mini", "");
     }
+
     if (!keyResult.ok) {
       logger.warn({ agentId, channel, reason: keyResult.reason }, "Key resolution failed");
       return;
     }
+
     apiKey = keyResult.apiKey;
     model = keyResult.model;
     instructions = keyResult.instructions;
@@ -124,7 +111,7 @@ export async function processIncomingMessage(job: IncomingMessageJob) {
     last_message_preview: reply.slice(0, 75),
   }).eq("id", conversationId);
 
-  // ── 6. Run agent tools (custom webhook) ───────────────
+  // ── 6. Run agent tools ────────────────────────────────
   void runAgentTools(agentId, conversationId, message, reply, sb)
     .catch(err => logger.error({ err, agentId }, "runAgentTools failed"));
 

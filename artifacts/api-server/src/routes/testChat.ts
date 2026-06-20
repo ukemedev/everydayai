@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "../lib/logger.js";
-import { sanitizeText, validateMessageLength, detectPromptInjection, buildHardenedSystemPrompt } from "../lib/sanitize.js";
+import { sanitizeText, validateMessageLength, detectPromptInjection } from "../lib/sanitize.js";
 import { checkPlanLimit } from "../lib/planLimits.js";
 import { KeyResolutionService } from "../services/KeyResolutionService.js";
 import { SupabaseKeyRepository } from "../adapters/SupabaseKeyRepository.js";
@@ -36,7 +36,7 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     return;
   }
 
-  // If user is authenticated, check their plan limit
+  // Plan limit check for authenticated users
   if (verifiedUserId) {
     const limitResult = await checkPlanLimit(verifiedUserId);
     if (!limitResult.allowed) {
@@ -61,19 +61,10 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     new SupabaseAgentRepository(sb as any)
   );
 
-  let keyResult;
-  if (verifiedUserId) {
-    // Authenticated: use the user's own key for the agent they own
-    keyResult = await keyService.resolveForStudio(
-      verifiedUserId, agentId.trim(), "", "gpt-4o-mini", ""
-    );
-  } else {
-    // Unauthenticated (mobile fallback): resolve using the agent owner's key
-    req.log.warn({ agentId }, "test-chat: no auth – resolving API key via public path");
-    keyResult = await keyService.resolveForPublic(
-      agentId.trim(), "", "gpt-4o-mini", ""
-    );
-  }
+  // Resolve the key (authenticated owner or public fallback)
+  const keyResult = verifiedUserId
+    ? await keyService.resolveForStudio(verifiedUserId, agentId.trim(), "", "gpt-4o-mini", "")
+    : await keyService.resolveForPublic(agentId.trim(), "", "gpt-4o-mini", "");
 
   if (!keyResult.ok) {
     if (keyResult.reason === "NO_API_KEY") {
@@ -119,7 +110,7 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     content: cleanMessage,
   });
 
-  // Enqueue the job
+  // Enqueue with fully resolved credentials — no more re‑resolution
   await enqueueMessage({
     agentId: agentId.trim(),
     conversationId,
@@ -127,11 +118,13 @@ router.post("/test-chat", async (req: Request, res: Response) => {
     message: cleanMessage,
     timestamp: new Date().toISOString(),
     ownerUserId: verifiedUserId ?? ownerId,
+    resolvedApiKey: keyResult.apiKey,
     resolvedProvider: keyResult.provider,
     resolvedModel: keyResult.model,
+    resolvedInstructions: keyResult.instructions,
   });
 
-  logger.info({ agentId, conversationId, verifiedUserId }, "Test chat message enqueued");
+  logger.info({ agentId, conversationId, verifiedUserId }, "Test chat message enqueued (pre‑resolved)");
 
   res.json({ conversationId });
 });
