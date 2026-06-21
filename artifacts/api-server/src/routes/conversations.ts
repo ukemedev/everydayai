@@ -121,6 +121,7 @@ async function sendChannelReply(channel: string, sessionKey: string, content: st
 
 router.get("/conversations", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const sb = getServiceClient();
   if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
@@ -207,6 +208,7 @@ router.get("/conversations/:id/messages", async (req: Request, res: Response) =>
 
 router.patch("/conversations/:id/mode", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params as { id: string };
   const { mode } = req.body as { mode: "ai" | "human" };
@@ -241,6 +243,7 @@ router.patch("/conversations/:id/mode", async (req: Request, res: Response) => {
 
 router.post("/conversations/:id/reply", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params as { id: string };
   const { content } = req.body as { content?: string };
@@ -306,6 +309,7 @@ router.post("/conversations/:id/reply", async (req: Request, res: Response) => {
 
 router.patch("/conversations/:id/archive", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params as { id: string };
   const { archive = true } = req.body as { archive?: boolean };
@@ -328,6 +332,7 @@ router.patch("/conversations/:id/archive", async (req: Request, res: Response) =
 
 router.patch("/conversations/:id/read", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params as { id: string };
   const sb = getServiceClient();
@@ -354,6 +359,7 @@ router.patch("/conversations/:id/read", async (req: Request, res: Response) => {
 
 router.post("/conversations/:id/tags", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params as { id: string };
   const { tags } = req.body as { tags?: unknown };
@@ -394,6 +400,7 @@ router.post("/conversations/:id/tags", async (req: Request, res: Response) => {
 
 router.delete("/conversations/:id", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params as { id: string };
   const sb = getServiceClient();
@@ -402,7 +409,7 @@ router.delete("/conversations/:id", async (req: Request, res: Response) => {
   // Verify ownership first
   const { data: conv } = await sb
     .from("conversations")
-    .select("id, owner_id")
+    .select("id, owner_id, channel")
     .eq("id", id)
     .maybeSingle();
 
@@ -432,6 +439,7 @@ router.delete("/conversations/:id", async (req: Request, res: Response) => {
 
 router.delete("/conversations", async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const sb = getServiceClient();
   if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }

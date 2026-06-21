@@ -13,8 +13,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.94.0",
-    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.105.3",
     "@types/express-session": "^1.19.0",
     "@types/ws": "^8.18.1",

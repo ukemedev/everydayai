@@ -109,29 +109,17 @@ describe("supabaseService.getServiceClient()", () => {
 // ── aiDispatch.getProviderForModel() ──────────────────────────────────────────
 
 describe("aiDispatch.getProviderForModel()", () => {
-  it("routes claude-* models to anthropic", () => {
-    expect(getProviderForModel("claude-3-haiku-20240307")).toBe("anthropic");
-    expect(getProviderForModel("claude-3-5-sonnet-20241022")).toBe("anthropic");
-  });
-
-  it("routes gemini-* models to google", () => {
-    expect(getProviderForModel("gemini-1.5-flash")).toBe("google");
-    expect(getProviderForModel("gemini-pro")).toBe("google");
-  });
-
-  it("routes llama models to groq", () => {
-    expect(getProviderForModel("llama3-70b-8192")).toBe("groq");
-    expect(getProviderForModel("llama-3.1-8b-instant")).toBe("groq");
-  });
-
-  it("routes mixtral models to groq", () => {
-    expect(getProviderForModel("mixtral-8x7b-32768")).toBe("groq");
-  });
-
-  it("defaults to openai for gpt-* and unknown models", () => {
+  it("defaults to openai for gpt models and unknowns", () => {
     expect(getProviderForModel("gpt-4o")).toBe("openai");
     expect(getProviderForModel("gpt-4o-mini")).toBe("openai");
+    expect(getProviderForModel("claude-3-haiku-20240307")).toBe("openai");
     expect(getProviderForModel("unknown-model")).toBe("openai");
+  });
+
+  it("routes llama/mixtral/whisper models to groq (TEMPORARY testing exception)", () => {
+    expect(getProviderForModel("llama3-70b-8192")).toBe("groq");
+    expect(getProviderForModel("mixtral-8x7b-32768")).toBe("groq");
+    expect(getProviderForModel("whisper-large-v3")).toBe("groq");
   });
 });
 

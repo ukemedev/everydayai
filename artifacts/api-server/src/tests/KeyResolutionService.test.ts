@@ -51,25 +51,17 @@ function makeFakeAgentRepo(agents: Agent[]): IAgentRepository {
 
 describe("getProviderForModel", () => {
 
-  it("returns anthropic for claude models", () => {
-    expect(getProviderForModel("claude-3-haiku-20240307")).toBe("anthropic");
-    expect(getProviderForModel("claude-3-5-sonnet-20241022")).toBe("anthropic");
-  });
-
-  it("returns google for gemini models", () => {
-    expect(getProviderForModel("gemini-1.5-pro")).toBe("google");
-    expect(getProviderForModel("gemini-2.0-flash")).toBe("google");
-  });
-
-  it("returns groq for llama and mixtral models", () => {
-    expect(getProviderForModel("llama-3.3-70b-versatile")).toBe("groq");
-    expect(getProviderForModel("mixtral-8x7b-32768")).toBe("groq");
-  });
-
-  it("returns openai for everything else", () => {
+  it("returns openai for gpt models and anything not matching groq patterns", () => {
     expect(getProviderForModel("gpt-4o")).toBe("openai");
     expect(getProviderForModel("gpt-4o-mini")).toBe("openai");
     expect(getProviderForModel("gpt-3.5-turbo")).toBe("openai");
+    expect(getProviderForModel("claude-3-haiku-20240307")).toBe("openai");
+  });
+
+  it("returns groq for llama/mixtral/whisper models (TEMPORARY testing exception)", () => {
+    expect(getProviderForModel("llama-3.3-70b-versatile")).toBe("groq");
+    expect(getProviderForModel("mixtral-8x7b-32768")).toBe("groq");
+    expect(getProviderForModel("whisper-large-v3")).toBe("groq");
   });
 });
 
@@ -128,12 +120,12 @@ describe("KeyResolutionService.resolveForStudio", () => {
 
   it("✅ owner can test a TESTING status agent", async () => {
     const service = new KeyResolutionService(
-      makeFakeKeyRepo({ "user-1:anthropic": "sk-ant-key" }),
+      makeFakeKeyRepo({ "user-1:groq": "sk-groq-key" }),
       makeFakeAgentRepo([
         {
           id: "agent-1",
           user_id: "user-1",
-          model: "claude-3-haiku-20240307",
+          model: "llama-3.3-70b-versatile",
           instructions: "Help customers",
           status: "testing",
         },
@@ -141,13 +133,13 @@ describe("KeyResolutionService.resolveForStudio", () => {
     );
 
     const result = await service.resolveForStudio(
-      "user-1", "agent-1", "", "claude-3-haiku-20240307", "fallback"
+      "user-1", "agent-1", "", "llama-3.3-70b-versatile", "fallback"
     );
 
     expect(result).toMatchObject({
       ok: true,
-      apiKey: "sk-ant-key",
-      provider: "anthropic",
+      apiKey: "sk-groq-key",
+      provider: "groq",
     });
   });
 

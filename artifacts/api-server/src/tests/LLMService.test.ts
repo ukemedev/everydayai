@@ -2,7 +2,9 @@
 // TDD TESTS for LLMService
 //
 // WHY these exist:
-// → Proves routing to correct provider works
+// → Proves routing to OpenAI provider works (primary, in v2)
+// → Proves routing to Groq provider works (TEMPORARY testing exception
+//   until OpenAI account is funded — see LLMService.ts comment)
 // → Proves vision fallback for Groq works
 // → Proves unknown provider throws clean error
 // → Uses fake providers — no real AI calls needed
@@ -39,38 +41,6 @@ describe("LLMService.chat", () => {
 
     expect(result.reply).toBe("Hello from OpenAI");
     expect(service["providers"]["openai"].chat).toHaveBeenCalledOnce();
-  });
-
-  it("✅ routes anthropic model to Anthropic provider", async () => {
-    const service = new LLMService();
-
-    service["providers"]["anthropic"] = {
-      chat: vi.fn().mockResolvedValue({ reply: "Hello from Anthropic" }),
-    };
-
-    const result = await service.chat("anthropic", {
-      ...baseRequest,
-      model: "claude-3-haiku-20240307",
-    });
-
-    expect(result.reply).toBe("Hello from Anthropic");
-    expect(service["providers"]["anthropic"].chat).toHaveBeenCalledOnce();
-  });
-
-  it("✅ routes google model to Google provider", async () => {
-    const service = new LLMService();
-
-    service["providers"]["google"] = {
-      chat: vi.fn().mockResolvedValue({ reply: "Hello from Google" }),
-    };
-
-    const result = await service.chat("google", {
-      ...baseRequest,
-      model: "gemini-1.5-flash",
-    });
-
-    expect(result.reply).toBe("Hello from Google");
-    expect(service["providers"]["google"].chat).toHaveBeenCalledOnce();
   });
 
   it("✅ routes groq model to Groq provider", async () => {

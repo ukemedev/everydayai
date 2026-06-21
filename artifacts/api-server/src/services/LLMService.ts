@@ -9,16 +9,14 @@
 // → Adding a new provider = add adapter + update this file only
 //
 // PROVIDERS:
-// → openai    → OpenAIProvider
-// → anthropic → AnthropicProvider
-// → google    → GoogleProvider
-// → groq      → GroqProvider
+// → openai → OpenAIProvider (primary — v2 design decision #2, OpenAI-only)
+// → groq   → GroqProvider (TEMPORARY exception — kept live for testing only,
+//             until OpenAI account is funded. Remove once OpenAI is funded,
+//             per the locked design decision of OpenAI-only.)
 // ──────────────────────────────────────────────────────────────────
 
-import { OpenAIProvider }    from "../adapters/OpenAIProvider.js";
-import { AnthropicProvider } from "../adapters/AnthropicProvider.js";
-import { GoogleProvider }    from "../adapters/GoogleProvider.js";
-import { GroqProvider }      from "../adapters/GroqProvider.js";
+import { OpenAIProvider } from "../adapters/OpenAIProvider.js";
+import { GroqProvider }   from "../adapters/GroqProvider.js";
 import type { ILLMProvider, LLMRequest, LLMResponse } from "../ports/ILLMProvider.js";
 import { LLMError } from "../ports/ILLMProvider.js";
 import { logger } from "../lib/logger.js";
@@ -27,16 +25,14 @@ export class LLMService {
 
   // Provider instances — created once and reused
   private providers: Record<string, ILLMProvider> = {
-    openai:    new OpenAIProvider(),
-    anthropic: new AnthropicProvider(),
-    google:    new GoogleProvider(),
-    groq:      new GroqProvider(),
+    openai: new OpenAIProvider(),
+    groq:   new GroqProvider(),
   };
 
   /**
    * Route request to correct provider and return reply.
    *
-   * @param provider - "openai" | "anthropic" | "google" | "groq"
+   * @param provider - "openai" (primary) | "groq" (temporary testing fallback)
    * @param request  - full LLMRequest with key, model, history, message
    * @returns LLMResponse with reply text
    *

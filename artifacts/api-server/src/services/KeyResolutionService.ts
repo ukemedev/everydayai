@@ -42,14 +42,14 @@ export type KeyResolutionResult =
       reason: "NOT_OWNER"; // user tried to test agent they don't own
     };
 
-// Helper — detect provider from model name
-// Matches exactly what your existing chat.ts uses
+// Helper — detect provider from model name.
+// v2 design decision #2: OpenAI is the only PERMANENT supported provider.
+// Groq is a TEMPORARY exception kept live for testing until OpenAI is
+// funded — remove this branch once that happens.
 export function getProviderForModel(model: string): string {
-  if (model.startsWith("claude-"))                                    return "anthropic";
-  if (model.startsWith("gemini-"))                                    return "google";
   if (model.includes("llama") || model.includes("mixtral") ||
       model.includes("whisper"))                                      return "groq";
-  return "openai"; // default
+  return "openai";
 }
 
 export class KeyResolutionService {

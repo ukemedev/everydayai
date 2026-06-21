@@ -1,5 +1,7 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
+import { createClient } from "@supabase/supabase-js";
+import { isEncrypted } from "../lib/encryption.js";
 
 const router: IRouter = Router();
 
@@ -23,12 +25,7 @@ router.post("/devbot/capture-error", (req, res) => {
   res.status(200).json({ ok: true });
 });
 
-export default router;
-
 // ── Encryption health check ──────────────────────────────────────────
-import { createClient } from "@supabase/supabase-js";
-import { isEncrypted } from "../lib/encryption.js";
-
 router.get("/health/encryption", async (_req: Request, res: Response) => {
   const url = process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -55,3 +52,5 @@ router.get("/health/encryption", async (_req: Request, res: Response) => {
     plaintextIds: plaintextKeys.map((r) => ({ id: r.id, provider: r.provider })),
   });
 });
+
+export default router;
