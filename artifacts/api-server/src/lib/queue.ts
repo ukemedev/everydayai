@@ -21,12 +21,10 @@ export const messageQueue = new Queue("incoming-messages", {
 export interface IncomingMessageJob {
   agentId: string;
   conversationId: string;
-  channel: "telegram" | "whatsapp" | "messenger" | "instagram" | "web_widget" | "test";
+  channel: "whatsapp" | "web_widget" | "web" | "test";
   message: string;
   timestamp: string;
   ownerUserId?: string;
-
-  // Pre‑resolved credentials (prevents re‑resolution in worker)
   resolvedApiKey?: string;
   resolvedProvider?: string;
   resolvedModel?: string;
