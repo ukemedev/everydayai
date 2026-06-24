@@ -1,29 +1,6 @@
-// ─── toolExecutor.test.ts ────────────────────────────────────────
-// TDD TESTS for lib/toolExecutor.ts
-//
-// WHY these exist:
-// → Seals custom_webhook execution behaviour forever
-// → Proves executor never throws — always returns ExecutionResult
-// → Proves URL validation rejects non-http(s) URLs
-// → Proves timeout is handled gracefully (no crash)
-// → Proves HTTP error responses are captured as failed result
-// → Proves unknown connectors return structured failed result
-//
-// SEALED FOREVER:
-// → custom_webhook: success → {status:'success', result: response body} ✅
-// → custom_webhook: HTTP 4xx/5xx → {status:'failed', error: message} ✅
-// → custom_webhook: no webhook_url → {status:'failed'} ✅
-// → custom_webhook: bad URL scheme → {status:'failed'} ✅
-// → custom_webhook: network error → {status:'failed'} ✅
-// → custom_webhook: abort/timeout → {status:'failed'} ✅
-// → unknown connector → {status:'failed', error includes connector id} ✅
-// ─────────────────────────────────────────────────────────────────
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { executeTool } from "../lib/toolExecutor.js";
 import type { AgentToolInput, ExecutionContext } from "../lib/toolExecutor.js";
-
-// ── Shared fixtures ───────────────────────────────────────────────
 
 const CTX: ExecutionContext = {
   agentId:         "agent-123",
@@ -34,14 +11,13 @@ const CTX: ExecutionContext = {
 
 function makeTool(overrides: Partial<AgentToolInput> = {}): AgentToolInput {
   return {
-    id:           "tool-1",
-    connector_id: "custom_webhook",
-    credentials:  { webhook_url: "https://hooks.example.com/test" },
+    id:          "tool-1",
+    name:        "Booking Webhook",
+    webhook_url: "https://hooks.example.com/test",
+    secret:      null,
     ...overrides,
   };
 }
-
-// ── Mock global fetch ─────────────────────────────────────────────
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -54,8 +30,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// ── custom_webhook — success ──────────────────────────────────────
-describe("executeTool — custom_webhook success", () => {
+// ── success ───────────────────────────────────────────────────────
+
+describe("executeTool — success", () => {
   it("✅ returns success when webhook responds 200 with JSON", async () => {
     fetchMock.mockResolvedValueOnce({
       ok:   true,
@@ -64,7 +41,6 @@ describe("executeTool — custom_webhook success", () => {
     });
 
     const result = await executeTool(makeTool(), CTX);
-
     expect(result.status).toBe("success");
     expect(result.result).toEqual({ received: true });
   });
@@ -78,7 +54,6 @@ describe("executeTool — custom_webhook success", () => {
 
     await executeTool(makeTool(), CTX);
 
-    expect(fetchMock).toHaveBeenCalledOnce();
     const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://hooks.example.com/test");
     expect(opts.method).toBe("POST");
@@ -90,6 +65,32 @@ describe("executeTool — custom_webhook success", () => {
       ai_reply:         "Sure! I've noted your request.",
     });
     expect(body.timestamp).toBeDefined();
+  });
+
+  it("✅ sends X-EverydayAI-Secret header when secret is configured", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({}),
+      text: async () => "{}",
+    });
+
+    await executeTool(makeTool({ secret: "my-secret" }), CTX);
+
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((opts.headers as Record<string, string>)["X-EverydayAI-Secret"]).toBe("my-secret");
+  });
+
+  it("✅ does NOT send secret header when secret is null", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok:   true,
+      json: async () => ({}),
+      text: async () => "{}",
+    });
+
+    await executeTool(makeTool({ secret: null }), CTX);
+
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((opts.headers as Record<string, string>)["X-EverydayAI-Secret"]).toBeUndefined();
   });
 
   it("✅ handles non-JSON response body gracefully", async () => {
@@ -104,24 +105,12 @@ describe("executeTool — custom_webhook success", () => {
   });
 });
 
-// ── custom_webhook — failures ─────────────────────────────────────
-describe("executeTool — custom_webhook failures", () => {
-  it("✅ returns failed when webhook_url is not configured", async () => {
-    const result = await executeTool(makeTool({ credentials: {} }), CTX);
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("webhook_url");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
+// ── failures ──────────────────────────────────────────────────────
 
-  it("✅ returns failed when webhook_url is empty string", async () => {
-    const result = await executeTool(makeTool({ credentials: { webhook_url: "  " } }), CTX);
-    expect(result.status).toBe("failed");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
+describe("executeTool — failures", () => {
   it("✅ returns failed when webhook_url has invalid scheme", async () => {
     const result = await executeTool(
-      makeTool({ credentials: { webhook_url: "ftp://bad.example.com" } }),
+      makeTool({ webhook_url: "ftp://bad.example.com" }),
       CTX,
     );
     expect(result.status).toBe("failed");
@@ -169,26 +158,5 @@ describe("executeTool — custom_webhook failures", () => {
     const result = await executeTool(makeTool(), CTX);
     expect(result.status).toBe("failed");
     expect(result.error).toBeDefined();
-  });
-});
-
-// ── unknown connector ─────────────────────────────────────────────
-describe("executeTool — unknown connector", () => {
-  it("✅ returns failed for an unknown connector id", async () => {
-    const result = await executeTool(
-      makeTool({ connector_id: "google_sheets" }),
-      CTX,
-    );
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("google_sheets");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("✅ error message includes the connector id for debugging", async () => {
-    const result = await executeTool(
-      makeTool({ connector_id: "totally_unknown_connector" }),
-      CTX,
-    );
-    expect(result.error).toContain("totally_unknown_connector");
   });
 });

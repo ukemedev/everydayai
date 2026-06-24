@@ -1,28 +1,22 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { getServiceClient } from "../lib/supabaseService.js";
 import { logger } from "../lib/logger.js";
 import { sanitizeText } from "../lib/sanitize.js";
 import { decrypt, isEncrypted } from "../lib/encryption.js";
 import { sendWhatsAppMessage } from "../lib/whatsappClient.js";
-import { sendMetaMessage } from "../lib/metaClient.js";
 
 const router = Router();
 
-function getServiceClient() {
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
-}
-
-// ── Channel reply adapters ─────────────────────────────────────────────────────
-// For 'web': customer polls GET /api/public/conversations/messages — nothing to push.
-// For 'whatsapp': look up deployment credentials and push via Meta Cloud API.
+// ── Channel reply adapter (human replies from inbox) ──────────────────────────
+// web / web_widget / test: customer polls DB — nothing to push.
+// whatsapp: push via Meta Cloud API using deployment credentials.
 async function sendChannelReply(channel: string, sessionKey: string, content: string, agentId: string): Promise<void> {
   switch (channel) {
     case "web":
-      break; // customer polls DB
+    case "web_widget":
+    case "test":
+      break;
 
     case "whatsapp": {
       const sb = getServiceClient();
@@ -42,71 +36,6 @@ async function sendChannelReply(channel: string, sessionKey: string, content: st
       const phoneNumId = dep.phone_number_id as string;
 
       await sendWhatsAppMessage(phoneNumId, token, sessionKey, content);
-      break;
-    }
-
-    case "telegram": {
-      const sb = getServiceClient();
-      if (!sb) { logger.warn({ agentId }, "Telegram reply: service client unavailable"); break; }
-
-      const { data: dep } = await sb
-        .from("telegram_deployments")
-        .select("bot_token")
-        .eq("agent_id", agentId)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (!dep) { logger.warn({ agentId }, "Telegram reply: no active deployment found"); break; }
-
-      const { decrypt: dec, isEncrypted: isEnc } = await import("../lib/encryption.js");
-      const rawToken = dep.bot_token as string;
-      const token    = isEnc(rawToken) ? dec(rawToken) : rawToken;
-
-      // sessionKey for Telegram is the chatId (stored as channel_conversation_id)
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ chat_id: sessionKey, text: content }),
-      });
-      logger.info({ agentId, chatId: sessionKey }, "Telegram human reply sent");
-      break;
-    }
-
-    case "messenger": {
-      const sb = getServiceClient();
-      if (!sb) { logger.warn({ agentId }, "Messenger reply: service client unavailable"); break; }
-
-      const { data: dep } = await sb
-        .from("messenger_deployments")
-        .select("access_token")
-        .eq("agent_id", agentId)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (!dep) { logger.warn({ agentId }, "Messenger reply: no active deployment"); break; }
-
-      const rawToken = dep.access_token as string;
-      const token    = isEncrypted(rawToken) ? decrypt(rawToken) : rawToken;
-      await sendMetaMessage(token, sessionKey, content);
-      break;
-    }
-
-    case "instagram": {
-      const sb = getServiceClient();
-      if (!sb) { logger.warn({ agentId }, "Instagram reply: service client unavailable"); break; }
-
-      const { data: dep } = await sb
-        .from("instagram_deployments")
-        .select("access_token")
-        .eq("agent_id", agentId)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (!dep) { logger.warn({ agentId }, "Instagram reply: no active deployment"); break; }
-
-      const rawToken = dep.access_token as string;
-      const token    = isEncrypted(rawToken) ? decrypt(rawToken) : rawToken;
-      await sendMetaMessage(token, sessionKey, content);
       break;
     }
 
@@ -158,7 +87,7 @@ router.get("/conversations", async (req: Request, res: Response) => {
 
 router.get("/conversations/:id/messages", async (req: Request, res: Response) => {
   const userId = req.user?.id;
-  // Allow unauthenticated access for test conversations (polling after test-chat)
+  // Allow unauthenticated access for test conversations (polling after test-chat).
   // Ownership check is skipped for test channel — conversation ID is a secret UUID.
 
   const { id } = req.params as { id: string };
@@ -257,7 +186,6 @@ router.post("/conversations/:id/reply", async (req: Request, res: Response) => {
   const sb = getServiceClient();
   if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
 
-  // Verify ownership and get channel info in one query
   const { data: conv } = await sb
     .from("conversations")
     .select("id, owner_id, channel, channel_conversation_id, agent_id, mode")
@@ -274,7 +202,6 @@ router.post("/conversations/:id/reply", async (req: Request, res: Response) => {
     return;
   }
 
-  // Save to DB first — customer polls will pick it up immediately
   const { data: msg, error: msgErr } = await sb
     .from("messages")
     .insert({ conversation_id: id, role: "human", content: cleanContent })
@@ -293,7 +220,7 @@ router.post("/conversations/:id/reply", async (req: Request, res: Response) => {
     last_message_preview: `You: ${cleanContent.slice(0, 75)}`,
   }).eq("id", id);
 
-  // Fire channel adapter for external channels (non-blocking)
+  // Push to channel (non-blocking)
   void sendChannelReply(
     (conv as { channel: string }).channel,
     (conv as { channel_conversation_id: string }).channel_conversation_id,
@@ -328,7 +255,6 @@ router.patch("/conversations/:id/archive", async (req: Request, res: Response) =
 });
 
 // ─── PATCH /api/conversations/:id/read ───────────────────────────────────────
-// Marks all messages as read (resets unread_count to 0).
 
 router.patch("/conversations/:id/read", async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -355,7 +281,6 @@ router.patch("/conversations/:id/read", async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/conversations/:id/tags ────────────────────────────────────────
-// Set (replace) the tags array for a conversation.
 
 router.post("/conversations/:id/tags", async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -396,7 +321,6 @@ router.post("/conversations/:id/tags", async (req: Request, res: Response) => {
 });
 
 // ─── DELETE /api/conversations/:id ───────────────────────────────────────────
-// Soft-deletes a single conversation by setting deleted_at.
 
 router.delete("/conversations/:id", async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -406,7 +330,6 @@ router.delete("/conversations/:id", async (req: Request, res: Response) => {
   const sb = getServiceClient();
   if (!sb) { res.status(503).json({ error: "Service unavailable" }); return; }
 
-  // Verify ownership first
   const { data: conv } = await sb
     .from("conversations")
     .select("id, owner_id, channel")
@@ -435,7 +358,6 @@ router.delete("/conversations/:id", async (req: Request, res: Response) => {
 });
 
 // ─── DELETE /api/conversations ────────────────────────────────────────────────
-// Soft-deletes ALL conversations for the authenticated user.
 
 router.delete("/conversations", async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -461,7 +383,6 @@ router.delete("/conversations", async (req: Request, res: Response) => {
 
 // ─── GET /api/public/conversations/messages ───────────────────────────────────
 // PUBLIC — no auth. Polled by Chat.tsx to receive human replies in real time.
-// Returns new messages (role: human or ai) since a given ISO timestamp.
 
 router.get("/public/conversations/messages", async (req: Request, res: Response) => {
   const { agentId, sessionId, since } = req.query as { agentId?: string; sessionId?: string; since?: string };

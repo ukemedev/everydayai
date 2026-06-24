@@ -1,23 +1,18 @@
 // ─── toolExecutor.ts ─────────────────────────────────────────────
-// Executes a single tool given its configuration and the conversation context.
-//
-// DISPATCH TABLE:
-// → custom_webhook — real HTTP POST to user-configured URL
-// → all others     — not yet implemented (returns structured failed result)
-//                    This logs to tool_executions with a clear error message.
-//                    Connector implementations are added incrementally.
+// Executes a single webhook tool given its configuration and conversation context.
 //
 // GUARANTEES:
 // → Never throws — always returns ExecutionResult
-// → custom_webhook timeout: 10 seconds
-// → Payload is sanitised (message/reply capped at 2000 chars each)
-// → Webhook URL is validated before fetch
+// → Webhook timeout: 10 seconds
+// → Payload fields capped at 2000 chars each
+// → Webhook URL validated before fetch
 // ─────────────────────────────────────────────────────────────────
 
 export interface AgentToolInput {
-  id:           string;
-  connector_id: string;
-  credentials:  Record<string, unknown>;
+  id:          string;
+  name:        string;
+  webhook_url: string;
+  secret:      string | null;
 }
 
 export interface ExecutionContext {
@@ -35,39 +30,14 @@ export interface ExecutionResult {
 
 const WEBHOOK_TIMEOUT_MS = 10_000;
 
-/**
- * Execute a single tool call and return a structured result.
- * This function never throws — callers can rely on the returned status.
- */
 export async function executeTool(
-  tool:  AgentToolInput,
-  ctx:   ExecutionContext,
-): Promise<ExecutionResult> {
-  switch (tool.connector_id) {
-    case "custom_webhook":
-      return executeCustomWebhook(tool, ctx);
-    default:
-      return {
-        status: "failed",
-        error:  `Connector '${tool.connector_id}' is not yet implemented.`,
-      };
-  }
-}
-
-// ── custom_webhook ────────────────────────────────────────────────
-
-async function executeCustomWebhook(
   tool: AgentToolInput,
   ctx:  ExecutionContext,
 ): Promise<ExecutionResult> {
-  const webhookUrl = (tool.credentials.webhook_url as string | undefined)?.trim();
+  const url = tool.webhook_url.trim();
 
-  if (!webhookUrl) {
-    return { status: "failed", error: "custom_webhook: webhook_url is not configured." };
-  }
-
-  if (!webhookUrl.startsWith("http://") && !webhookUrl.startsWith("https://")) {
-    return { status: "failed", error: "custom_webhook: webhook_url must start with http:// or https://" };
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return { status: "failed", error: "webhook_url must start with http:// or https://" };
   }
 
   const payload = {
@@ -78,13 +48,21 @@ async function executeCustomWebhook(
     timestamp:        new Date().toISOString(),
   };
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+  // If the user configured a signing secret, include it as a bearer token
+  // so their receiving server can verify the request came from EverydayAI.
+  if (tool.secret?.trim()) {
+    headers["X-EverydayAI-Secret"] = tool.secret.trim();
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
 
   try {
-    const res = await fetch(webhookUrl, {
+    const res = await fetch(url, {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body:    JSON.stringify(payload),
       signal:  controller.signal,
     });
@@ -108,6 +86,7 @@ async function executeCustomWebhook(
     }
 
     return { status: "success", result };
+
   } catch (err) {
     clearTimeout(timer);
     const msg = err instanceof Error ? err.message : "Unknown fetch error";

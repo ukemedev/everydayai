@@ -27,17 +27,12 @@ const MAX_REPLY_TOKENS = 1_024;
 /**
  * Shared AI dispatch utilities used by every channel webhook handler.
  *
- * Having one canonical implementation means a fix here propagates to
- * Telegram, WhatsApp, Messenger, Instagram and the web chat immediately —
- * no more copy-paste drift across route files.
+ * v2 supported providers:
+ * - OpenAI  — permanent, production provider.
+ * - Groq    — temporary, testing only. Remove once OpenAI account is funded.
  *
- * v2 design decision #2: OpenAI is the only PERMANENT supported provider.
- * Groq is a TEMPORARY exception kept live for testing only, until the
- * OpenAI account is funded — remove the groq branches below once that
- * happens, to match the locked design decision.
- *
- * NOTE: this is still a separate implementation from LLMService/adapters
- * (the studio/widget chat path) — that consolidation is a deliberate,
+ * NOTE: this is a separate implementation from LLMService/adapters
+ * (the studio/widget chat path). Consolidating the two is a deliberate
  * separate piece of work, not done here.
  */
 
@@ -103,7 +98,7 @@ export async function callAIVision(
   imageBase64: string,
   imageMimeType: string
 ): Promise<string> {
-  // Groq has no vision support — return a polite explanation rather than crash.
+  // Groq has no vision support — fall back to text-only with a note.
   if (provider === "groq") {
     return callAI(
       apiKey, provider, model, systemPrompt, history,
@@ -134,15 +129,4 @@ export async function callAIVision(
     "OpenAI"
   );
   return completion.choices[0]?.message?.content ?? "No response.";
-}
-
-/**
- * Telegram sendMessage has a hard 4096-character limit.
- * Truncate AI replies before sending to avoid a silent 400 from the Bot API.
- */
-export const TELEGRAM_MAX_MSG_LEN = 4096;
-
-export function truncateForTelegram(text: string): string {
-  if (text.length <= TELEGRAM_MAX_MSG_LEN) return text;
-  return text.slice(0, TELEGRAM_MAX_MSG_LEN - 1) + "…";
 }

@@ -4,18 +4,18 @@
 // PIPELINE:
 //   1. Fetch all active agent_tools for this agent
 //   2. For each tool: evaluate trigger condition
-//   3. If trigger fires: execute the tool (async, non-blocking)
+//   3. If trigger fires: execute the webhook
 //   4. Write result to tool_executions audit log
 //
-// USAGE (in all 5 channels — fire-and-forget):
+// USAGE (fire-and-forget from agentProcessor):
 //   void runAgentTools(agentId, conversationId, customerMsg, aiReply, sb)
 //     .catch(err => logger.error({ err }, "runAgentTools failed"));
 //
 // GUARANTEES:
-// → Never blocks the HTTP response — always called as void
-// → Per-tool errors are caught and logged — one failure never stops others
+// → Never blocks the HTTP response
+// → Per-tool errors are caught — one failure never stops others
 // → tool_executions insert failure is suppressed (non-fatal audit)
-// → No throw — callers use void, so exceptions would be unhandled
+// → Never throws
 // ─────────────────────────────────────────────────────────────────
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -26,17 +26,14 @@ import { logger } from "./logger.js";
 interface AgentToolRow {
   id:             string;
   agent_id:       string;
-  connector_id:   string;
-  credentials:    Record<string, unknown>;
+  name:           string;
+  webhook_url:    string;
+  secret:         string | null;
   trigger_type:   string;
   trigger_config: { keywords?: string[]; fields?: string[] };
   status:         string;
 }
 
-/**
- * Run all active tools for an agent after an AI reply.
- * Call as: void runAgentTools(...).catch(...)
- */
 export async function runAgentTools(
   agentId:         string,
   conversationId:  string,
@@ -44,10 +41,9 @@ export async function runAgentTools(
   aiReply:         string,
   sb:              SupabaseClient,
 ): Promise<void> {
-  // 1. Fetch all active tools for this agent
   const { data: rows, error } = await sb
     .from("agent_tools")
-    .select("*")
+    .select("id, agent_id, name, webhook_url, secret, trigger_type, trigger_config, status")
     .eq("agent_id", agentId)
     .eq("status", "active");
 
@@ -58,10 +54,7 @@ export async function runAgentTools(
 
   if (!rows || rows.length === 0) return;
 
-  const agentTools = rows as AgentToolRow[];
-
-  // 2. Evaluate + execute each tool
-  for (const tool of agentTools) {
+  for (const tool of rows as AgentToolRow[]) {
     const triggerFired = evaluateTrigger(
       tool.trigger_type as "always" | "keyword" | "data_collected",
       tool.trigger_config ?? {},
@@ -71,18 +64,17 @@ export async function runAgentTools(
 
     if (!triggerFired) continue;
 
-    // 3. Execute (errors caught per-tool — one failure never stops others)
     try {
       const result = await executeTool(
         {
-          id:           tool.id,
-          connector_id: tool.connector_id,
-          credentials:  tool.credentials ?? {},
+          id:          tool.id,
+          name:        tool.name,
+          webhook_url: tool.webhook_url,
+          secret:      tool.secret,
         },
         { agentId, conversationId, customerMessage, aiReply },
       );
 
-      // 4. Write audit log
       const { error: auditError } = await sb
         .from("tool_executions")
         .insert({
@@ -98,36 +90,35 @@ export async function runAgentTools(
             ai_reply:         aiReply.slice(0, 500),
           },
         });
+
       if (auditError) {
-        logger.warn({ err: auditError, agentId, toolId: tool.id }, "runAgentTools: audit log insert failed (non-fatal)");
+        logger.warn({ err: auditError, agentId, toolId: tool.id }, "runAgentTools: audit insert failed (non-fatal)");
       }
 
       logger.info(
-        { agentId, toolId: tool.id, connectorId: tool.connector_id, status: result.status },
+        { agentId, toolId: tool.id, toolName: tool.name, status: result.status },
         "runAgentTools: tool executed",
       );
+
     } catch (execErr) {
       logger.error(
-        { err: execErr, agentId, toolId: tool.id, connectorId: tool.connector_id },
+        { err: execErr, agentId, toolId: tool.id, toolName: tool.name },
         "runAgentTools: unexpected execution error",
       );
 
-      // Best-effort audit of the failure
       try {
-        await sb
-          .from("tool_executions")
-          .insert({
-            agent_tool_id:   tool.id,
-            agent_id:        agentId,
-            conversation_id: conversationId,
-            trigger_type:    tool.trigger_type,
-            status:          "failed",
-            error_message:   execErr instanceof Error ? execErr.message : "Unexpected error",
-            payload: {
-              customer_message: customerMessage.slice(0, 500),
-              ai_reply:         aiReply.slice(0, 500),
-            },
-          });
+        await sb.from("tool_executions").insert({
+          agent_tool_id:   tool.id,
+          agent_id:        agentId,
+          conversation_id: conversationId,
+          trigger_type:    tool.trigger_type,
+          status:          "failed",
+          error_message:   execErr instanceof Error ? execErr.message : "Unexpected error",
+          payload: {
+            customer_message: customerMessage.slice(0, 500),
+            ai_reply:         aiReply.slice(0, 500),
+          },
+        });
       } catch (_) { /* non-fatal */ }
     }
   }

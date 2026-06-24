@@ -42,21 +42,18 @@ export async function verifyAgentOwnership(
   return { ok: true, agent: data as AgentOwnershipResult["agent"] };
 }
 
-// All external channel deployment tables
+// v2: WhatsApp is the only supported external channel.
 const CHANNEL_TABLES: Record<string, string> = {
-  telegram:  "telegram_deployments",
-  whatsapp:  "whatsapp_deployments",
-  messenger: "messenger_deployments",
-  instagram: "instagram_deployments",
+  whatsapp: "whatsapp_deployments",
 };
 
 /**
  * Check that an agent is NOT already deployed to another external channel.
- * One agent → one external channel at a time. (Web widget is allowed on all.)
+ * One agent → one external channel at a time. Web widget is always allowed.
  */
 export async function checkChannelExclusivity(
   agentId: string,
-  channel: "telegram" | "whatsapp" | "messenger" | "instagram",
+  channel: "whatsapp",
   supabase?: ReturnType<typeof getServiceClient>
 ): Promise<ChannelExclusivityResult> {
   const sb = supabase ?? getServiceClient();

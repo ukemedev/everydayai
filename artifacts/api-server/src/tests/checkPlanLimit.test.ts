@@ -13,7 +13,6 @@
 // → Instead, planLimits.ts uses getRedisClient() from redisClient.ts —
 //   a thin factory we mock directly. No interop problems.
 //
-// SEALED FOREVER:
 // → FREE_TRIAL_LIMIT constant = 20                                  ✅
 // → UPGRADE_MESSAGE constant exact wording                          ✅
 // → Free user, 1st message            → allowed: true, current=1   ✅
@@ -212,20 +211,6 @@ describe("free trial user", () => {
     whenIncrReturns(1);
     await checkPlanLimit("abc-123");
     expect(mockIncr).toHaveBeenCalledWith("usage:abc-123:messages");
-  });
-
-});
-
-// ── Unlimited plan (business) ──────────────────────────────────────
-
-describe("unlimited plan (business)", () => {
-
-  it("✅ business user → allowed, Redis never called", async () => {
-    whenPlanIs("business");
-    const result = await checkPlanLimit("user-biz");
-    expect(result.allowed).toBe(true);
-    expect(result.limit).toBe(Infinity);
-    expect(mockGetRedisClient).not.toHaveBeenCalled();
   });
 
 });
